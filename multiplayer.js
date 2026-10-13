@@ -2,18 +2,21 @@ import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-setti
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 const MAX_BUFFER=1024*1024;
+function packetTiming(){return {count:0,last:null,intervals:[]};}
+function recordPacket(timing){const now=performance.now();timing.count++;if(timing.last!==null){timing.intervals.push(now-timing.last);if(timing.intervals.length>256)timing.intervals.shift();}timing.last=now;}
+function timingSummary(timing){const values=[...timing.intervals].sort((a,b)=>a-b);return {packets:timing.count,intervalP95Ms:values.length?values[Math.floor((values.length-1)*.95)]:null,intervalMaxMs:values.length?values.at(-1):null};}
 export const PROGRESS_TIMEOUT_MS=5000;
 const INACTIVE_REASON="The race was interrupted because a cabinet became inactive. Return to the room and start again.";
 export class Multiplayer {
  constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},isVisible=()=>true}={}){
   Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,isVisible});this.reset();
  }
- reset(){this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.settings={mode:0,difficulty:0,region:'Export'};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;}
+ reset(){this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.settings={mode:0,difficulty:0,region:'Export'};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;}
  snapshot(){return {phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop};}
  changed(){this.onChange(this.snapshot());}
  get active(){return this.phase==='playing';}
  get occupied(){return !['idle','error'].includes(this.phase);}
- send(conn,data){if(!conn?.open)throw Error('A player is disconnected.');if((conn.dataChannel?.bufferedAmount||0)>MAX_BUFFER)throw Error('A player connection is too slow; the arcade link was stopped.');conn.send(data);if(data.type==='arcade')this.payloadSent+=data.bytes.byteLength;}
+ send(conn,data){if(!conn?.open)throw Error('A player is disconnected.');if((conn.dataChannel?.bufferedAmount||0)>MAX_BUFFER)throw Error('A player connection is too slow; the arcade link was stopped.');conn.send(data);if(data.type==='arcade'){this.payloadSent+=data.bytes.byteLength;recordPacket(this.sentTiming);}}
  broadcast(data){for(const member of this.members){if(member.id!==this.id)this.send(this.connections.get(member.id),data);}}
  async openPeer(){
   if(typeof globalThis.Peer!=='function')throw Error('PeerJS could not load. Reload the page.');
@@ -46,7 +49,7 @@ export class Multiplayer {
     this.connections.set(conn.peer,conn);this.pending.set(conn.peer,{id:conn.peer,name:cleanName(meta.name)});this.send(conn,{type:'pending'});accepted=true;clearTimeout(expiry);this.changed();
    }else{accepted=true;clearTimeout(expiry);this.phase='pending';this.changed();}
   });
-  conn.on('data',data=>{if(generation!==this.generation)return;conn.lastSeen=performance.now();if(data?.type==='arcade'&&data.bytes instanceof ArrayBuffer)this.payloadReceived+=data.bytes.byteLength;try{this.handle(conn,data,incoming);}catch(e){if(this.isHost){this.reject(conn.peer,e.message);if(this.active||this.phase==='preparing')this.end(e.message);}else this.end(e.message);}});
+  conn.on('data',data=>{if(generation!==this.generation)return;conn.lastSeen=performance.now();if(data?.type==='arcade'&&data.bytes instanceof ArrayBuffer){this.payloadReceived+=data.bytes.byteLength;recordPacket(this.receivedTiming);}try{this.handle(conn,data,incoming);}catch(e){if(this.isHost){this.reject(conn.peer,e.message);if(this.active||this.phase==='preparing')this.end(e.message);}else this.end(e.message);}});
   conn.on('close',()=>{
    clearTimeout(expiry);if(generation!==this.generation)return;
    if(incoming){if(this.connections.get(conn.peer)!==conn)return;this.connections.delete(conn.peer);this.pending.delete(conn.peer);const member=this.members.some(x=>x.id===conn.peer);this.members=this.members.filter(x=>x.id!==conn.peer);if(member&&(this.active||this.phase==='preparing'))this.end('A cabinet disconnected. The original arcade link must restart.');else{this.renumber();this.publish();}}
@@ -140,6 +143,7 @@ export class Multiplayer {
   return {connections:connections.length,rttMs:rtts.length?Math.max(...rtts):null,
    bufferedBytes:connections.reduce((sum,c)=>sum+(c.dataChannel?.bufferedAmount||0),0),
    payloadSentBytes:this.payloadSent,payloadReceivedBytes:this.payloadReceived,
+   sent:timingSummary(this.sentTiming),received:timingSummary(this.receivedTiming),
    relayConnections:connections.filter(c=>this.networkStats.get(c)?.relay).length};
  }
  async pollDiagnostics(){

@@ -5,8 +5,8 @@ export class Diagnostics {
     Object.assign(this,{clock,read,network,render});
     this.enabled=false;this.history=[];this.latest=null;this.reset();
   }
-  reset() {this.since=this.clock();this.steps=0;this.draws=0;this.cpu=[];this.discardedMs=0;this.audioResets=0;this.maxGap=0;this.previousStep=null;}
-  step(ms) {if(!this.enabled)return;const now=this.clock();if(this.previousStep!==null)this.maxGap=Math.max(this.maxGap,now-this.previousStep);this.previousStep=now;this.steps++;this.cpu.push(ms);}
+  reset() {this.since=this.clock();this.steps=0;this.draws=0;this.cpu=[];this.discardedMs=0;this.audioResets=0;this.maxGap=0;this.previousStep=null;this.nativeTotals=Array(24).fill(0);this.nativeSamples=0;this.windowNetwork=this.network();}
+  step(ms,counters) {if(!this.enabled)return;const now=this.clock();if(this.previousStep!==null)this.maxGap=Math.max(this.maxGap,now-this.previousStep);this.previousStep=now;this.steps++;this.cpu.push(ms);if(counters){this.nativeSamples++;for(let i=0;i<24;i++)this.nativeTotals[i]+=counters[i]||0;}}
   draw() {if(this.enabled)this.draws++;}
   discard(ms) {if(this.enabled)this.discardedMs+=Math.max(0,ms);}
   audioReset() {if(this.enabled)this.audioResets++;}
@@ -14,17 +14,22 @@ export class Diagnostics {
   update(running) {
     if(!this.enabled)return;
     const now=this.clock(),seconds=(now-this.since)/1000;if(seconds<1)return;
-    const sorted=this.cpu.sort((a,b)=>a-b);
+    const sorted=this.cpu.sort((a,b)=>a-b),network=this.network();
+    const rate=key=>Math.max(0,(network[key]||0)-(this.windowNetwork[key]||0))/seconds;
+    network.sentBytesPerSecond=rate('payloadSentBytes');network.receivedBytesPerSecond=rate('payloadReceivedBytes');
+    network.sentPacketsPerSecond=Math.max(0,(network.sent?.packets||0)-(this.windowNetwork.sent?.packets||0))/seconds;
+    network.receivedPacketsPerSecond=Math.max(0,(network.received?.packets||0)-(this.windowNetwork.received?.packets||0))/seconds;
     const sample={time:now,running,seconds,simulationHz:this.steps/seconds,drawHz:this.draws/seconds,
       cpuMeanMs:this.steps?sorted.reduce((a,b)=>a+b,0)/this.steps:0,
       cpuP95Ms:this.steps?sorted[Math.min(sorted.length-1,Math.floor(sorted.length*.95))]:0,
       maxStepGapMs:this.maxGap,discardedMs:this.discardedMs,audioResets:this.audioResets,
-      ...this.read(),network:this.network()};
+      nativeLink:this.nativeSamples?{listWritesHz:this.nativeTotals[7]/seconds,fgEdgesHz:this.nativeTotals[1]/seconds,dataBlocksHz:this.nativeTotals[2]/seconds,parseHz:this.nativeTotals[5]/seconds,fgReadsHz:this.nativeTotals[0]/seconds,frameCaps:this.nativeTotals[10],vblankCaps:this.nativeTotals[11],dataInFg:this.nativeTotals[18],groupedFgReads:this.nativeTotals[19],cancelledFgBatches:this.nativeTotals[20],video30Frames:this.nativeTotals[6]}:null,
+      ...this.read(),network};
     this.latest=sample;this.history.push(sample);if(this.history.length>300)this.history.shift();
     this.render(sample,true);this.reset();
   }
-  report() {return {schema:1,build:BUILD_ID,createdAt:new Date().toISOString(),
-    userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements; application ping RTT includes browser scheduling, RTC RTT measures the selected pair. WASM heap is capacity, not live allocations. GPU time is not measured.',samples:this.history};}
+  report() {return {schema:2,build:BUILD_ID,createdAt:new Date().toISOString(),
+    userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Packet intervals cover the last 256 gaps and include DATA and VSYNC. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
 }
 
 export function mountDiagnostics({element,toggle,download,read,room}) {
@@ -33,7 +38,8 @@ export function mountDiagnostics({element,toggle,download,read,room}) {
     element.hidden=!on;
     if(!s){element.textContent='Diagnostics · collecting…';return;}
     const n=s.network,rtt=n.rttMs==null?'—':`${Math.round(n.rttMs)} ms`;
-    element.textContent=`SIM ${s.simulationHz.toFixed(1)} / 57.5 Hz · DRAW ${s.drawHz.toFixed(0)} Hz\nCPU ${s.cpuMeanMs.toFixed(1)} ms · p95 ${s.cpuP95Ms.toFixed(1)} ms · gap ${s.maxStepGapMs.toFixed(0)} ms\nRTT ${rtt} · SEND ${(n.bufferedBytes/1024).toFixed(0)} KB · RECEIVE ${(s.receiveBytes/1024).toFixed(0)} KB\nWASM ${(s.heapBytes/1048576).toFixed(0)} MB · callbacks ${s.callbackSlots} · dropped ${s.discardedMs.toFixed(0)} ms`;
+    const lists=s.nativeLink?.listWritesHz,format=value=>Number.isFinite(value)?value.toFixed(1):'—';
+    element.textContent=`${s.role||'SINGLE'} · SIM ${s.simulationHz.toFixed(1)} · DRAW ${s.drawHz.toFixed(0)} · LIST ${format(lists)} /s\nCPU ${s.cpuMeanMs.toFixed(1)} ms · p95 ${s.cpuP95Ms.toFixed(1)} · gap ${s.maxStepGapMs.toFixed(0)} ms\nTX ${(n.sentBytesPerSecond/1024).toFixed(0)} KiB/s · RX ${(n.receivedBytesPerSecond/1024).toFixed(0)} KiB/s · RTT ${rtt}\nQUEUE TX ${(n.bufferedBytes/1024).toFixed(1)} KiB · RX ${(s.receiveBytes/1024).toFixed(1)} KiB\nDATA ${format(s.nativeLink?.dataBlocksHz)} · FG ${format(s.nativeLink?.fgEdgesHz)} /s · backlog ${format(s.backlogMs)} ms`;
   }});
   toggle.addEventListener('change',()=>diag.enable(toggle.checked));
   download.addEventListener('click',()=>{
