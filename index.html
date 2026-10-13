@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#05070b"><title>[EXPERIMENTAL LINK PHASE] Daytona USA · Multiplayer Performance Test</title>
+  <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -53,30 +53,37 @@
         </div>
         <div id="mpUtilities" class="mp-utilities" hidden></div>
         <section id="multiplayerEntry" class="room-entry" hidden aria-labelledby="entryTitle">
-          <div class="entry-heading"><button id="modeBack" type="button" class="quiet-btn">← Back</button><div><h2 id="entryTitle">Race with your friends</h2><p>Create a private room or enter an invitation.</p></div></div>
-          <div class="driver-field"><label for="driverName">Your driver name</label><input id="driverName" maxlength="24" value="Driver" autocomplete="nickname"></div>
+          <div class="entry-heading"><button id="modeBack" type="button" class="quiet-btn">← Back</button><div><span class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="entryTitle">Your friends. Your grid.</h2><p>Choose a room and race together.</p></div></div>
+          <div class="driver-field"><label for="driverName">Driver name</label><input id="driverName" maxlength="24" value="Driver" autocomplete="nickname"></div>
           <div class="room-entry-actions">
-            <section class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M19 9v8M15 13h8"/></svg><h3>Lead the grid</h3><p>Invite your friends and choose the race settings.</p><button id="createRoom" class="launch-btn" type="button">CREATE ROOM <span aria-hidden="true">→</span></button></section>
-            <section class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v16h-7M3 12h12M10 7l5 5-5 5"/></svg><h3>Join your friends</h3><label for="joinCode">Invitation link or room code</label><input id="joinCode" autocomplete="off" spellcheck="false" placeholder="Paste invitation"><button id="joinRoom" class="launch-btn secondary" type="button">JOIN ROOM <span aria-hidden="true">→</span></button></section>
+            <section class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M19 9v8M15 13h8"/></svg><h3>Create a room</h3><p>Set the race, invite friends and approve your grid.</p><button id="createRoom" class="launch-btn" type="button">CREATE ROOM <span aria-hidden="true">→</span></button></section>
+            <section id="joinCard" class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v16h-7M3 12h12M10 7l5 5-5 5"/></svg><h3>Join a room</h3><label for="joinCode" class="sr-only">Invitation link or room code</label><input id="joinCode" autocomplete="off" spellcheck="false" placeholder="Paste invitation link or code" aria-describedby="invitationHint"><p id="invitationHint" class="invitation-hint">Your host will approve your request.</p><button id="joinRoom" class="launch-btn secondary" type="button">JOIN ROOM <span aria-hidden="true">→</span></button></section>
           </div>
-          <p class="entry-note">Up to 8 drivers · Everyone uses their own verified ROM.</p>
+          <p id="entryStatus" class="entry-status" role="status" aria-live="polite"></p>
+          <p class="entry-note">2–8 drivers · Your ROM stays on your device.</p>
         </section>
-        <section id="roomPanel" class="room-panel" hidden aria-labelledby="roomTitle">
-          <div class="room-heading"><div><span class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="roomTitle">Your room</h2></div><span id="roomCount" class="room-count">0 / 8 players</span></div>
-          <div class="room-layout">
+        <section id="roomPanel" class="room-panel" hidden aria-labelledby="roomTitle" data-mobile-tab="grid">
+          <div class="room-heading"><div><span class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="roomTitle">Your room</h2></div><div class="room-heading-meta"><span id="roomPhase" class="phase-pill">LOBBY</span><span id="roomCount" class="room-count">0 / 8 players</span></div></div>
+          <div class="room-mobile-tabs" role="tablist" aria-label="Room view"><button id="roomGridTab" role="tab" aria-selected="true" aria-controls="roomWorkspace" type="button">ROOM</button><button id="roomChatTab" role="tab" aria-selected="false" aria-controls="chatPanel" type="button">CHAT <span id="mobileChatUnread" class="unread-badge" hidden>0</span></button></div>
+          <div id="roomWorkspace" class="room-layout">
             <section class="grid-section" aria-labelledby="gridTitle"><div class="section-label"><h3 id="gridTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M17 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 6v2"/></svg>STARTING GRID</h3><span id="readyCount">0 ready</span></div>
               <ul id="playersList" class="room-players" aria-label="Players"></ul>
-              <div id="pendingBlock" hidden><div class="section-label"><h3>JOIN REQUESTS</h3><span id="pendingCount"></span></div><ul id="pendingList" class="room-pending"></ul></div>
+              <p id="openSeatCount" class="open-seats">Invite a friend to fill the grid.</p>
+              <div id="pendingBlock" hidden><div class="section-label"><h3>JOIN REQUESTS</h3><div class="request-controls"><span id="pendingCount" aria-live="polite"></span></div></div><ul id="pendingList" class="room-pending"></ul></div>
             </section>
             <aside class="room-sidebar" aria-label="Room options">
-              <fieldset class="room-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend><div class="race-selectors"><label for="roomMode">Game mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label></div><p class="region-label">Region <strong>Export</strong></p><p id="roomSettingsHint" class="room-hint"></p></fieldset>
-              <div id="inviteBlock" class="invite-card" hidden><h3><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>INVITE FRIENDS</h3><label for="inviteLink" class="sr-only">Private invitation link</label><input id="inviteLink" readonly aria-describedby="inviteHint"><div class="invite-actions"><button id="copyRoom" type="button">Copy link</button><button id="copyCode" type="button" class="quiet-btn">Copy code</button></div><span id="roomCode" hidden></span><p id="inviteHint" class="room-hint">Share privately. You approve who joins.</p></div>
-              <p id="roomConnection" class="room-connection"></p>
-              <p id="arcadeLinkStatus" class="room-hint" hidden></p>
+              <fieldset class="room-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label></div><p class="region-label">Region <strong>Export</strong></p><p id="roomSettingsHint" class="room-hint"></p></fieldset>
+              <div id="inviteBlock" class="invite-card" hidden><h3><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>INVITE FRIENDS</h3><label for="inviteLink" class="sr-only">Private invitation link</label><input id="inviteLink" readonly aria-describedby="inviteHint"><div class="invite-actions"><button id="copyRoom" type="button">Copy link</button><button id="copyCode" type="button" class="quiet-btn">Copy code</button></div><span id="roomCode" hidden></span><p id="inviteHint" class="room-hint">Only admitted players can join the grid and chat.</p></div>
+              <p id="roomConnection" class="room-connection"></p><p id="arcadeLinkStatus" class="room-hint" hidden></p>
             </aside>
+            <section id="chatPanel" class="room-chat" aria-labelledby="chatTitle"><div class="chat-heading"><h3 id="chatTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>LOBBY CHAT</h3><span id="chatUnread" class="unread-badge" hidden>0</span></div>
+              <div class="chat-scroll"><ol id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Lobby messages" tabindex="0"></ol><p id="chatEmpty" class="chat-empty">Meet your grid.<br><span>Say hello or coordinate the next race.</span></p><button id="newChatMessages" type="button" class="new-messages" hidden>New messages ↓</button></div>
+              <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Message to the lobby</label><input id="chatInput" maxlength="240" autocomplete="off" enterkeyhint="send" placeholder="Message your friends…" aria-describedby="chatFeedback"><button id="chatSend" type="submit" aria-label="Send message"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 9-18 9 4-9-4-9ZM7 12h14"/></svg></button></form>
+              <div class="chat-footnote"><p id="chatFeedback" role="status" aria-live="polite">Only players in this room can read this chat.</p><span id="chatLength">0/240</span></div>
+            </section>
           </div>
           <footer class="room-footer"><p id="roomMessage" role="status" aria-live="polite"></p><div class="room-actions"><button id="leaveRoom" type="button" class="quiet-btn">← Leave room</button><span class="action-spacer"></span><button id="readyRoom" type="button" aria-pressed="false">I’M READY</button><button id="startRoom" type="button" class="launch-btn" disabled>START GAME <span aria-hidden="true">→</span></button><button id="stopRoom" type="button" hidden>Return all to room</button><button id="returnRoomGame" type="button" class="launch-btn" hidden>RETURN TO GAME <span aria-hidden="true">→</span></button></div></footer>
-          <p class="room-note">Experimental · Keep this tab visible. A lost connection returns everyone to the room.</p>
+          <p class="room-note">Keep the game tab visible during a race.</p>
         </section>
         <p class="first-run">First visit: Single cabinet · Export region · Zero credits.<br>Let attract mode play, or insert a coin to race.</p>
       </section>

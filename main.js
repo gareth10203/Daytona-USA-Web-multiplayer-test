@@ -1,3 +1,4 @@
+import {createLobbySound} from './lobby-sound.js';
 import { mountDiagnostics } from './diagnostics.js';
 import { createRenderer } from './renderer.js';
 import { restoreNVRAM, STORAGE_ID } from './nvram.js';
@@ -96,7 +97,7 @@ for(const [id,key] of [['rumbleIntensity','rumble'],['centringIntensity','centri
   $(id).addEventListener('input',event=>changeSetting(key,Number(event.target.value)/100));
 for(const radio of document.querySelectorAll('[name="drawDistance"]'))radio.addEventListener('change',event=>{if(event.target.checked)changeSetting('drawDistance',Number(event.target.value));});
 syncSettings();
-const settingsTabs=[...document.querySelectorAll('[role="tab"]')];
+const settingsTabs=[...document.querySelectorAll('#settingsModal [role="tab"]')];
 function selectSettingsTab(tab,focus=false){
   wheelControls.cancel();
   for(const item of settingsTabs){
@@ -137,7 +138,8 @@ const touch=createTouchControls($('touchControls'),{
   menu:()=>openMenu(),
   settings:()=>{const panel=$('touchControls').querySelector('.touch-service');panel.hidden=!panel.hidden;}
 });
-roomUI=createRoomUI(room,{single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
+const joinChime=createLobbySound({context:()=>ctxAudio,output:()=>audioGain,muted:()=>soundMuted||settings.volume===0});
+roomUI=createRoomUI(room,{notifyRequest:joinChime,single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
 document.documentElement.classList.toggle('touch-device',navigator.maxTouchPoints>0 || matchMedia('(any-pointer:coarse)').matches);
 function saveNVRAM() {
   if(multiplayerProfile)return;
@@ -404,7 +406,7 @@ ui.dropzone.addEventListener('keydown',e=>{
 });
 ui.overlay.addEventListener('keydown',e=>{
   if(e.key!=='Tab')return;
-  const targets=[...ui.overlay.querySelectorAll('button:not([disabled]),[tabindex="0"],input:not([disabled]):not([type="file"]),select:not([disabled]),summary')].filter(el=>{
+  const targets=[...ui.overlay.querySelectorAll('button:not([disabled]),[tabindex="0"],input:not([disabled]):not([type="file"]),select:not([disabled]),textarea:not([disabled]),summary')].filter(el=>{
     if(!el.getClientRects().length || el.tabIndex<0)return false;
     if(el.type==='radio' && el.name){
       const group=[...ui.overlay.querySelectorAll('input[type="radio"]')].filter(input=>input.name===el.name && input.getClientRects().length);

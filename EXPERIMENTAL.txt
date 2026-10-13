@@ -18,3 +18,12 @@ En multiplayer, la lectura inicial de la interrupcion conserva la referencia de 
 Prueba especifica de Revision A: reconoce el sitio de lectura del manejador de video por su direccion. No hay paridad certificada con hardware o MAME.
 Se desactiva al terminar la sesion y al recargar el motor; single player conserva el modo anterior.
 El trazado detallado de PCs esta apagado por defecto; las metricas de diagnostico siguen disponibles.
+
+LOBBY 7 - daytona-rev-a-lobby-7
+Guia inferior alineada al ancho de la ventana de crear/unirse. Nombre persistente al editar.
+Presencia ping/pong cada segundo tambien en lobby y pendientes: retiro tras 12 segundos sin datos recibidos. Limpieza independiente del evento close del transporte.
+Aviso explicito al salir o cerrar la sala; renumeracion y Ready se actualizan en todos.
+El lobby conserva el chat y la interfaz compacta. Todos los participantes deben usar lobby-7.
+Motor identico al experimento de fase 4 que ya fue probado.
+
+El lobby vuelve a mostrar los ocho asientos numerados y los puestos Open seat.
