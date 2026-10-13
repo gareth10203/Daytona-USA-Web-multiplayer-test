@@ -161,6 +161,8 @@ uintptr_t daytona_frame_ptr() {
 }
 int daytona_audio_frames() { return audio_frames; }
 uintptr_t daytona_audio_ptr() { return audio_samples.empty() ? 0 : reinterpret_cast<uintptr_t>(audio_samples.data()); }
+uint32_t daytona_callback_slots() { return game ? uint32_t(game->callback_slots()) : 0; }
+uint32_t daytona_link_pending_bytes() { return uint32_t(browser_link.incoming.size()); }
 uint32_t daytona_total_frames() { return game ? uint32_t(game->frames()) : 0; }
 uintptr_t daytona_eeprom_ptr() {
     return game ? reinterpret_cast<uintptr_t>(game->board().io().eeprom.data()) : 0;

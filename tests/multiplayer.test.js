@@ -44,3 +44,65 @@ test('capacity is eight, stale readiness cannot start and late admission is reje
   await host.start();assert.equal(host.phase,'lobby');
  }finally{host.leave();for(const r of guests)r.leave();}
 });
+
+async function linkedRooms(count=3){
+ const visibility=Array(count).fill(true),stopped=Array(count).fill(0);
+ const rooms=Array.from({length:count},(_,i)=>new Multiplayer({isVisible:()=>visibility[i],onStop:()=>stopped[i]++}));
+ await rooms[0].create('Host');
+ for(let i=1;i<count;i++){await rooms[i].join(rooms[0].snapshot().code,'Guest '+i);await flush();rooms[0].approve(rooms[i].id);await flush();}
+ for(const r of rooms)r.ready(true);await flush();await rooms[0].start();await flush();
+ return {rooms,visibility,stopped};
+}
+test('host and guest visibility interruption stop every cabinet, retain the room and allow a clean restart',async()=>{
+ const {rooms,visibility,stopped}=await linkedRooms();const host=rooms[0],code=host.snapshot().code;
+ try{
+  for(const index of [0,1]){
+   const epoch=host.epoch;visibility[index]=false;rooms[index].visibilityChanged();await flush();
+   assert.ok(rooms.every(r=>r.phase==='lobby'&&!r.active&&!r.awaitingStop));assert.ok(rooms.every(r=>r.members.length===3&&r.members.every(m=>!m.ready)));assert.equal(host.snapshot().code,code);
+   visibility[index]=true;rooms[index].visibilityChanged();assert.ok(rooms.every(r=>!r.active));
+   for(const r of rooms)r.ready(true);await flush();await host.start();await flush();assert.ok(rooms.every(r=>r.active));assert.notEqual(host.epoch,epoch);
+   host.handle(host.connections.get(rooms[1].id),{type:'stop',epoch,reason:'stale'},true);assert.ok(host.active);
+  }
+  assert.deepEqual(stopped,[2,2,2]);
+ }finally{for(const r of rooms)r.leave();}
+});
+test('keepalive traffic cannot conceal a stalled host and guests wait for stop acknowledgment',async()=>{
+ const {rooms}=await linkedRooms();const [host,a,b]=rooms;
+ try{
+  const epoch=host.epoch;const now=performance.now();
+  for(const guest of [a,b]){
+   guest.advance();guest.server.emulation.at=now-6000;
+   guest.handle(guest.server,{type:'ping',time:now,epoch,frames:0},false);assert.equal(guest.server.emulation.at,now-6000);
+   guest.checkProgress(now);assert.equal(guest.phase,'lobby');assert.ok(guest.awaitingStop);guest.ready(true);assert.ok(guest.members.every(m=>!m.ready));
+  }
+  await flush();assert.ok(rooms.every(r=>r.phase==='lobby'&&!r.awaitingStop));assert.equal(host.members.length,3);
+ }finally{for(const r of rooms)r.leave();}
+});
+test('host watches each slave progress, while progressing cabinets stay active',async()=>{
+ const {rooms}=await linkedRooms();const [host,a,b]=rooms;
+ try{
+  const now=performance.now();for(const r of rooms)r.advance();
+  for(const guest of [a,b])host.handle(host.connections.get(guest.id),{type:'ping',time:now,epoch:host.epoch,frames:1},true);
+  host.checkProgress(now);assert.ok(host.active);
+  host.connections.get(b.id).emulation.at=now-6000;host.checkProgress(now);await flush();assert.ok(rooms.every(r=>r.phase==='lobby'));
+ }finally{for(const r of rooms)r.leave();}
+});
+
+test('relayed slave packets cannot pretend that the master is advancing',async()=>{
+ const {rooms}=await linkedRooms();const [host,a,b]=rooms;
+ try{
+  host.advance();const now=performance.now();b.server.emulation={epoch:host.epoch,frames:host.progressFrames,at:now-6000};
+  a.advance();a.write(new Uint8Array([9]));await flush();assert.equal(b.server.emulation.at,now-6000);
+  b.checkProgress(performance.now());await flush();assert.ok(rooms.every(r=>r.phase==='lobby'));
+ }finally{for(const r of rooms)r.leave();}
+});
+
+test('preparation never advertises counters retained from the previous race',async()=>{
+ const {rooms}=await linkedRooms(2);const [host,guest]=rooms;
+ try{
+  for(const r of rooms)for(let i=0;i<100;i++)r.advance();host.end('Restart');await flush();
+  for(const r of rooms){r.onPrepare=async()=>{assert.equal(r.progressFrames,0);r.heartbeat();};r.ready(true);}
+  await flush();await host.start();await flush();assert.ok(rooms.every(r=>r.active&&r.progressFrames===0));
+  assert.equal(guest.server.emulation.frames,0);assert.equal(host.connections.get(guest.id).emulation.frames,0);
+ }finally{for(const r of rooms)r.leave();}
+});

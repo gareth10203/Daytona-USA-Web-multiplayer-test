@@ -1,7 +1,7 @@
 const {chromium}=require(process.env.PLAYWRIGHT_PATH||'playwright');
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
-const base=process.env.TEST_URL||'http://127.0.0.1:8082';
+const base=process.env.TEST_URL||'http://127.0.0.1:8083';
 (async()=>{
  const browser=await chromium.launch({channel:'chrome',headless:true,args:['--enable-unsafe-webgpu','--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--autoplay-policy=no-user-gesture-required']});
  const contexts=[];const errors=[];
@@ -37,6 +37,7 @@ const base=process.env.TEST_URL||'http://127.0.0.1:8082';
   await guest.waitForFunction(()=>{const s=arcadeState();return s.linkState===2||s.multiplayer.error;},null,{timeout:60000});
   const initial=await Promise.all([state(host),state(guest)]);console.log('Linked states:',initial.map(s=>({phase:s.multiplayer.phase,error:s.multiplayer.error,id:s.linkId,count:s.linkCount,state:s.linkState,frames:s.frames})));
   assert.ok(initial.every(s=>s.linkState===2&&s.linkCount===2));assert.deepEqual(initial.map(s=>s.linkId).sort(),[1,2]);
+  for(const p of [host,guest]){await p.keyboard.press('Escape');await p.click('#settingsBtn');await p.click('#experimentalTab');await p.check('#diagnosticsEnabled');await p.keyboard.press('Escape');await p.keyboard.press('Escape');}
   assert.equal(await host.evaluate(()=>localStorage.getItem('daytona-web-rev-a-nvram-v1')),saved);
   const eeprom=await Promise.all([host,guest].map(p=>p.evaluate(()=>{const m=testEngine;return Array.from(m.HEAPU8.slice(m._daytona_eeprom_ptr(),m._daytona_eeprom_ptr()+128));})));
   fs.writeFileSync('build/room-eeprom.json',JSON.stringify(eeprom));
@@ -53,6 +54,13 @@ const base=process.env.TEST_URL||'http://127.0.0.1:8082';
   await host.waitForTimeout(35000);
   await Promise.all([host,guest].map(async p=>{await p.keyboard.down('ArrowUp');await p.waitForTimeout(2000);await p.keyboard.up('ArrowUp');}));
   const race=await Promise.all([state(host),state(guest)]);assert.ok(race.every(s=>s.linkState===2));await host.screenshot({path:'build/linked-race-host.png'});await guest.screenshot({path:'build/linked-race-guest.png'});
+  await host.screenshot({path:'build/diagnostics-race.png'});assert.ok(await host.locator('#diagnosticsHud').isVisible());
+  await host.keyboard.press('Escape');await host.click('#settingsBtn');await host.click('#experimentalTab');
+  const reportEvent=host.waitForEvent('download');await host.click('#downloadDiagnostics');const download=await reportEvent;
+  const report=JSON.parse(fs.readFileSync(await download.path(),'utf8'));fs.writeFileSync('build/live-diagnostics.json',JSON.stringify(report,null,2));
+  assert.ok(report.samples.some(s=>s.linked&&s.simulationHz>30&&s.callbackSlots>0&&s.callbackSlots<=256));
+  assert.ok(report.samples.some(s=>s.network.rttMs!=null));assert.ok(report.samples.every(s=>s.cpuMeanMs>=0));assert.ok(!JSON.stringify(report).includes(invite));
+  await host.keyboard.press('Escape');await host.keyboard.press('Escape');
   await guest.keyboard.press('Escape');await guest.click('#leaveRoom');await host.waitForFunction(()=>arcadeState().multiplayer.phase==='lobby');
   assert.equal((await state(host)).running,false);assert.equal((await state(host)).multiplayer.members.length,1);
   await host.click('#leaveRoom');await host.click('#modeBack');await host.click('#singlePlayer');await host.waitForTimeout(500);assert.equal((await state(host)).linkState,0);assert.equal((await state(host)).multiplayer.phase,'idle');

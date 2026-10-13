@@ -10,7 +10,7 @@ Add-Content -LiteralPath (Join-Path $stageRoot '.gitignore') -Value "`n# Compile
 $manifest=Get-ChildItem -LiteralPath $stageRoot -Recurse -File -Force | Sort-Object FullName | ForEach-Object {(Get-FileHash -LiteralPath $_.FullName).Hash.ToLower()+'  '+$_.FullName.Substring($stageRoot.Length+1).Replace('\','/')}
 [System.IO.File]::WriteAllLines((Join-Path $stageRoot 'MANIFEST.sha256'),$manifest,[System.Text.UTF8Encoding]::new($false))
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archivePath=Join-Path $variantRoot 'daytona_multiplayer_github_pages.zip'
+$archivePath=Join-Path $variantRoot 'daytona_multiplayer_optimized_github_pages.zip'
 $stream=[System.IO.File]::Open($archivePath,[System.IO.FileMode]::Create)
 $archive=[System.IO.Compression.ZipArchive]::new($stream,[System.IO.Compression.ZipArchiveMode]::Create)
 try{foreach($entry in (Get-ChildItem -LiteralPath $stageRoot -Recurse -File -Force)){[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$entry.FullName,$entry.FullName.Substring($stageRoot.Length+1).Replace('\','/'),[System.IO.Compression.CompressionLevel]::Optimal)|Out-Null}}finally{$archive.Dispose();$stream.Dispose()}

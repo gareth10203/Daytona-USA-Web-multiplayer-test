@@ -1,4 +1,4 @@
-# Daytona USA — separate multiplayer experiment
+# Daytona USA — multiplayer performance test
 
 Import a validated Revision A ROM, choose SINGLE PLAYER or MULTIPLAYER, then
 CREATE ROOM or JOIN ROOM. The host shares an invitation and approves guests.
@@ -10,11 +10,16 @@ protocol. It allows up to eight players; connection and latency compatibility
 are experimental. No dedicated game server is required. Some networks need
 a separately configured TURN relay. Menus do not pause multiplayer.
 
-Serve `dist` with `node scripts/serve.js dist 8082`, then open localhost:8082.
+Serve `dist` with `node scripts/serve.js dist 8083`, then open localhost:8083.
 The compiled dist contents can be published at a GitHub Pages publishing root.
 See [multiplayer behavior and tests](docs/MULTIPLAYER.md).
 
-The original single-player project outside this folder is preserved.
+The original single-player project and previous multiplayer-version are preserved.
+
+This copy removes unused link-clock calls, recycles executed callbacks and adds
+local diagnostics under Settings → Experimental. Hidden or stalled cabinets
+return everyone to the existing room, clearing Ready without resuming the old race. The normal counter now shows
+simulation FPS. See [testing and diagnostic reports](docs/PERFORMANCE_TEST.md).
 
 ---
 

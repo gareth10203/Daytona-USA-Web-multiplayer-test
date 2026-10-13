@@ -4,13 +4,15 @@ Installs platform/web, patches CMake and keeps CPU tile composition for WebGPU.
 Never copies ROMs or generated game sources into the port package.
 """
 from pathlib import Path
-import shutil, sys
+import shutil, sys, subprocess
 
 SOURCE = Path(__file__).resolve().parents[1]
 repo = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path.cwd()
 cmake = repo / "CMakeLists.txt"
 if not cmake.is_file() or not (repo / "src/runtime/game_loop.h").is_file():
     raise SystemExit("Indica la ruta de la carpeta clonada daytona-arcade-recomp")
+
+subprocess.run([sys.executable, str(SOURCE / 'scripts/apply_runtime_optimizations.py'), str(repo)], check=True)
 
 text = cmake.read_text(encoding="utf-8")
 # Avoid SDL3's native GPU frontend during an Emscripten CMake configure.
@@ -56,7 +58,7 @@ if "// WebGPU widened backdrop" not in video_text:
 video.write_text(video_text, encoding="utf-8")
 for name in ("daytona_web.cmake", "daytona_web.cpp", "daytona_gpu.cpp", "daytona_gpu.h", "daytona_haptics.h", "daytona_link.h"):
     shutil.copy2(SOURCE / "bridge" / name, out / name)
-for name in ("index.html", "main.js", "style.css", "renderer.js", "model2.wgsl", "nvram.js", "touch.js", "haptics.js", "preferences.js", "steering.js", "wheel.js", "wheel-controls.js", "multiplayer.js", "room-ui.js", "room-settings.js", "vendor/peerjs.min.js", "vendor/PEERJS-LICENSE.txt", "daytona-logo.png"):
+for name in ("index.html", "main.js", "style.css", "renderer.js", "model2.wgsl", "nvram.js", "touch.js", "haptics.js", "preferences.js", "steering.js", "wheel.js", "wheel-controls.js", "multiplayer.js", "diagnostics.js", "room-ui.js", "room-settings.js", "vendor/peerjs.min.js", "vendor/PEERJS-LICENSE.txt", "daytona-logo.png"):
     (out / name).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE / "web" / name, out / name)
 print("Web frontend instalado en", out)

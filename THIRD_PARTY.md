@@ -87,3 +87,10 @@ and shipped license are documented in [the Vita dependency record](https://githu
 - Bundle SHA256: 7604d8c31bec4f134b0d15c2d80b1d095ea18af005354f439f14291fcd7b4168.
 - Used only for browser WebRTC data connections and cloud signaling.
 - Cloud signaling is an external dependency, not included server software.
+
+## Web runtime performance adaptation
+
+The existing BSD-3-Clause MAME-derived CommBoard adaptation now skips unused
+deadline clock reads when frame synchronization is disabled. The existing runtime
+callback-slot reuse path is enabled for the web build. These changes are installed
+by scripts/apply_runtime_optimizations.py; no third-party dependency was added.

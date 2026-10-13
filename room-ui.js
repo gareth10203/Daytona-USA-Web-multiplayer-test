@@ -62,14 +62,14 @@ export function createRoomUI(room,{single,unlockAudio}){
    $('pendingBlock').hidden=!state.isHost||!state.pending.length;
    $('pendingCount').textContent=`${state.pending.length} pending`;
    const me=state.members.find(x=>x.id===state.id);
-   $('readyRoom').hidden=state.phase!=='lobby'||!me;$('readyRoom').textContent=me?.ready?'READY ✓':'I’M READY';$('readyRoom').title=me?.ready?'Undo Ready':'Mark yourself ready';$('readyRoom').setAttribute('aria-pressed',String(!!me?.ready));
+   $('readyRoom').disabled=!!state.awaitingStop;$('readyRoom').hidden=state.phase!=='lobby'||!me;$('readyRoom').textContent=me?.ready?'READY ✓':'I’M READY';$('readyRoom').title=me?.ready?'Undo Ready':'Mark yourself ready';$('readyRoom').setAttribute('aria-pressed',String(!!me?.ready));
    $('startRoom').hidden=!state.isHost||state.phase!=='lobby';$('startRoom').disabled=state.members.length<2||state.pending.length>0||state.members.some(x=>!x.ready);
    $('stopRoom').hidden=!state.isHost||state.phase!=='playing';
    $('leaveRoom').textContent=state.phase==='playing'?'Leave game':'← Leave room';
    const waiting=state.members.filter(x=>!x.ready).length;
    const lobby=state.pending.length?'Review the join requests to continue.':state.members.length<2?'Invite a friend to fill the grid.':waiting?`Waiting for ${waiting} ${waiting===1?'driver':'drivers'} to get ready.`:state.isHost?'Everyone is ready. Start the game.':'Everyone is ready. Waiting for the host.';
    const messages={connecting:'Connecting…',pending:'Waiting for the host to accept you.',lobby,preparing:'Preparing every cabinet…',playing:'Race in progress. This menu does not pause it.',error:'Connection could not be established.'};
-   $('roomMessage').textContent=state.error||messages[state.phase]||'';
+   $('roomMessage').textContent=(state.error||messages[state.phase]||'')+(state.awaitingStop?' Waiting for the host to return to the room.':'');
    $('roomConnection').textContent=state.phase==='connecting'?'Connecting…':state.phase==='error'?'Connection unavailable':state.signaling?'● Room connected':'Room service unavailable';
    $('roomConnection').title=state.signaling?'Room service available.':'Existing player connections can continue.';
    $('returnRoomGame').hidden=state.phase!=='playing';
