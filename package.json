@@ -1,0 +1,18 @@
+{
+  "name": "daytona-webgpu",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/nvram.test.js tests/haptics.test.js tests/preferences.test.js tests/steering.test.js tests/wheel.test.js tests/multiplayer.test.js",
+    "test:browser": "node tests/browser-smoke.cjs",
+    "test:settings": "node tests/settings-browser.cjs",
+    "test:wheel": "node tests/wheel-browser.cjs",
+    "serve": "node scripts/serve.js",
+    "test:mobile": "node tests/mobile-controls.cjs",
+    "test:multiplayer": "node tests/multiplayer-browser.cjs",
+    "test:room-ui": "node tests/room-layout.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}
