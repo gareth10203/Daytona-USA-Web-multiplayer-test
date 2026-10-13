@@ -1,7 +1,7 @@
 # Private linked-cabinet experiment
 
 This is a separate version. The original web, bridge, runtime and dist folders
-outside multiplayer-optimized are not edited. Rebuilding uses the existing SDK
+outside multiplayer-version are not edited. Rebuilding uses the existing SDK
 and generated Revision A sources read-only; all new runtime objects and output
 are inside this version.
 
@@ -83,5 +83,3 @@ The room is verified without vertical scrolling at 1024x640, 1280x720,
 1366x768 and 1920x1080, including eight drivers or seven pending requests.
 Mobile uses a stacked layout. `tests/room-layout.cjs` checks those layouts
 with roster fixtures, real application modules and a local ROM boot.
-
-Performance changes in this copy are documented in [PERFORMANCE_TEST.md](PERFORMANCE_TEST.md).

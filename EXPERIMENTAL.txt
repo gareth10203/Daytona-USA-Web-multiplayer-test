@@ -1,0 +1,6 @@
+PRUEBA EXPERIMENTAL DEL ENLACE
+Conserva las transiciones DATA y el tiempo pendiente.
+Motor de diagnostico, no version final optimizada.
+Todos los participantes deben usar este mismo paquete.
+No incluye ROM. Cerrar el menu enlazado conserva el reloj de emulacion y la programacion del audio.
+La proteccion de regreso a la sala al ocultar la pestana sigue activa.

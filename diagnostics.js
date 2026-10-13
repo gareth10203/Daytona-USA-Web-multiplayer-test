@@ -1,3 +1,4 @@
+import {BUILD_ID} from './room-settings.js';
 // Local, bounded measurements. No telemetry is uploaded.
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {
@@ -22,7 +23,7 @@ export class Diagnostics {
     this.latest=sample;this.history.push(sample);if(this.history.length>300)this.history.shift();
     this.render(sample,true);this.reset();
   }
-  report() {return {schema:1,build:'daytona-rev-a-link-performance-3',createdAt:new Date().toISOString(),
+  report() {return {schema:1,build:BUILD_ID,createdAt:new Date().toISOString(),
     userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements; application ping RTT includes browser scheduling, RTC RTT measures the selected pair. WASM heap is capacity, not live allocations. GPU time is not measured.',samples:this.history};}
 }
 

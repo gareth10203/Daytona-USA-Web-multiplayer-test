@@ -1,5 +1,5 @@
 import {DEFAULT_EEPROM} from './nvram.js';
-export const BUILD_ID='daytona-rev-a-link-performance-3';
+export const BUILD_ID='daytona-rev-a-link-recovery-experimental-2';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

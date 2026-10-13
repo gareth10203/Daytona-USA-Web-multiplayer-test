@@ -254,7 +254,7 @@ function frame(now) {
   if(room.active){room.checkProgress(now);if(!room.active)return;}
   renderer.prepare(wasm);
   if(!lastTime)lastTime=now;
-  lagMs+=Math.min(120,now-lastTime);lastTime=now;
+  lagMs+=Math.max(0,now-lastTime);lastTime=now;
   // Never block the browser rendering dozens of late game frames.
   for(let n=0;n<2&&lagMs>=FIXED_MS;n++) {
     const i=inputs();
@@ -283,7 +283,7 @@ function frame(now) {
     if(wasm._daytona_eeprom_dirty() || (wasm._daytona_total_frames()%600===0))saveNVRAM();
     lagMs-=FIXED_MS;
   }
-  if(lagMs>100){diagnostics.discard(lagMs-FIXED_MS);lagMs=FIXED_MS;}
+
   if(wasm._daytona_total_frames()>0){try{renderer.draw(wasm);rendered++;diagnostics.draw();}catch(err){failure(err.message);}}
   if(now-statTime>1000){ui.fps.textContent=String(Math.round(simulated*1000/(now-statTime)));rendered=0;simulated=0;statTime=now;}
 }
@@ -376,12 +376,14 @@ function openMenu() {
 async function resumeGame() {
   if(!wasm?._daytona_ready() || ui.start.disabled)return;
   wheelControls.resetEdges();
-  started=true;running=true;held.clear();touch.clear();lastTime=0;lagMs=FIXED_MS;statTime=performance.now();rendered=0;simulated=0;diagnostics.reset();
+  const keepLinkedClock=room.active&&running;
+  started=true;running=true;held.clear();touch.clear();
+  if(!keepLinkedClock){lastTime=0;lagMs=FIXED_MS;statTime=performance.now();rendered=0;simulated=0;diagnostics.reset();}
   ui.overlay.hidden=true;document.documentElement.classList.remove('launcher-open');
   gameSurface.inert=false;
   document.documentElement.classList.add('playing');ui.canvas.focus();
   setStatus(room.active?'Linked arcade running':'Arcade running',true);
-  if(audioLoaded)await activateAudio();
+  if(audioLoaded&&(!keepLinkedClock||ctxAudio?.state!=='running'))await activateAudio();
 }
 ui.start.addEventListener('click',resumeGame);
 ui.menu.addEventListener('click',openMenu);
