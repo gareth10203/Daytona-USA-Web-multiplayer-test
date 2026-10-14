@@ -4816,6 +4816,7 @@ var ___cxa_free_exception = makeInvalidEarlyAccess('___cxa_free_exception');
 var _daytona_probe_reset = Module['_daytona_probe_reset'] = makeInvalidEarlyAccess('_daytona_probe_reset');
 var _daytona_probe_ptr = Module['_daytona_probe_ptr'] = makeInvalidEarlyAccess('_daytona_probe_ptr');
 var _daytona_delivery_mode = Module['_daytona_delivery_mode'] = makeInvalidEarlyAccess('_daytona_delivery_mode');
+var _daytona_central_config = Module['_daytona_central_config'] = makeInvalidEarlyAccess('_daytona_central_config');
 var _daytona_trace_enable = Module['_daytona_trace_enable'] = makeInvalidEarlyAccess('_daytona_trace_enable');
 var _daytona_trace_events_ptr = Module['_daytona_trace_events_ptr'] = makeInvalidEarlyAccess('_daytona_trace_events_ptr');
 var _daytona_trace_events_count = Module['_daytona_trace_events_count'] = makeInvalidEarlyAccess('_daytona_trace_events_count');
@@ -4892,6 +4893,7 @@ function assignWasmExports(wasmExports) {
   assert(typeof wasmExports['daytona_probe_reset'] != 'undefined', 'missing Wasm export: daytona_probe_reset');
   assert(typeof wasmExports['daytona_probe_ptr'] != 'undefined', 'missing Wasm export: daytona_probe_ptr');
   assert(typeof wasmExports['daytona_delivery_mode'] != 'undefined', 'missing Wasm export: daytona_delivery_mode');
+  assert(typeof wasmExports['daytona_central_config'] != 'undefined', 'missing Wasm export: daytona_central_config');
   assert(typeof wasmExports['daytona_trace_enable'] != 'undefined', 'missing Wasm export: daytona_trace_enable');
   assert(typeof wasmExports['daytona_trace_events_ptr'] != 'undefined', 'missing Wasm export: daytona_trace_events_ptr');
   assert(typeof wasmExports['daytona_trace_events_count'] != 'undefined', 'missing Wasm export: daytona_trace_events_count');
@@ -4964,6 +4966,7 @@ function assignWasmExports(wasmExports) {
   _daytona_probe_reset = Module['_daytona_probe_reset'] = createExportWrapper('daytona_probe_reset', 0);
   _daytona_probe_ptr = Module['_daytona_probe_ptr'] = createExportWrapper('daytona_probe_ptr', 0);
   _daytona_delivery_mode = Module['_daytona_delivery_mode'] = createExportWrapper('daytona_delivery_mode', 1);
+  _daytona_central_config = Module['_daytona_central_config'] = createExportWrapper('daytona_central_config', 2);
   _daytona_trace_enable = Module['_daytona_trace_enable'] = createExportWrapper('daytona_trace_enable', 1);
   _daytona_trace_events_ptr = Module['_daytona_trace_events_ptr'] = createExportWrapper('daytona_trace_events_ptr', 0);
   _daytona_trace_events_count = Module['_daytona_trace_events_count'] = createExportWrapper('daytona_trace_events_count', 0);
@@ -5082,6 +5085,8 @@ var wasmImports = {
   /** @export */
   invoke_viiii,
   /** @export */
+  invoke_viiiii,
+  /** @export */
   invoke_viiiiii,
   /** @export */
   invoke_viiiiiii,
@@ -5178,6 +5183,17 @@ function invoke_i(index) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)();
+  } catch(e) {
+    stackRestore(sp);
+    if (!(e instanceof EmscriptenEH)) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (!(e instanceof EmscriptenEH)) throw e;

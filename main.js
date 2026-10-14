@@ -1,3 +1,4 @@
+import {linkIdForSeat} from './central-link.js';
 import {createLobbySound} from './lobby-sound.js';
 import { mountDiagnostics } from './diagnostics.js';
 import { createRenderer } from './renderer.js';
@@ -45,11 +46,12 @@ const room=new Multiplayer({
   ui.start.disabled=true;ui.close.hidden=true;
   setStatus('Preparing linked cabinet…',true);
   await prepareCabinet(wasm,reloadEngine,config,cancelled);
+  if(!wasm._daytona_central_config(linkIdForSeat(config.cabinet,room.members.length),room.members.length))throw Error('Invalid centralized cabinet configuration.');
   renderer.reset();applyGraphics();
  },
  onStart:()=>{wasm._daytona_delivery_mode(1);ui.start.disabled=false;linkStartedAt=performance.now();roomUI.running();void resumeGame();},
  onStop:reason=>{
-  wasm?._daytona_delivery_mode(0);
+  wasm?._daytona_delivery_mode(0);wasm?._daytona_central_config(0,0);
   for(const source of audioSources){try{source.stop();}catch{}}audioSources.clear();audioNext=0;
   running=false;started=false;held.clear();touch.clear();rumble.stop();wasm?._daytona_link_enable(0);
   ui.start.disabled=true;ui.start.hidden=true;openMenu();setStatus('Room ready',true);ui.message.textContent=reason;
@@ -64,6 +66,7 @@ const diagnostics=mountDiagnostics({element:$('diagnosticsHud'),toggle:$('diagno
  role:room.active?(room.isHost?'MASTER':'SLAVE'):null,sessionId:room.active?room.epoch:null,progressFrames:room.progressFrames,backlogMs:Math.max(0,lagMs),
  peers:(room.isHost?[...room.connections.values()]:[room.server]).filter(c=>c?.emulation?.epoch===room.epoch&&room.active).map(c=>({cabinet:room.members.find(m=>m.id===c.peer)?.cabinet??null,frames:c.emulation.frames,ageMs:performance.now()-c.emulation.at,observedFrameDelta:room.progressFrames-c.emulation.frames}))})});
 function reloadEngine(){
+ wasm._daytona_central_config(0,0);
  wasm._daytona_delivery_mode(0);
  if(!wasm.ccall('daytona_load','number',['string','number'],['/roms/user_daytona.zip',Number(audioLoaded)]))throw Error(cString(wasm._daytona_error()));
  renderer.reset();

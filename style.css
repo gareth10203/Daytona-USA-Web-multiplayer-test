@@ -112,6 +112,8 @@
 .phase-pill{font-size:9px;font-weight:900;letter-spacing:.08em;padding:6px 9px;border-radius:3px;background:#e3ede4;color:#356047}
 .room-panel[data-phase=preparing] .phase-pill,.room-panel[data-phase=pending] .phase-pill{background:#fff0b5;color:#7b5e08}
 .room-panel[data-phase=error] .phase-pill{background:#f6dedb;color:#962c22}
+.room-panel[data-phase=reconnecting] .phase-pill{background:#fff0b5;color:#7b5e08}
+.driver-reconnecting{border-style:dashed;border-color:#c5ad59;background:#fff9e5}.driver-reconnecting .driver-status,.room-connection[data-state=recovering]{color:#80620d}.room-connection[data-state=offline]{color:#962c22}
 .room-layout{grid-template-columns:minmax(0,1.22fr) minmax(0,.92fr) minmax(0,1fr);gap:18px;align-items:stretch}
 .grid-section{min-width:0}
 .room-players{gap:7px}

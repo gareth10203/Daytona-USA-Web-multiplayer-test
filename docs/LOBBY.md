@@ -1,38 +1,25 @@
-# Daytona USA — lobby multiplayer
+# Daytona USA — enlace centralizado experimental
 
-Versión independiente basada en el experimento de temporización que funcionó: `daytona-rev-a-lobby-7`.
+Build `daytona-rev-a-central-experimental-2`. Copia independiente de RC1; la candidata original se conserva en `../multiplayer-lobby/releases/RC1`. El ZIP del experimento 1 también se conserva.
 
-## Cambios
+Cada cabina envía sus datos directamente al host de manera independiente. El host distribuye estados preparados para cada destinatario sin circulación por las cabinas ni espera de todos por actualización. La CommBoard adaptada mantiene la interfaz de memoria del juego y la entrega FG corregida. El programa original, física y assets de la ROM permanecen intactos. La temporización del dispositivo de enlace cambia intencionalmente; no se afirma equivalencia con el hardware.
 
-- El lobby muestra los ocho asientos numerados: los puestos vacíos son tarjetas Open seat y se reemplazan al admitir jugadores. El contador de plazas se sustituye visualmente por esas tarjetas. En desktop bajo las plazas vacías se compactan cuando hay solicitudes, cuyo panel tiene scroll interno para mantener accesible el footer.
+El lobby conserva ocho asientos, chat, nombre guardado, controles alineados, retirada de jugadores y aviso sonoro. Comprueba presencia tras 12 segundos sin respuesta y reserva el asiento 30 segundos mientras intenta reconectar. Restaura la sala y confirma Ready/chat sin duplicar acciones; los cortes recuperables de señalización conservan los canales existentes. Todos los participantes deben usar el build 2; su ingreso no es compatible con RC1 ni con el experimento 1.
 
-- La pantalla de crear/unirse conserva debajo la guía original de teclado, mando y controles de servicio; dentro del lobby permanece oculta. La guía ocupa el mismo ancho que la ventana. Los espacios se adaptan a ventanas desktop bajas.
-- Presencia del lobby mediante ping/pong cada segundo: tras 12 segundos sin recibir respuesta o datos se retira al participante o solicitud pendiente, se renumera la lista, se invalida Ready y se actualiza a todos. La limpieza funciona aunque PeerJS no emita `close`. El cliente limpia su lista si deja de recibir al host. Salir anuncia la partida o el cierre de sala; el cierre de conexión y el timeout quedan como respaldo. Las pausas breves conservan el puesto.
-- El nombre se guarda en el navegador al editarlo, sin esperar a crear o unirse a una sala, y se recupera al recargar.
-
-- La invitación se vuelve a leer desde la URL actual en cambios del fragmento, navegación del historial y restauración de pestaña (`pageshow`). Los formularios restaurados no prevalecen sobre el enlace. Una invitación nueva puede sustituir una sala anterior del lobby; no interrumpe una carrera activa automáticamente.
-- El host puede retirar jugadores admitidos desde el lobby. La lista se renumera y Ready se reinicia al cambiar sus miembros. Durante una carrera hay que volver a la sala para modificarla.
-- Las nuevas solicitudes producen un aviso breve de dos notas. El aviso está siempre habilitado y respeta el silencio y volumen general del juego. Se usa el contexto y volumen del juego y no se reinicia su reloj de audio. El navegador necesita el gesto de Create/Join/Ready para habilitar audio.
-- Desktop usa columnas para jugadores, opciones y chat; se verificó sin scroll exterior entre 1024×640 y 1920×1080, con ocho jugadores y hasta siete solicitudes. En móvil se separan las vistas ROOM y CHAT; los inputs usan 16 px para evitar zoom de enfoque en iPhone.
-- El aviso inferior identifica al jugador y su número de cabina cuando se interrumpe la sesión. El host verifica quién solicita la interrupción; una desconexión conserva el número anterior a renumerar el lobby.
-- Chat privado de lobby para jugadores admitidos: texto plano, 240 caracteres, máximo de 60 mensajes en memoria y límite de frecuencia. El host asigna el remitente y orden de mensajes. Los recién admitidos reciben el historial; los pendientes no lo reciben. Se conserva al volver de una carrera y se borra al salir de la sala. Durante una carrera no se envían mensajes.
-
-## Probar y publicar
+## Probar
 
 ```powershell
-node scripts/serve.js dist 8087
+node scripts/serve.js dist 8088
 ```
 
-Abrir `http://localhost:8087`, cargar la ROM propia y elegir Multiplayer. Para GitHub Pages, publicar el contenido de `dist/` en la raíz del sitio o extraer el ZIP listo para Pages. Todos los jugadores deben usar esta versión; no es compatible con el identificador de las versiones anteriores.
+Abrir http://localhost:8088 y cargar la ROM local. Para Pages, publicar el contenido de `dist/` o el ZIP experimental, sin ROM. No sustituir RC1 hasta probarlo entre dispositivos.
 
-Las fuentes del frontend están en `web/`. `node scripts/build.mjs` las copia a `dist/` conservando el motor existente. Esta revisión no recompila ni modifica el motor: los archivos JS/WASM son idénticos al experimento de fase 4, con la recepción después de la instantánea de FG y las correcciones de ESC.
+## Compilar y verificar
 
-## Verificación
+`node scripts/build.mjs` copia el frontend a dist conservando el motor centralizado.
 
-`node --test tests/*.test.js`: 23 pruebas de chat, identidad del remitente, historial, permisos de retirada, Ready, numeración, señalización, presencia, salida explícita, transporte silencioso y recuperación del enlace, además del aviso sonoro.
+`scripts/build-central.py` compila las fuentes del dispositivo en `native/` y reenlaza con los objetos locales del juego y bibliotecas originales ya compilados. Requiere el emsdk y la caché existente del workspace; no modifica esos objetos. `native/m2_board.cpp` conserva la instrumentación y corrección de fase de RC1 y se recompila para el nuevo tamaño del dispositivo.
 
-`tests/lobby-layout.cjs`: medidas de desktop, solicitudes, móvil, guía de entrada, nombre persistente al recargar, escape de texto, pestañas y acceso a ajustes. Usa fixtures de roster y el motor real.
+`node --test tests/*.test.js` pasa 41 pruebas y verifica protocolo, distribución, permisos, chat, presencia y recuperación. `tests/lobby-recovery-browser.cjs` prueba recuperación con tres cabinas Chrome y conexiones PeerJS reales. `tests/lobby-layout.cjs` verifica desktop/móvil y `tests/lobby-browser.cjs` el arranque/reinicio del motor y single player. `tests/central-native.cpp` prueba directamente el dispositivo nativo en WASM. `tests/central-benchmark.cjs` compara cabinas reales con retrasos, jitter y pausas controladas; admite TEST_URL, TEST_CABINETS, TEST_TAG y TEST_EXTENDED. Usa el Playwright instalado y una ROM local; no empaqueta los assets.
 
-`tests/lobby-browser.cjs`: tres cabinas Chrome con ROM local y PeerJS real; enlace actualizado y formulario restaurado, aviso sonoro sin duplicación, chat e historial, exclusión de pendientes, retirada, arranque, vuelta al lobby y desconexión automática al cortar las respuestas de un jugador. Las pruebas usan el Playwright ya instalado y una ruta local de ROM; no empaquetan la ROM.
-
-No se modifican las versiones originales ni los ZIP anteriores. Los archivos de build y las capturas son locales.
+La recuperación y sus límites están en [docs/LOBBY_RECOVERY.md](docs/LOBBY_RECOVERY.md). La investigación y resultados del motor central del experimento 1 están en [docs/CENTRAL_LINK_INVESTIGATION.md](docs/CENTRAL_LINK_INVESTIGATION.md). No hay extrapolación de posiciones ni datos ficticios; se retienen las últimas muestras reales. La centralización no añade todavía netcode de predicción/rollback ni garantiza colisiones idénticas con RTT alto. La recuperación requiere mantener la página abierta y no incorpora migración del host ni reanudación de una carrera interrumpida.

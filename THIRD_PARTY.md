@@ -94,3 +94,7 @@ The existing BSD-3-Clause MAME-derived CommBoard adaptation now skips unused
 deadline clock reads when frame synchronization is disabled. The existing runtime
 callback-slot reuse path is enabled for the web build. These changes are installed
 by scripts/apply_runtime_optimizations.py; no third-party dependency was added.
+
+## Experimental centralized communication
+
+The separate native/ sources preserve the MAME-derived board notices. Central sampling, room-provided IDs, local FG delivery and JavaScript distribution are additional experimental adaptations. The original board firmware is not executed, and this mode is not hardware-equivalent. No new linked third-party library is introduced.

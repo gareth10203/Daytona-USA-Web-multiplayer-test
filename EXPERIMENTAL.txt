@@ -1,29 +1,13 @@
-PRUEBA EXPERIMENTAL DEL ENLACE
-Conserva las transiciones DATA y el tiempo pendiente.
-Motor de diagnostico, no version final optimizada.
-Todos los participantes deben usar este mismo paquete.
-No incluye ROM. Cerrar el menu enlazado conserva el reloj de emulacion y la programacion del audio.
-La proteccion de regreso a la sala al ocultar la pestana sigue activa.
+DAYTONA CENTRAL LINK — EXPERIMENTAL 2
+Build: daytona-rev-a-central-experimental-2
 
-DIAGNOSTICOS (schema 2, phase experimental-4)
-TX/RX: payload arcade enviado/recibido por segundo (KiB/s). TX es entrega a PeerJS, no confirmacion de recepcion remota.
-QUEUE: datos pendientes de transmitir o consumir; puede ser cero aunque haya trafico constante.
-LIST: publicaciones de listas graficas por la CPU; no equivale a presentaciones de GPU ni garantiza escenas visualmente distintas.
-DATA/FG: bloques incorporados y cambios de senal observados.
-El informe incluye rol, sesion, contadores de progreso, edad del progreso remoto, tiempo pendiente e intervalos de paquetes.
-No incluye los retrasos artificiales del harness de pruebas.
+Motor central del experimento 1 conservado. RC1 y el ZIP del experimento 1 permanecen intactos.
+Lobby: reconexion autenticada, reserva de asiento/solicitud durante 30 segundos, restauracion de jugadores/ajustes/chat, confirmaciones de Ready y chat sin duplicados, reintentos de senalizacion manteniendo los canales vivos.
+Presencia: 12 segundos sin mensajes antes de declarar silencio. La reserva de 30 segundos empieza al detectar el corte.
+Recuperacion dentro de la pagina abierta; recargar/cerrar requiere una nueva solicitud. No hay migracion del host ni reanudacion a mitad de carrera. Un corte de cabina durante carrera devuelve a los demas al lobby.
 
-VARIANTE DE ENTREGA experimental-4
-En multiplayer, la lectura inicial de la interrupcion conserva la referencia de senal anterior; despues incorpora los DATA pendientes. Las consultas de primer plano tambien pueden incorporar DATA. La recepcion continua incluso en pantallas sin espera principal.
-Prueba especifica de Revision A: reconoce el sitio de lectura del manejador de video por su direccion. No hay paridad certificada con hardware o MAME.
-Se desactiva al terminar la sesion y al recargar el motor; single player conserva el modo anterior.
-El trazado detallado de PCs esta apagado por defecto; las metricas de diagnostico siguen disponibles.
-
-LOBBY 7 - daytona-rev-a-lobby-7
-Guia inferior alineada al ancho de la ventana de crear/unirse. Nombre persistente al editar.
-Presencia ping/pong cada segundo tambien en lobby y pendientes: retiro tras 12 segundos sin datos recibidos. Limpieza independiente del evento close del transporte.
-Aviso explicito al salir o cerrar la sala; renumeracion y Ready se actualizan en todos.
-El lobby conserva el chat y la interfaz compacta. Todos los participantes deben usar lobby-7.
-Motor identico al experimento de fase 4 que ya fue probado.
-
-El lobby vuelve a mostrar los ocho asientos numerados y los puestos Open seat.
+Todos los participantes deben usar este build. No se incluye ROM ni codigo de inyeccion de las pruebas.
+41 pruebas JS; pruebas Chrome con conexiones PeerJS/WebRTC reales, estados de recuperacion desktop/movil y regresion de arranque, Grand Prix y single player.
+Validacion local. Falta probar recuperacion entre hogares y en iPhone.
+Resultados previos del motor: docs/CENTRAL_LINK_INVESTIGATION.md y docs/RESULTS_SUMMARY.json.
+Cambios y limites del lobby: docs/LOBBY_RECOVERY.md.

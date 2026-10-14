@@ -29,7 +29,7 @@ export class Diagnostics {
     this.render(sample,true);this.reset();
   }
   report() {return {schema:2,build:BUILD_ID,createdAt:new Date().toISOString(),
-    userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Packet intervals cover the last 256 gaps and include DATA and VSYNC. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
+    userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Centralized DATA counts local shared-RAM applications, including reuse of the latest real state. Packet intervals cover the last 256 gaps and include cabinet samples and host states. Central agesMs measures time since receipt by the host, excluding network transit. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
 }
 
 export function mountDiagnostics({element,toggle,download,read,room}) {
