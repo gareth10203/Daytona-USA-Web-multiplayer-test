@@ -1,5 +1,23 @@
 export const SLOT_BYTES=0x1c0,SAMPLE_BYTES=SLOT_BYTES+5,STATE_BYTES=SLOT_BYTES*8+1+9*4;
 export const STATE_TAG=0xfd;
+export const COMPACT_STATE_TAG=0xfc;
+function checkedCount(count){if(!Number.isInteger(count)||count<2||count>8)throw Error('Invalid compact grid.');}
+// A full snapshot repeats slots modulo the number of actual cabinets. Send
+// those distinct complete blocks once; reconstruct the exact native layout.
+export function compactState(full,count){
+ checkedCount(count);if(!(full instanceof ArrayBuffer)||full.byteLength!==STATE_BYTES||new Uint8Array(full)[0]!==STATE_TAG)throw Error('Invalid complete state.');
+ const bytes=new Uint8Array(5+count*(SLOT_BYTES+4)),source=new Uint8Array(full),view=new DataView(bytes.buffer),old=new DataView(full);bytes[0]=COMPACT_STATE_TAG;
+ view.setUint32(1,old.getUint32(1+SLOT_BYTES*8,true),true);bytes.set(source.subarray(1,1+count*SLOT_BYTES),5);
+ for(let slot=0;slot<count;slot++)view.setUint32(5+count*SLOT_BYTES+slot*4,old.getUint32(5+SLOT_BYTES*8+slot*4,true),true);
+ return bytes.buffer;
+}
+export function expandState(compact,count){
+ checkedCount(count);if(!(compact instanceof ArrayBuffer)||compact.byteLength!==5+count*(SLOT_BYTES+4)||new Uint8Array(compact)[0]!==COMPACT_STATE_TAG)throw Error('Invalid compact state.');
+ const bytes=new Uint8Array(STATE_BYTES),source=new Uint8Array(compact),view=new DataView(bytes.buffer),old=new DataView(compact);bytes[0]=STATE_TAG;
+ view.setUint32(1+SLOT_BYTES*8,old.getUint32(1,true),true);
+ for(let slot=0;slot<8;slot++){const index=slot%count;bytes.set(source.subarray(5+index*SLOT_BYTES,5+(index+1)*SLOT_BYTES),1+slot*SLOT_BYTES);view.setUint32(5+SLOT_BYTES*8+slot*4,old.getUint32(5+count*SLOT_BYTES+index*4,true),true);}
+ return bytes.buffer;
+}
 // Preserve the IDs assigned by RC1's original discovery (slaves count backwards).
 export function linkIdForSeat(seat,count){return seat===1?1:count-seat+2;}
 export class HostDistributor {

@@ -1,5 +1,5 @@
 import {DEFAULT_EEPROM} from './nvram.js';
-export const BUILD_ID='daytona-rev-a-central-experimental-7';
+export const BUILD_ID='daytona-rev-a-central-experimental-9';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];
@@ -41,3 +41,4 @@ export function parseInvitation(text){
  if(!match)throw Error('Paste a complete room code or invitation link.');
  return {host:match[1],token:match[2]};
 }
+

@@ -38,9 +38,9 @@ export function mountDiagnostics({element,toggle,download,read,room}) {
   const diag=new Diagnostics({read,network:()=>room.diagnostics(),render:(s,on)=>{
     element.hidden=!on;
     if(!s){element.textContent='Diagnostics · collecting…';return;}
-    const n=s.network,rtt=n.rttMs==null?'—':`${Math.round(n.rttMs)} ms`;
+    const n=s.network,rtt=n.rttMs==null?'—':`${Math.round(n.rttMs)} ms`,flows=n.snapshotFlow||[];
     const lists=s.nativeLink?.listWritesHz,format=value=>Number.isFinite(value)?value.toFixed(1):'—';
-    element.textContent=`${s.role||'SINGLE'} · SIM ${s.simulationHz.toFixed(1)} · DRAW ${s.drawHz.toFixed(0)} · LIST ${format(lists)} /s\nCPU ${s.cpuMeanMs.toFixed(1)} ms · p95 ${s.cpuP95Ms.toFixed(1)} · gap ${s.maxStepGapMs.toFixed(0)} ms\nTX ${(n.sentBytesPerSecond/1024).toFixed(0)} KiB/s · RX ${(n.receivedBytesPerSecond/1024).toFixed(0)} KiB/s · RTT ${rtt}\nQUEUE TX ${(n.bufferedBytes/1024).toFixed(1)} KiB · RX ${(s.receiveBytes/1024).toFixed(1)} KiB\nDATA ${format(s.nativeLink?.dataBlocksHz)} · FG ${format(s.nativeLink?.fgEdgesHz)} /s · backlog ${format(s.backlogMs)} ms`;
+    element.textContent=`${s.role||'SINGLE'} · SIM ${s.simulationHz.toFixed(1)} · DRAW ${s.drawHz.toFixed(0)} · LIST ${format(lists)} /s\nCPU ${s.cpuMeanMs.toFixed(1)} ms · p95 ${s.cpuP95Ms.toFixed(1)} · gap ${s.maxStepGapMs.toFixed(0)} ms\nTX ${(n.sentBytesPerSecond/1024).toFixed(0)} KiB/s · RX ${(n.receivedBytesPerSecond/1024).toFixed(0)} KiB/s · RTT ${rtt}\nQUEUE TX ${(n.bufferedBytes/1024).toFixed(1)} KiB · RX ${(s.receiveBytes/1024).toFixed(1)} KiB\nSNAPSHOTS flight ${flows.reduce((a,f)=>a+f.inFlight,0)} · pending ${flows.reduce((a,f)=>a+f.pending,0)} · superseded ${flows.reduce((a,f)=>a+f.coalesced,0)}\nDATA ${format(s.nativeLink?.dataBlocksHz)} · FG ${format(s.nativeLink?.fgEdgesHz)} /s · backlog ${format(s.backlogMs)} ms`;
   }});
   toggle.addEventListener('change',()=>diag.enable(toggle.checked));
   download.addEventListener('click',()=>{

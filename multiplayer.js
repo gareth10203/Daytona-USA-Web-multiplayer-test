@@ -1,4 +1,5 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG} from './central-link.js';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js';
+import {SnapshotFlow} from './snapshot-flow.js';
 import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
@@ -32,6 +33,18 @@ export class Multiplayer {
  get active(){return this.phase==='playing';}
  get occupied(){return !['idle','error'].includes(this.phase);}
  send(conn,data){if(!conn?.open)throw Error('A player is disconnected.');if((conn.dataChannel?.bufferedAmount||0)>MAX_BUFFER){this.recordConnectionEvent('send-queue-limit',conn);throw Error('A player connection is too slow; the arcade link was stopped.');}try{conn.send(data);}catch(e){this.recordConnectionEvent('send-error',conn);throw e;}if(['arcade-sample','arcade-state'].includes(data.type)){this.payloadSent+=data.bytes.byteLength;recordPacket(this.sentTiming);}}
+ sendSnapshot(conn,data){
+  if(!conn?.open)throw Error('A player is disconnected.');
+  if(!conn.snapshotFlow||conn.snapshotFlow.epoch!==this.epoch)conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);
+  conn.snapshotFlow.offer(data);this.flushSnapshot(conn);
+ }
+ flushSnapshot(conn){if(this.active&&conn?.open&&conn.snapshotFlow?.epoch===this.epoch)conn.snapshotFlow.flush(conn.dataChannel?.bufferedAmount||0,data=>this.send(conn,data));}
+ acknowledgeSnapshot(conn,data){
+  if(data.delivery===undefined)return; // Bare local messages have no receipt envelope; sendSnapshot always adds one.
+  if(!Number.isSafeInteger(data.delivery)||data.delivery<1)throw Error('Invalid snapshot delivery.');
+  this.send(conn,{type:'arcade-ack',epoch:this.epoch,kind:data.type,delivery:data.delivery,frames:this.progressFrames});
+ }
+ clearSnapshots(){for(const conn of this.isHost?this.connections.values():[this.server])if(conn)conn.snapshotFlow=null;}
  broadcast(data){for(const member of this.members){if(member.id===this.id)continue;const conn=this.connections.get(member.id);if(!conn)continue;try{this.send(conn,data);}catch(e){queueMicrotask(()=>{this.detach(conn,true,e.message);try{conn.close();}catch{}});}}}
  signalingLost(){this.recordConnectionEvent('signaling-disconnected');this.signaling=false;if(!this.signalRetryAt)this.signalRetryAt=performance.now()+retryDelay(this.signalAttempt++);this.changed();}
  connectHost(){
@@ -179,7 +192,7 @@ export class Multiplayer {
  go(){
   if(!this.isVisible()){this.end(INACTIVE_REASON);return;}
   const now=performance.now();this.progressFrames=0;this.progressAt=now;
-  for(const conn of this.isHost?this.connections.values():[this.server])if(conn)conn.emulation={epoch:this.epoch,frames:0,at:now};
+  for(const conn of this.isHost?this.connections.values():[this.server])if(conn){conn.emulation={epoch:this.epoch,frames:0,at:now};conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);}
   this.distributor=this.isHost?new HostDistributor(this.members):null;this.stateSequence=0;this.phase='playing';this.onStart();this.changed();
  }
  advance(){if(this.active){this.progressFrames++;this.progressAt=performance.now();}}
@@ -205,6 +218,12 @@ export class Multiplayer {
   }
   if(data.type==='ping'){this.send(conn,{type:'pong',time:data.time,epoch:this.epoch,frames:this.active?this.progressFrames:0});return;}
   if(data.type==='pong'){if(Number.isFinite(data.time)){const member=this.members.find(x=>x.id===conn.peer);conn.measuredRttMs=Math.max(0,performance.now()-data.time);if(member)member.rtt=Math.round(conn.measuredRttMs);}return;}
+  if(data.type==='arcade-ack'){
+   if(!this.active||data.epoch!==this.epoch||!conn.snapshotFlow||conn.snapshotFlow.epoch!==this.epoch)return;
+   if(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn)return;
+   if(data.kind!==(this.isHost?'arcade-state':'arcade-sample'))throw Error('Invalid snapshot acknowledgment kind.');
+   if(conn.snapshotFlow.acknowledge(data.delivery))this.flushSnapshot(conn);return;
+  }
   if(incoming){
    if(this.connections.get(conn.peer)!==conn)return;
    if(data.type==='leave'){this.detach(conn,true,'The player left the room.',false);conn.close();return;}
@@ -222,7 +241,7 @@ export class Multiplayer {
     // The connection identifies the requester; clients cannot name another cabinet.
     this.end(String(data.reason||'The cabinet stopped.').slice(0,180),conn.peer);
    }
-   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch)this.distributor.accept(conn.peer,data.frames,data.bytes);
+   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){this.distributor.accept(conn.peer,data.frames,data.bytes);this.acknowledgeSnapshot(conn,data);}
   }else{
    if(this.server!==conn)return;
    if(data.type==='command-ack'){
@@ -255,8 +274,10 @@ export class Multiplayer {
    else if(data.type==='go'&&this.phase==='preparing'&&data.epoch===this.epoch)this.go();
    else if(data.type==='stop'&&(data.epoch===this.epoch||(this.awaitingStop&&data.epoch===this.endedEpoch)))this.stopLocal(String(data.reason||'The arcade link stopped.').slice(0,280));
    else if(data.type==='arcade-state'&&this.active&&data.epoch===this.epoch){
-    if(!Number.isSafeInteger(data.sequence)||data.sequence<1||!(data.bytes instanceof ArrayBuffer)||data.bytes.byteLength!==STATE_BYTES||new Uint8Array(data.bytes)[0]!==STATE_TAG)throw Error('Invalid centralized state.');
-    if(data.sequence>this.stateSequence){this.stateSequence=data.sequence;this.receiveBytes(data.bytes);}
+    if(data.encoding!==undefined&&data.encoding!=='cabinet-slots')throw Error('Invalid state encoding.');
+    const bytes=data.encoding==='cabinet-slots'?expandState(data.bytes,this.members.length):data.bytes;
+    if(!Number.isSafeInteger(data.sequence)||data.sequence<1||!(bytes instanceof ArrayBuffer)||bytes.byteLength!==STATE_BYTES||new Uint8Array(bytes)[0]!==STATE_TAG)throw Error('Invalid centralized state.');
+    if(data.sequence>this.stateSequence){this.stateSequence=data.sequence;this.receiveBytes(bytes);}this.acknowledgeSnapshot(conn,data);
    }
   }
  }
@@ -265,17 +286,17 @@ export class Multiplayer {
   if(!this.active)return;
   const data={type:'arcade-sample',epoch:this.epoch,frames:this.progressFrames,bytes:bytes.slice().buffer};
   try{
-   if(!this.isHost){this.send(this.server,data);return;}
+   if(!this.isHost){this.sendSnapshot(this.server,data);return;}
    if(!this.distributor.accept(this.id,data.frames,data.bytes)||!this.distributor.ready)return;
    const sequence=++this.distributor.sequence;
    for(const member of this.members){
     const state=this.distributor.snapshot(member.id);
     if(member.id===this.id)this.receiveBytes(state);
-    else this.send(this.connections.get(member.id),{type:'arcade-state',epoch:this.epoch,frames:this.progressFrames,sequence,bytes:state});
+    else this.sendSnapshot(this.connections.get(member.id),{type:'arcade-state',epoch:this.epoch,frames:this.progressFrames,sequence,encoding:'cabinet-slots',bytes:compactState(state,this.members.length)});
    }
   }catch(e){this.end(e.message);}
  }
- stopLocal(reason){const hadSession=this.active||this.phase==='preparing';if(this.epoch)this.endedEpoch=this.epoch;this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.epoch='';this.phase='lobby';this.error=reason;for(const x of this.members)x.ready=false;if(hadSession)this.onStop(reason);this.changed();}
+ stopLocal(reason){const hadSession=this.active||this.phase==='preparing';this.clearSnapshots();if(this.epoch)this.endedEpoch=this.epoch;this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.epoch='';this.phase='lobby';this.error=reason;for(const x of this.members)x.ready=false;if(hadSession)this.onStop(reason);this.changed();}
  end(reason='The arcade session ended.',cabinet=this.id){
   const member=typeof cabinet==='string'?this.members.find(m=>m.id===cabinet):cabinet;
   const detail=String(reason).slice(0,180);
@@ -293,10 +314,11 @@ export class Multiplayer {
   if(this.phase==='lobby'&&!this.isHost&&this.server?.open)for(const command of this.commands.values())if(now-command.at>=2000){command.at=now;try{this.send(this.server,command.data);}catch{this.detach(this.server,false);break;}}
   this.checkProgress(now);if(this.isHost&&this.phase==='preparing'&&now>this.prepareDeadline){this.recordConnectionEvent('preparation-timeout');this.end('Cabinet preparation timed out.');return;}
   const connections=this.isHost?[...this.connections.values()]:[this.server].filter(Boolean);
+  if(this.active){const stalled=connections.find(conn=>conn?.snapshotFlow?.oldestAgeMs(now)>PROGRESS_TIMEOUT_MS);if(stalled){this.recordConnectionEvent('snapshot-ack-timeout',stalled);this.end('No arcade snapshot receipt for 10 seconds. Return to the room and start again.',stalled.peer);return;}}
   for(const conn of connections){
    if(!conn.open){if(!conn.wasOpened&&conn.openingUntil>now)continue;const opening=!!conn.openingUntil&&!conn.wasOpened;this.recordConnectionEvent(opening?'opening-timeout':'channel-not-open',conn);this.detach(conn,this.isHost,opening?'The data channel did not open within 30 seconds.':'The connection closed.');try{conn.close();}catch{}continue;}
    if(now-conn.lastSeen>CONNECTION_TIMEOUT_MS){this.recordConnectionEvent('silence-timeout',conn);this.detach(conn,this.isHost,'No response for 20 seconds.');try{conn.close();}catch{}continue;}
-   try{this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0});}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
+   try{this.flushSnapshot(conn);this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0});}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
   }
   if(this.isHost&&['lobby','playing'].includes(this.phase))this.publish();else this.changed();
  }
@@ -307,6 +329,7 @@ export class Multiplayer {
    bufferedBytes:connections.reduce((sum,c)=>sum+(c.dataChannel?.bufferedAmount||0),0),
    payloadSentBytes:this.payloadSent,payloadReceivedBytes:this.payloadReceived,
    sent:timingSummary(this.sentTiming),received:timingSummary(this.receivedTiming),
+   snapshotFlow:connections.map(c=>({cabinet:this.members.find(m=>m.id===c.peer)?.cabinet??null,...(c.snapshotFlow?.snapshot()||{inFlight:0,pending:0,pendingBytes:0,coalesced:0,ackRttMs:null})})),
    relayConnections:connections.filter(c=>this.networkStats.get(c)?.relay).length,connectionEvents:this.connectionEvents.map(e=>({...e}))};
  }
  async pollDiagnostics(){
