@@ -63,7 +63,13 @@ export async function createRenderer(canvas, onFailure) {
     [screen,texram,luma,xlat].map((b,binding)=>({binding,resource:{buffer:b}}))});
   let vertexBuffer=null, vertexCapacity=0, depth=null, back=null, front=null;
   let backGroup,frontGroup,width=0,height=0,outputWidth=0,outputHeight=0,textureGeneration=-1;
+  let uploadedModule=null,uploadedFrame=-1,uploadedHeap=null,layoutKey='',textureModule=null;
+  let vertexSize=0,batchDraws=[];
+  const screenValues=new Float32Array(8);
   let enhanced=false,drawDistance=1,displayKey='';
+  function invalidate() {
+    uploadedModule=null;uploadedFrame=-1;uploadedHeap=null;layoutKey='';
+  }
   const extent=()=>{
     const dpr=globalThis.devicePixelRatio || 1, limit=device.limits.maxTextureDimension2D;
     const w=Math.max(1,Math.round(canvas.clientWidth*dpr)),h=Math.max(1,Math.round(canvas.clientHeight*dpr));
@@ -82,9 +88,10 @@ export async function createRenderer(canvas, onFailure) {
     const descriptor={size:[w,h],format:'rgba8unorm',usage:GPUTextureUsage.COPY_DST|GPUTextureUsage.TEXTURE_BINDING};
     back=device.createTexture(descriptor);front=device.createTexture(descriptor);
     backGroup=layerGroup(back);frontGroup=layerGroup(front);
+    invalidate();
   }
   return {
-    reset() {textureGeneration=-1;displayKey='';},
+    reset() {textureGeneration=-1;displayKey='';invalidate();},
     setEnhanced(on) {enhanced=on;displayKey='';canvas.classList.toggle('enhanced',on);},
     setDrawDistance(level) {drawDistance=level;enhanced=level>0;displayKey='';canvas.classList.toggle('enhanced',enhanced);},
     prepare(wasm) {
@@ -95,7 +102,7 @@ export async function createRenderer(canvas, onFailure) {
         // Portrait phones keep the complete arcade image, leaving thumb room
         // below it. Wide windows still reveal additional scenery.
         const gameHeight=enhanced?Math.min(h,Math.ceil(w*384/496)):h;
-        wasm._daytona_set_display(Number(enhanced),w,gameHeight);displayKey=key;
+        wasm._daytona_set_display(Number(enhanced),w,gameHeight);displayKey=key;invalidate();
       }
     },
     draw(wasm) {
@@ -103,42 +110,62 @@ export async function createRenderer(canvas, onFailure) {
       const [ow,oh]=enhanced?extent():[w,h];resize(w,h,ow,oh);
       const scale=enhanced?Math.min(oh/h,ow/496):oh/h,viewWidth=ow/scale,offset=(w-viewWidth)/2;
       const top=(oh-h*scale)/2;
-      device.queue.writeBuffer(screen,0,new Float32Array([viewWidth,h,offset,scale,0,top,0,0]));
       const mem=wasm.HEAPU8; // reacquire after wasm memory growth
-      const view=(ptr,size)=>mem.subarray(ptr,ptr+size);
-      const uploadLayer=(texture,ptr)=>device.queue.writeTexture({texture},view(ptr,w*h*4),{bytesPerRow:w*4},[w,h]);
-      uploadLayer(back,wasm._daytona_background_ptr());
-      uploadLayer(front,wasm._daytona_foreground_ptr());
-      const gen=wasm._daytona_texture_generation();
-      const tp0=wasm._daytona_tex0_ptr(),tp1=wasm._daytona_tex1_ptr();
-      if(tp0 && tp1 && gen!==textureGeneration){
-        device.queue.writeBuffer(texram,0,view(tp0,0x200000));
-        device.queue.writeBuffer(texram,0x200000,view(tp1,0x200000));textureGeneration=gen;
+      const frame=wasm._daytona_total_frames(),key=`${w}:${h}:${ow}:${oh}:${enhanced}`;
+      const layoutChanged=key!==layoutKey;
+      // Continue presenting on every browser refresh. Only the GPU input data
+      // and batch clipping are reused when no simulation step changed them.
+      // Reset, module replacement, heap growth and display changes invalidate
+      // the cache even when the frame counter is unchanged or restarts.
+      const dataChanged=wasm!==uploadedModule || frame!==uploadedFrame || mem.buffer!==uploadedHeap;
+      if(layoutChanged){
+        screenValues.set([viewWidth,h,offset,scale,0,top,0,0]);
+        device.queue.writeBuffer(screen,0,screenValues);
       }
-      const lp=wasm._daytona_luma_ptr(),xp=wasm._daytona_xlat_ptr();
-      if(lp)device.queue.writeBuffer(luma,0,view(lp,0x20000));
-      if(xp)device.queue.writeBuffer(xlat,0,view(xp,0x6000*4));
-      const count=wasm._daytona_vertices_count(),size=count*64;
-      if(size>vertexCapacity){vertexBuffer?.destroy();vertexCapacity=Math.ceil(size/65536)*65536;
-        vertexBuffer=buffer(vertexCapacity,GPUBufferUsage.VERTEX);}
-      if(size)device.queue.writeBuffer(vertexBuffer,0,view(wasm._daytona_vertices_ptr(),size));
+      if(dataChanged){
+        const view=(ptr,size)=>mem.subarray(ptr,ptr+size);
+        const uploadLayer=(texture,ptr)=>device.queue.writeTexture({texture},view(ptr,w*h*4),{bytesPerRow:w*4},[w,h]);
+        uploadLayer(back,wasm._daytona_background_ptr());
+        uploadLayer(front,wasm._daytona_foreground_ptr());
+        const gen=wasm._daytona_texture_generation();
+        const tp0=wasm._daytona_tex0_ptr(),tp1=wasm._daytona_tex1_ptr();
+        if(tp0 && tp1 && (wasm!==textureModule || gen!==textureGeneration)){
+          device.queue.writeBuffer(texram,0,view(tp0,0x200000));
+          device.queue.writeBuffer(texram,0x200000,view(tp1,0x200000));textureGeneration=gen;textureModule=wasm;
+        }
+        const lp=wasm._daytona_luma_ptr(),xp=wasm._daytona_xlat_ptr();
+        if(lp)device.queue.writeBuffer(luma,0,view(lp,0x20000));
+        if(xp)device.queue.writeBuffer(xlat,0,view(xp,0x6000*4));
+        vertexSize=wasm._daytona_vertices_count()*64;
+        if(vertexSize>vertexCapacity){vertexBuffer?.destroy();vertexCapacity=Math.ceil(vertexSize/65536)*65536;
+          vertexBuffer=buffer(vertexCapacity,GPUBufferUsage.VERTEX);}
+        if(vertexSize)device.queue.writeBuffer(vertexBuffer,0,view(wasm._daytona_vertices_ptr(),vertexSize));
+      }
+      if(dataChanged || layoutChanged){
+        batchDraws.length=0;
+        if(vertexSize){
+          const batches=new Uint32Array(mem.buffer,wasm._daytona_batches_ptr(),wasm._daytona_batches_count()*6);
+          for(let n=0;n<batches.length;n+=6){
+            const x=Math.max(0,Math.floor((batches[n+2]-offset)*scale));
+            const y=Math.max(0,Math.floor(top+batches[n+3]*scale));
+            const right=Math.min(ow,Math.ceil((batches[n+2]+batches[n+4]-offset)*scale));
+            const bottom=Math.min(oh,Math.ceil(top+(batches[n+3]+batches[n+5])*scale));
+            if(right>x && bottom>y)batchDraws.push(x,y,right-x,bottom-y,batches[n+1],batches[n]);
+          }
+        }
+        uploadedModule=wasm;uploadedFrame=frame;uploadedHeap=mem.buffer;layoutKey=key;
+      }
       const encoder=device.createCommandEncoder();
       const pass=encoder.beginRenderPass({colorAttachments:[{view:context.getCurrentTexture().createView(),
         loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}],
         depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'discard',depthClearValue:1}});
       pass.setViewport(0,top,ow,h*scale,0,1);
       pass.setPipeline(layerPipeline);pass.setBindGroup(0,backGroup);pass.draw(3);
-      if(size){
+      if(vertexSize){
         pass.setPipeline(polyPipeline);pass.setBindGroup(0,polyGroup);pass.setVertexBuffer(0,vertexBuffer);
-        const batches=new Uint32Array(mem.buffer,wasm._daytona_batches_ptr(),wasm._daytona_batches_count()*6);
-        for(let n=0;n<batches.length;n+=6){
-          const x=Math.max(0,Math.floor((batches[n+2]-offset)*scale));
-          const y=Math.max(0,Math.floor(top+batches[n+3]*scale));
-          const right=Math.min(ow,Math.ceil((batches[n+2]+batches[n+4]-offset)*scale));
-          const bottom=Math.min(oh,Math.ceil(top+(batches[n+3]+batches[n+5])*scale));
-          if(right<=x || bottom<=y)continue;
-          pass.setScissorRect(x,y,right-x,bottom-y);
-          pass.draw(batches[n+1],1,batches[n]);
+        for(let n=0;n<batchDraws.length;n+=6){
+          pass.setScissorRect(batchDraws[n],batchDraws[n+1],batchDraws[n+2],batchDraws[n+3]);
+          pass.draw(batchDraws[n+4],1,batchDraws[n+5]);
         }
       }
       pass.setScissorRect(0,0,ow,oh);pass.setPipeline(layerPipeline);pass.setBindGroup(0,frontGroup);pass.draw(3);

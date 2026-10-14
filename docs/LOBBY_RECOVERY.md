@@ -2,6 +2,8 @@
 
 Build: `daytona-rev-a-central-experimental-2`.
 
+Documento histórico. El experimento 7 conserva este diseño y modifica apertura, RTT y tiempos de silencio/progreso; valores actuales y nuevas pruebas en [LOBBY_LATENCY.md](LOBBY_LATENCY.md).
+
 Esta actualización cambia la sala y la gestión de conexiones. Conserva el motor nativo y el protocolo central de datos de carrera del experimento 1. RC1 y el ZIP del experimento 1 permanecen intactos. Todos los jugadores deben utilizar el build 2, porque el ingreso y la recuperación incorporan nuevos mensajes.
 
 ## Comportamiento

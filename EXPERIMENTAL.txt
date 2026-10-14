@@ -1,19 +1,26 @@
-DAYTONA CENTRAL LINK — EXPERIMENTAL 4
-Build: daytona-rev-a-central-experimental-4
+DAYTONA CENTRAL LINK — EXPERIMENTAL 7
+Build: daytona-rev-a-central-experimental-7
 
-RC1 y los ZIP de los experimentos 1, 2 y 3 permanecen intactos.
+RC1 y los ZIP de los experimentos 1, 2, 3, 4, 5 y 6 permanecen intactos.
+Lobby: espera canales que aun estan abriendo; deadline de apertura/senalizacion 30 segundos, falta de progreso 10 segundos, silencio 20 segundos. No limita por RTT. Conserva recuperacion de 30 segundos, preparacion de 60 y cola maxima de 1 MiB. Los cierres reales y visibilidad siguen interrumpiendo la carrera.
+RTT local del host preservado ante refrescos del roster. Reconexion muestra la causa. Reporte schema 3 incluye hasta 128 eventos locales, aunque el overlay este apagado, sin nombres/credenciales/IP ni telemetria externa. Los eventos registran estados del canal/ICE, cola, RTT y edades.
+Motor: optimizacion final WASM/JS O2, ahora predeterminada en el script de recompilacion. Reutiliza los mismos objetos compilados con O3 y precision matematica estricta, sin fast-math, LTO, SIMD ni hilos adicionales. No cambia fuentes del juego ni transporte. O0/O2/O3 comparados con outputs exactos; O2 elegido. Los diagnosticos siguen disponibles.
+Render: conserva la reutilizacion de datos de la version 5 y todos los dibujos de requestAnimationFrame. No reduce resolucion ni introduce interpolacion visual.
 NPC: el filtro vertical lee el contador real local solamente en su instruccion original 0x0ce3c, con enlace central activo. Evita dividir por un intervalo cero al repetir el reloj compartido. No cambia la ROM, el reloj de carrera, la distribucion de estados ni el suavizado de jugadores.
 Reloj completo del master: evita acarreos perdidos/repetidos al omitir/reaplicar el byte cero. Muestras de 453 bytes; estados personalizados de 3621 bytes.
 Movimiento remoto: historia acotada, coordenadas/velocidad/angulos coherentes interpolados entre estados reales. Buffer inicial de 4 ticks, adaptable hasta 8; añade retraso remoto de reproduccion (normalmente unos 70-140 ms a 57,5 Hz), sin extrapolacion. Puede influir en colisiones; no es equivalencia de hardware.
 Lobby: reconexion autenticada, reserva de asiento/solicitud durante 30 segundos, restauracion de jugadores/ajustes/chat, confirmaciones de Ready y chat sin duplicados, reintentos de senalizacion manteniendo los canales vivos.
-Presencia: 12 segundos sin mensajes antes de declarar silencio. La reserva de 30 segundos empieza al detectar el corte.
+Presencia: 20 segundos sin mensajes antes de declarar silencio. La reserva de 30 segundos empieza al detectar el corte.
 Recuperacion dentro de la pagina abierta; recargar/cerrar requiere una nueva solicitud. No hay migracion del host ni reanudacion a mitad de carrera. Un corte de cabina durante carrera devuelve a los demas al lobby.
 
 Todos los participantes deben usar este build. No se incluye ROM ni codigo de inyeccion de las pruebas.
-42 pruebas JS; harness nativo 35 pares ID/cantidad; comparacion NPC antes/despues con dos cabinas y validacion con tres, jitter FIFO y pausa de 500 ms; comprobacion del alcance del bus y wrap de 16 bits. Pruebas de lobby, Grand Prix y single player. Las auditorias de dos/cuatro cabinas del movimiento previo se conservan.
+Validacion nueva: 49 pruebas JS, dos cabinas Chrome/PeerJS con retrasos FIFO de aplicacion de 340/600/1000 ms RTT y cambio de host, cola de subida limitada simulada, recuperacion de lobby y reinicio Grand Prix/single player. Las pruebas previas del motor O2/render/NPC/movimiento permanecen documentadas. Retrasar mensajes no reproduce ICE lento, perdida real, WAN ni congestion SCTP.
 Validacion local. Falta probar recuperacion entre hogares y en iPhone.
 Resultados previos del motor: docs/CENTRAL_LINK_INVESTIGATION.md y docs/RESULTS_SUMMARY.json.
 Cambios y limites del lobby: docs/LOBBY_RECOVERY.md.
 Correccion, evidencia y limites del movimiento: docs/REMOTE_MOTION_FIX.md y docs/MOTION_RESULTS.json.
 Correccion de NPC y resultados: docs/NPC_FILTER_FIX.md y docs/NPC_FILTER_RESULTS.json.
+Reutilizacion del renderizador y resultados: docs/RENDERER_REUSE.md y docs/RENDERER_REUSE_RESULTS.json.
+Optimizacion final O2 y resultados: docs/WASM_O2.md y docs/WASM_O2_RESULTS.json. La ganancia local es moderada y no equivale a una reduccion medida del porcentaje global de un nucleo.
+Tolerancia, correcciones y limites del lobby: docs/LOBBY_LATENCY.md y docs/LOBBY_LATENCY_RESULTS.json. No se garantiza jugabilidad comoda a 1000 ms.
 El bloqueo previamente comunicado al terminar la carrera con el host en attract sigue siendo una incidencia independiente sin causa ni correccion confirmadas.

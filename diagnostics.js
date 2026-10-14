@@ -14,7 +14,7 @@ export class Diagnostics {
   update(running) {
     if(!this.enabled)return;
     const now=this.clock(),seconds=(now-this.since)/1000;if(seconds<1)return;
-    const sorted=this.cpu.sort((a,b)=>a-b),network=this.network();
+    const sorted=this.cpu.sort((a,b)=>a-b),network={...this.network()};delete network.connectionEvents;
     const rate=key=>Math.max(0,(network[key]||0)-(this.windowNetwork[key]||0))/seconds;
     network.sentBytesPerSecond=rate('payloadSentBytes');network.receivedBytesPerSecond=rate('payloadReceivedBytes');
     network.sentPacketsPerSecond=Math.max(0,(network.sent?.packets||0)-(this.windowNetwork.sent?.packets||0))/seconds;
@@ -29,7 +29,7 @@ export class Diagnostics {
     this.latest=sample;this.history.push(sample);if(this.history.length>300)this.history.shift();
     this.render(sample,true);this.reset();
   }
-  report() {return {schema:2,build:BUILD_ID,createdAt:new Date().toISOString(),
+  report() {return {schema:3,build:BUILD_ID,createdAt:new Date().toISOString(),connectionEvents:this.network().connectionEvents||[],
     userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Centralized DATA counts local shared-RAM applications with real control data and buffered/interpolated remote poses. poseBufferTicks is the additional playout distance in source game ticks, excluding network transit; poseHeldPercent counts applications that reached the newest available sample, not necessarily a visually stationary car. Packet intervals cover the last 256 gaps and include cabinet samples and host states. Central agesMs measures time since receipt by the host, excluding network transit. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
 }
 
