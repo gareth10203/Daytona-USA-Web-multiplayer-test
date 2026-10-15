@@ -38,7 +38,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
  $('leaveRoom').onclick=()=>{room.leave();showEntry();};
  $('readyRoom').onclick=()=>{void unlockAudio();const me=room.members.find(x=>x.id===room.id);room.ready(!me?.ready);};
  $('startRoom').onclick=action(async()=>{void unlockAudio();await room.start();});
- $('stopRoom').onclick=()=>room.end('The host returned everyone to the room.');
+ $('stopRoom').onclick=()=>room.end('The host returned everyone to the room.',room.id,'requested-stop','action');
  $('copyRoom').onclick=action(async()=>{await navigator.clipboard.writeText($('inviteLink').value);$('roomMessage').textContent='Link copied. Share it with your friends.';});
  $('copyCode').onclick=action(async()=>{await navigator.clipboard.writeText($('roomCode').textContent);$('roomMessage').textContent='Room code copied.';});
  $('inviteLink').onclick=event=>event.target.select();
@@ -95,7 +95,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
    const key=state.host||state.id||'idle';if(key!==roomKey){roomKey=key;pendingIDs=new Set();pendingStamp='';lastChatSeq=0;lastAckCommand=0;messages.clear();$('chatLog').replaceChildren();cards.clear();emptySeats.clear();$('playersList').replaceChildren();$('chatInput').value='';$('chatLength').textContent='0/240';markRead();mobileTab('grid');}
    if(state.phase==='idle')return;
    layout(true);panel.classList.toggle('guest-room',!state.isHost);panel.classList.toggle('has-requests',state.isHost&&state.pending.length>0);panel.dataset.phase=state.phase;
-   if($('settingsModal').hidden)$('menuDialog').setAttribute('aria-labelledby','roomTitle');
+   if($('settingsModal').hidden&&$('hostConsole')?.hidden!==false)$('menuDialog').setAttribute('aria-labelledby','roomTitle');
    $('startBtn').disabled=state.phase!=='playing';$('closeBtn').hidden=state.phase!=='playing';panel.hidden=false;entry.hidden=true;choices.hidden=true;
    $('roomTitle').textContent=state.phase==='pending'?'Request sent':state.phase==='error'?'Room unavailable':state.isHost?'Your starting grid':'Your race room';
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
@@ -115,7 +115,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
    const labels={connecting:'Connecting to the room…',pending:'Your host will admit you shortly.',lobby,preparing:'Setting up every cabinet. Please wait…',playing:'The race keeps running while this menu is open.',error:'Try another invitation.'};
    $('roomMessage').textContent=(state.error||labels[state.phase]||'')+(state.awaitingStop?' Waiting for the host to return to the room.':'');$('roomConnection').textContent=state.phase==='connecting'?'Connecting…':state.phase==='reconnecting'?'Reconnecting automatically · seat reserved':state.phase==='error'?'Disconnected':state.signaling?'● Room connected':'Room connected · invitation service reconnecting';$('roomConnection').dataset.state=state.phase==='error'?'offline':state.phase==='reconnecting'||!state.signaling?'recovering':'connected';
    $('returnRoomGame').hidden=state.phase!=='playing';$('startBtn').hidden=true;
-   if(state.phase!==lastPhase&&!$('overlay').hidden){lastPhase=state.phase;if(state.phase==='lobby'&&me)$('readyRoom').focus();else if(state.phase==='error')$('leaveRoom').focus();}
+   if(state.phase!==lastPhase&&!$('overlay').hidden){lastPhase=state.phase;if($('hostConsole')?.hidden!==false){if(state.phase==='lobby'&&me)$('readyRoom').focus();else if(state.phase==='error')$('leaveRoom').focus();}}
   }
  };
 }

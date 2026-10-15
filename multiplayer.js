@@ -1,11 +1,13 @@
 import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js';
 import {SnapshotFlow} from './snapshot-flow.js';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js';
 import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
 const chatText=value=>typeof value==='string'?value.replace(/\s+/gu,' ').trim():'';
 const MAX_BUFFER=1024*1024;
+const linkError=(message,cause,conn)=>Object.assign(Error(message),{linkCause:cause,linkPeer:conn?.peer});
 function packetTiming(){return {count:0,last:null,intervals:[]};}
 function recordPacket(timing){const now=performance.now();timing.count++;if(timing.last!==null){timing.intervals.push(now-timing.last);if(timing.intervals.length>256)timing.intervals.shift();}timing.last=now;}
 function timingSummary(timing){const values=[...timing.intervals].sort((a,b)=>a-b);return {packets:timing.count,intervalP95Ms:values.length?values[Math.floor((values.length-1)*.95)]:null,intervalMaxMs:values.length?values.at(-1):null};}
@@ -16,25 +18,71 @@ export const RECONNECT_GRACE_MS=30000;
 const retryDelay=attempt=>Math.min(1000*2**Math.min(attempt,4),10000);
 const INACTIVE_REASON="The race was interrupted because a cabinet became inactive. Return to the room and start again.";
 export class Multiplayer {
- constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},isVisible=()=>true}={}){
-  Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,isVisible});this.reset();
+ constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},isVisible=()=>true,readHealth=()=>({})}={}){
+  Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,isVisible,readHealth});this.reset();
  }
  reset(){this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.settings={mode:0,difficulty:0,region:'Export'};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
  snapshot(){return {phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),lastAck:this.lastAck};}
  changed(){this.onChange(this.snapshot());}
- recordConnectionEvent(kind,conn=null){
+ recordConnectionEvent(kind,conn=null,detail={}){
   const now=performance.now(),pc=conn?.peerConnection;
-  this.connectionEvents.push({time:now,kind,phase:this.phase,role:this.isHost?'MASTER':'SLAVE',cabinet:this.members.find(m=>m.id===conn?.peer)?.cabinet??null,
+  const member=detail.member||this.members.find(m=>m.id===(conn?.peer||this.id))||this.pending.get(conn?.peer);
+  this.connectionEvents.push({id:++this.consoleEventSequence,at:Date.now(),time:now,kind,phase:this.phase,role:this.isHost?'MASTER':'SLAVE',name:cleanName(member?.name||(!conn?this.name:'Driver')),cabinet:member?.cabinet??null,source:detail.source||'observed',cause:detail.cause||null,reason:cleanReason(detail.reason),
    channelState:conn?.dataChannel?.readyState??(conn?.open?'open':null),connectionState:pc?.connectionState??null,iceState:pc?.iceConnectionState??null,
    bufferedBytes:conn?.dataChannel?.bufferedAmount||0,rttMs:this.networkStats.get(conn)?.rttMs??conn?.measuredRttMs??null,lastMessageAgeMs:conn?.lastSeen==null?null:Math.max(0,now-conn.lastSeen),progressAgeMs:conn?.emulation?.at==null?null:Math.max(0,now-conn.emulation.at)});
   if(this.connectionEvents.length>128)this.connectionEvents.shift();
  }
- initRecovery(){this.connectionEvents=[];this.sessions=new Map();this.sessionKey='';this.reconnectUntil=0;this.retryAt=0;this.retryAttempt=0;this.signalRetryAt=0;this.signalAttempt=0;this.lobbySequence=0;this.lastLobbySequence=0;this.commands=new Map();this.commandSequence=0;this.lastAck=null;}
+ initRecovery(){this.connectionEvents=[];this.consoleEventSequence=0;this.consoleRecords=new Map();this.consoleSerial=0;this.healthSampler=new HealthSampler();this.lastHealth=null;this.sessions=new Map();this.sessionKey='';this.reconnectUntil=0;this.retryAt=0;this.retryAttempt=0;this.signalRetryAt=0;this.signalAttempt=0;this.lobbySequence=0;this.lastLobbySequence=0;this.commands=new Map();this.commandSequence=0;this.lastAck=null;}
+ makeHealth(now=performance.now()){let extra={};try{extra=this.readHealth()||{};}catch{}return this.lastHealth=this.healthSampler.sample(this,now,extra);}
+ receiveHealth(conn,data){
+  if(!this.isHost||this.connections.get(conn.peer)!==conn||!this.members.some(m=>m.id===conn.peer)||data.health===undefined)return;
+  const health=normalizeHealth(data.health);
+  if(!health){if(!conn.invalidHealthAt||performance.now()-conn.invalidHealthAt>5000){conn.invalidHealthAt=performance.now();this.recordConnectionEvent('invalid-status-report',conn);}return;}
+  if(health.sequence<=(conn.healthSequence||0))return;
+  if(this.active&&data.epoch!==this.epoch)return;
+  conn.healthSequence=health.sequence;conn.healthReport={...health,receivedAt:performance.now()};
+ }
+ connectionRow(member,conn,now){
+  const stats=this.networkStats.get(conn),flow=conn?.snapshotFlow?.snapshot();
+  let record=this.consoleRecords.get(member.id);
+  if(!record){record={serial:++this.consoleSerial};this.consoleRecords.set(member.id,record);}
+  if(conn){const counters=conn.consoleCounters||{tx:0,rx:0};const prev=conn.consoleRate;
+   if(!prev||now-prev.at>=500){conn.consoleRate={at:now,tx:counters.tx,rx:counters.rx,txRate:prev?Math.max(0,counters.tx-prev.tx)*1000/(now-prev.at):null,rxRate:prev?Math.max(0,counters.rx-prev.rx)*1000/(now-prev.at):null};}
+  }
+  const age=at=>at==null?null:Math.max(0,now-at),report=conn?.healthReport;
+  const health=report?Object.fromEntries(Object.entries(report).filter(([key])=>key!=='receivedAt')):null;
+  const row={serial:record.serial,name:cleanName(member.name),cabinet:member.cabinet??null,self:false,pending:this.pending.has(member.id),archived:false,connection:member.connection||'connected',
+   rttMs:conn?.measuredRttMs??stats?.rttMs??null,rttSource:Number.isFinite(conn?.measuredRttMs)?'room-ping':stats?.rttMs!=null?'browser':null,transportRttMs:stats?.rttMs??null,statsAgeMs:stats?.at==null?null:Math.max(0,now-stats.at),path:stats?stats.relay?'relay':'direct':null,channelState:conn?.dataChannel?.readyState??(conn?.open?'open':null),connectionState:conn?.peerConnection?.connectionState??null,iceState:conn?.peerConnection?.iceConnectionState??null,
+   bufferedBytes:conn?.dataChannel?.bufferedAmount??null,inFlight:flow?.inFlight??null,pendingStates:flow?.pending??null,ackAgeMs:conn?.snapshotFlow?.oldestAgeMs(now)??null,
+   lastMessageAgeMs:age(conn?.lastSeen),progressAgeMs:age(conn?.emulation?.epoch===this.epoch?conn.emulation.at:null),lastStateAgeMs:age(conn?.lastStateAt),reportAgeMs:age(report?.receivedAt),health,
+   sentBytes:conn?.consoleCounters?.tx??0,receivedBytes:conn?.consoleCounters?.rx??0,txBytesPerSecond:conn?.consoleRate?.txRate??null,rxBytesPerSecond:conn?.consoleRate?.rxRate??null};
+  record.row=row;return row;
+ }
+ retainConnection(conn){
+  if(!this.isHost)return;const member=this.members.find(m=>m.id===conn.peer)||this.pending.get(conn.peer);if(!member)return;
+  const row=this.connectionRow(member,conn,performance.now());this.consoleRecords.get(member.id).row={...row,archived:true,connection:'disconnected'};
+  this.trimConsoleRecords();
+ }
+ trimConsoleRecords(){
+  const current=new Set([...this.members.map(m=>m.id),...this.pending.keys()]);
+  for(const [id,r] of this.consoleRecords)if(this.consoleRecords.size>32&&!current.has(id)&&r.row?.archived)this.consoleRecords.delete(id);
+ }
+ consoleSnapshot(){
+  if(!this.isHost)return this.lastHostReport?structuredClone(this.lastHostReport):null;
+  const now=performance.now(),health=this.makeHealth(now),activeIDs=new Set([this.id]),rows=[{serial:0,self:true,name:cleanName(this.name),cabinet:1,visible:health.visible,health,reportAgeMs:0,connection:'connected',archived:false,rttMs:null,lastMessageAgeMs:0,lastStateAgeMs:null,progressAgeMs:this.active?Math.max(0,now-this.progressAt):null,bufferedBytes:this.diagnostics().bufferedBytes}];
+  for(const member of [...this.members,...this.pending.values()]){
+   if(member.id===this.id)continue;activeIDs.add(member.id);const conn=this.connections.get(member.id),previous=this.consoleRecords.get(member.id)?.row;
+   rows.push(conn?this.connectionRow(member,conn,now):previous?{...previous,archived:false,connection:member.connection||'reconnecting'}:this.connectionRow(member,null,now));
+  }
+  for(const [id,record] of this.consoleRecords)if(!activeIDs.has(id)&&record.row)rows.push({...record.row,archived:true,connection:'disconnected'});
+  this.trimConsoleRecords();
+  return {build:BUILD_ID,generatedAt:new Date().toISOString(),live:true,phase:this.phase,signaling:this.signaling,rows,events:this.connectionEvents.map(e=>({...e})),packetLossPercent:null};
+ }
  get active(){return this.phase==='playing';}
  get occupied(){return !['idle','error'].includes(this.phase);}
- send(conn,data){if(!conn?.open)throw Error('A player is disconnected.');if((conn.dataChannel?.bufferedAmount||0)>MAX_BUFFER){this.recordConnectionEvent('send-queue-limit',conn);throw Error('A player connection is too slow; the arcade link was stopped.');}try{conn.send(data);}catch(e){this.recordConnectionEvent('send-error',conn);throw e;}if(['arcade-sample','arcade-state'].includes(data.type)){this.payloadSent+=data.bytes.byteLength;recordPacket(this.sentTiming);}}
+ send(conn,data){if(!conn?.open)throw linkError('A player is disconnected.','transport-interruption',conn);if((conn.dataChannel?.bufferedAmount||0)>MAX_BUFFER){this.recordConnectionEvent('send-queue-limit',conn);throw linkError('A player connection is too slow; the arcade link was stopped.','send-queue-limit',conn);}try{conn.send(data);}catch(e){this.recordConnectionEvent('send-error',conn);throw linkError(e.message||'Send failed.','send-error',conn);}if(['arcade-sample','arcade-state'].includes(data.type)){this.payloadSent+=data.bytes.byteLength;recordPacket(this.sentTiming);if(conn.consoleCounters)conn.consoleCounters.tx+=data.bytes.byteLength;}}
  sendSnapshot(conn,data){
-  if(!conn?.open)throw Error('A player is disconnected.');
+  if(!conn?.open)throw linkError('A player is disconnected.','transport-interruption',conn);
   if(!conn.snapshotFlow||conn.snapshotFlow.epoch!==this.epoch)conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);
   conn.snapshotFlow.offer(data);this.flushSnapshot(conn);
  }
@@ -81,7 +129,7 @@ export class Multiplayer {
     if(opened&&err.type==='peer-unavailable'&&!this.isHost&&this.phase==='reconnecting'){if(this.server){const conn=this.server;this.detach(conn,false);try{conn.close();}catch{}}return;}
     const e=Error(err.type==='peer-unavailable'?'Room unavailable. Ask the host for a new invitation.':`Connection failed (${err.type||'network'}). Some networks need a TURN relay.`);
     if(!opened){clearTimeout(expiry);reject(e);return;}
-    if(this.active||this.phase==='preparing')this.end(e.message);
+    if(this.active||this.phase==='preparing')this.end(e.message,this.id,'local-runtime-error');
     if(peer.destroyed){this.signaling=false;this.pending.clear();this.sessions.clear();this.failRoom(e.message);}else{this.error=e.message;this.changed();}
    });
   });
@@ -93,7 +141,7 @@ export class Multiplayer {
   try{await this.openPeer();this.connectHost();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}
  }
  attach(conn,incoming){
-  const generation=this.generation;let accepted=false;conn.lastSeen=performance.now();conn.openingUntil=conn.lastSeen+OPEN_TIMEOUT_MS;conn.wasOpened=false;
+  const generation=this.generation;let accepted=false;conn.consoleCounters={tx:0,rx:0};conn.lastSeen=performance.now();conn.openingUntil=conn.lastSeen+OPEN_TIMEOUT_MS;conn.wasOpened=false;
   const expiry=setTimeout(()=>{if(generation!==this.generation||accepted)return;this.recordConnectionEvent('opening-timeout',conn);if(!incoming&&this.server===conn)this.detach(conn,false,'The data channel did not open within 30 seconds.');try{conn.close();}catch{}},OPEN_TIMEOUT_MS);
   conn.on('open',()=>{
    if(generation!==this.generation||(!incoming&&this.server!==conn)){conn.close();return;}
@@ -108,27 +156,35 @@ export class Multiplayer {
     const previous=this.connections.get(conn.peer);this.connections.set(conn.peer,conn);
     if(returning){session.until=0;const member=this.members.find(m=>m.id===conn.peer),pending=this.pending.get(conn.peer);if(member){member.connection='connected';member.ready=false;this.revision++;if(!this.members.some(m=>m.connection==='reconnecting'))this.error='';}if(pending)pending.connection='connected';}
     else{this.sessions.set(conn.peer,{key:meta.session,until:0,commands:new Map()});this.pending.set(conn.peer,{id:conn.peer,name:cleanName(meta.name),connection:'connected'});}
-    accepted=true;clearTimeout(expiry);this.syncConnection(conn);this.publish();if(previous&&previous!==conn)previous.close();
-   }else{accepted=true;clearTimeout(expiry);if(this.phase!=='reconnecting'){this.phase='pending';this.changed();}}
+    accepted=true;clearTimeout(expiry);if(returning)this.recordConnectionEvent('player-reconnected',conn);this.observeTransport(conn,incoming,generation);this.syncConnection(conn);this.publish();if(previous&&previous!==conn)previous.close();
+   }else{accepted=true;clearTimeout(expiry);this.observeTransport(conn,incoming,generation);if(this.phase!=='reconnecting'){this.phase='pending';this.changed();}}
   });
-  conn.on('data',data=>{if(generation!==this.generation||(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn))return;conn.lastSeen=performance.now();if(['arcade-sample','arcade-state'].includes(data?.type)&&data.bytes instanceof ArrayBuffer){this.payloadReceived+=data.bytes.byteLength;recordPacket(this.receivedTiming);}try{this.handle(conn,data,incoming);}catch(e){this.recordConnectionEvent('data-handler-error',conn);if(this.isHost){this.detach(conn,true,e.message,false);conn.close();}else{if(this.active||this.phase==='preparing')this.end(e.message);this.detach(conn,false,e.message,false);conn.close();}}});
+  conn.on('data',data=>{if(generation!==this.generation||(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn))return;conn.lastSeen=performance.now();if(['arcade-sample','arcade-state'].includes(data?.type)&&data.bytes instanceof ArrayBuffer){this.payloadReceived+=data.bytes.byteLength;recordPacket(this.receivedTiming);conn.consoleCounters.rx+=data.bytes.byteLength;}try{this.handle(conn,data,incoming);}catch(e){this.recordConnectionEvent('data-handler-error',conn);if(this.isHost){this.detach(conn,true,e.message,false);conn.close();}else{if(this.active||this.phase==='preparing')this.end(e.message,this.id,'data-handler-error');this.detach(conn,false,e.message,false);conn.close();}}});
   conn.on('close',()=>{clearTimeout(expiry);if(generation===this.generation&&(incoming?this.connections.get(conn.peer)===conn:this.server===conn)){this.recordConnectionEvent('channel-close',conn);this.detach(conn,incoming,'The data channel closed.');}});
   conn.on('error',err=>{clearTimeout(expiry);if(generation===this.generation&&(incoming?this.connections.get(conn.peer)===conn:this.server===conn)){const type=/^[a-z0-9-]{1,40}$/i.test(err?.type||'')?err.type:'transport';this.recordConnectionEvent('channel-error:'+type,conn);this.detach(conn,incoming,`Data channel error (${type}).`);}try{conn.close();}catch{}});
  }
- forget(id,reason){
-  const member=this.members.find(m=>m.id===id);this.sessions.delete(id);this.pending.delete(id);this.chatRate.delete(id);this.members=this.members.filter(m=>m.id!==id);this.renumber();
-  if(member){this.revision++;for(const m of this.members)m.ready=false;if(this.active||this.phase==='preparing')this.end(reason+' The arcade link must restart.',member);else this.error=`${member.name} left the room. ${reason}`;}
+ observeTransport(conn,incoming,generation){
+  const pc=conn.peerConnection;if(!pc?.addEventListener)return;
+  const observe=()=>{if(generation!==this.generation||(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn))return;
+   const state=pc.connectionState;if(state===conn.consoleTransportState)return;conn.consoleTransportState=state;
+   if(['connected','disconnected','failed'].includes(state))this.recordConnectionEvent('rtc-'+state,conn);
+  };pc.addEventListener('connectionstatechange',observe);observe();
+  conn.on('close',()=>pc.removeEventListener?.('connectionstatechange',observe));
+ }
+ forget(id,reason,cause='transport-interruption',source='observed'){
+  const member=this.members.find(m=>m.id===id);this.sessions.delete(id);this.pending.delete(id);this.chatRate.delete(id);this.members=this.members.filter(m=>m.id!==id);this.renumber();this.trimConsoleRecords();
+  if(member){this.revision++;for(const m of this.members)m.ready=false;if(this.active||this.phase==='preparing')this.end(reason+' The arcade link must restart.',member,cause,source);else this.error=`${member.name} left the room. ${reason}`;}
   this.publish();
  }
- detach(conn,incoming,reason='The cabinet disconnected.',recover=true){
+ detach(conn,incoming,reason='The cabinet disconnected.',recover=true,cause='transport-interruption',source='observed'){
   if(incoming){
-   if(this.connections.get(conn.peer)!==conn)return;this.connections.delete(conn.peer);
+   if(this.connections.get(conn.peer)!==conn)return;this.retainConnection(conn);this.connections.delete(conn.peer);
    const member=this.members.find(m=>m.id===conn.peer),pending=this.pending.get(conn.peer),session=this.sessions.get(conn.peer);
    if(recover&&session&&(member||pending)){
     session.until=performance.now()+RECONNECT_GRACE_MS;
-    if(member){if(this.active||this.phase==='preparing')this.end(reason+' Reconnect in the lobby to start again.',member);member.connection='reconnecting';this.revision++;for(const m of this.members)m.ready=false;this.error=`${member.name} is reconnecting. ${reason} Their seat is reserved for 30 seconds.`;}
+    if(member){if(this.active||this.phase==='preparing')this.end(reason+' Reconnect in the lobby to start again.',member,cause,source);member.connection='reconnecting';this.revision++;for(const m of this.members)m.ready=false;this.error=`${member.name} is reconnecting. ${reason} Their seat is reserved for 30 seconds.`;}
     if(pending)pending.connection='reconnecting';this.publish();
-   }else this.forget(conn.peer,reason);
+   }else this.forget(conn.peer,reason,cause,source);
   }else{
    if(this.server!==conn)return;this.server=null;
    const host=this.members.find(m=>m.id===this.host),message=host?`Session interrupted by ${host.name} (cabinet ${host.cabinet}). ${reason}`:reason;
@@ -140,13 +196,13 @@ export class Multiplayer {
  }
  renumber(){this.members.forEach((x,i)=>x.cabinet=i+1);}
  publish(){if(this.isHost&&this.phase!=='idle'){this.broadcast({type:'roster',sequence:++this.lobbySequence,members:this.members,settings:this.settings,revision:this.revision,phase:this.phase});}this.changed();}
- approve(id){if(!this.isHost||this.phase!=='lobby'||!this.pending.has(id)||!this.connections.get(id)?.open||this.members.length>=8)return;const member=this.pending.get(id);this.pending.delete(id);this.members.push({...member,ready:false,cabinet:this.members.length+1,rtt:null});this.revision++;for(const m of this.members)m.ready=false;const conn=this.connections.get(id);this.syncConnection(conn);this.publish();}
+ approve(id){if(!this.isHost||this.phase!=='lobby'||!this.pending.has(id)||!this.connections.get(id)?.open||this.members.length>=8)return;const member=this.pending.get(id);this.pending.delete(id);this.members.push({...member,ready:false,cabinet:this.members.length+1,rtt:null});this.recordConnectionEvent('player-admitted',this.connections.get(id),{source:'action'});this.revision++;for(const m of this.members)m.ready=false;const conn=this.connections.get(id);this.syncConnection(conn);this.publish();}
  kick(id){
   if(!this.isHost||this.phase!=='lobby'||id===this.id||!this.members.some(m=>m.id===id))return false;
-  const conn=this.connections.get(id);
+  const conn=this.connections.get(id);this.recordConnectionEvent('host-removed-player',conn,{source:'action'});if(conn)this.retainConnection(conn);
   if(conn?.open)this.send(conn,{type:'removed',reason:'The host removed you from this room.'});
   this.connections.delete(id);this.sessions.delete(id);this.pending.delete(id);this.members=this.members.filter(m=>m.id!==id);
-  this.renumber();this.revision++;for(const m of this.members)m.ready=false;this.publish();
+  this.renumber();this.trimConsoleRecords();this.revision++;for(const m of this.members)m.ready=false;this.publish();
   if(conn)setTimeout(()=>conn.close(),200);
   return true;
  }
@@ -171,7 +227,7 @@ export class Multiplayer {
   if(!m||!Number.isSafeInteger(m.seq)||m.seq<1||typeof m.sender!=='string'||m.sender.length>100||typeof m.name!=='string'||m.name.length>24||typeof m.text!=='string'||!m.text.length||m.text.length>CHAT_LIMIT||!Number.isFinite(m.time)||m.time<0||m.time>8640000000000000)return null;
   return {seq:m.seq,sender:m.sender,name:cleanName(m.name),text:m.text,time:m.time};
  }
- reject(id,reason='The host declined this request.'){const conn=this.connections.get(id);if(conn?.open){this.send(conn,{type:'reject',reason});setTimeout(()=>conn.close(),200);}this.connections.delete(id);this.sessions.delete(id);this.pending.delete(id);this.changed();}
+ reject(id,reason='The host declined this request.'){const conn=this.connections.get(id);if(conn){this.recordConnectionEvent('request-declined',conn,{source:'action'});this.retainConnection(conn);}if(conn?.open){this.send(conn,{type:'reject',reason});setTimeout(()=>conn.close(),200);}this.connections.delete(id);this.sessions.delete(id);this.pending.delete(id);this.trimConsoleRecords();this.changed();}
  setSettings(value){if(!this.isHost||this.phase!=='lobby')return;this.settings=validateSettings(value);this.revision++;for(const x of this.members)x.ready=false;this.publish();}
  ready(value){if(this.phase!=='lobby'||this.awaitingStop||(value&&!this.isVisible())||this.snapshot().readyPending)return;if(this.isHost){this.members[0].ready=!!value;this.publish();}else this.command('ready',{value:!!value,revision:this.revision});}
  async start(){
@@ -181,31 +237,31 @@ export class Multiplayer {
  }
  async prepare(data){
   this.settings=validateSettings(data.settings);if(!/^[a-f0-9]{32}$/.test(data.epoch))throw Error('Invalid race session.');
-  this.members=this.validateMembers(data.members);this.epoch=data.epoch;this.progressFrames=0;this.phase='preparing';this.changed();if(!this.isVisible()){this.end(INACTIVE_REASON);return;}const generation=this.generation,epoch=this.epoch;
+  this.members=this.validateMembers(data.members);this.epoch=data.epoch;this.progressFrames=0;this.phase='preparing';this.changed();if(!this.isVisible()){this.end(INACTIVE_REASON,this.id,'visibility-interruption');return;}const generation=this.generation,epoch=this.epoch;
   const me=this.members.find(x=>x.id===this.id);if(!me)throw Error('This cabinet is not in the race.');
   try{await this.onPrepare({...this.settings,master:this.id===this.host,cabinet:me.cabinet},()=>generation!==this.generation||this.epoch!==epoch||this.phase!=='preparing');
    if(generation!==this.generation||this.epoch!==epoch||this.phase!=='preparing')return;
    if(this.isHost){this.prepared.add(this.id);this.tryGo();}else this.send(this.server,{type:'prepared',epoch:this.epoch,revision:this.revision});
-  }catch(e){if(generation!==this.generation||this.epoch!==epoch||this.phase!=='preparing')return;if(this.isHost)this.end(e.message);else this.send(this.server,{type:'prepare-failed',epoch:this.epoch,reason:e.message});}
+  }catch(e){if(generation!==this.generation||this.epoch!==epoch||this.phase!=='preparing')return;if(this.isHost)this.end(e.message,this.id,'prepare-failed');else this.send(this.server,{type:'prepare-failed',epoch:this.epoch,reason:e.message});}
  }
  tryGo(){if(this.phase==='preparing'&&this.members.every(x=>this.prepared.has(x.id))){this.broadcast({type:'go',epoch:this.epoch});this.go();}}
  go(){
-  if(!this.isVisible()){this.end(INACTIVE_REASON);return;}
+  if(!this.isVisible()){this.end(INACTIVE_REASON,this.id,'visibility-interruption');return;}
   const now=performance.now();this.progressFrames=0;this.progressAt=now;
-  for(const conn of this.isHost?this.connections.values():[this.server])if(conn){conn.emulation={epoch:this.epoch,frames:0,at:now};conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);}
+  for(const conn of this.isHost?this.connections.values():[this.server])if(conn){conn.lastStateAt=null;conn.emulation={epoch:this.epoch,frames:0,at:now};conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);}
   this.distributor=this.isHost?new HostDistributor(this.members):null;this.stateSequence=0;this.phase='playing';this.onStart();this.changed();
  }
  advance(){if(this.active){this.progressFrames++;this.progressAt=performance.now();}}
- visibilityChanged(){if(!this.isVisible()&&(this.active||this.phase==='preparing')){this.recordConnectionEvent('visibility-interruption');this.end(INACTIVE_REASON);}}
+ visibilityChanged(){if(!this.isVisible()&&(this.active||this.phase==='preparing')){this.recordConnectionEvent('visibility-interruption');this.end(INACTIVE_REASON,this.id,'visibility-interruption');}}
  checkProgress(now=performance.now()){
   if(!this.active)return;
   const connections=this.isHost?[...this.connections.values()]:[this.server];
-  if(now-this.progressAt>PROGRESS_TIMEOUT_MS){this.recordConnectionEvent('local-progress-timeout');this.end(INACTIVE_REASON);return;}
+  if(now-this.progressAt>PROGRESS_TIMEOUT_MS){this.recordConnectionEvent('local-progress-timeout');this.end(INACTIVE_REASON,this.id,'local-progress-timeout');return;}
   const stalled=connections.find(c=>c?.emulation?.epoch===this.epoch&&now-c.emulation.at>PROGRESS_TIMEOUT_MS);
   if(stalled){
    const member=this.members.find(m=>m.id===stalled.peer);
    const label=member?`${cleanName(member.name)} (cabinet ${member.cabinet})`:'the remote cabinet';
-   this.recordConnectionEvent('remote-progress-timeout',stalled);this.end(`No emulation progress from ${label}. Return to the room and start again.`,stalled.peer);
+   this.recordConnectionEvent('remote-progress-timeout',stalled);this.end(`No emulation progress from ${label}. Return to the room and start again.`,stalled.peer,'remote-progress-timeout');
   }
  }
 
@@ -216,7 +272,7 @@ export class Multiplayer {
    const previous=conn.emulation;
    if(!previous||previous.epoch!==this.epoch||data.frames>previous.frames)conn.emulation={epoch:this.epoch,frames:data.frames,at:performance.now()};
   }
-  if(data.type==='ping'){this.send(conn,{type:'pong',time:data.time,epoch:this.epoch,frames:this.active?this.progressFrames:0});return;}
+  if(data.type==='ping'){this.receiveHealth(conn,data);this.send(conn,{type:'pong',time:data.time,epoch:this.epoch,frames:this.active?this.progressFrames:0});return;}
   if(data.type==='pong'){if(Number.isFinite(data.time)){const member=this.members.find(x=>x.id===conn.peer);conn.measuredRttMs=Math.max(0,performance.now()-data.time);if(member)member.rtt=Math.round(conn.measuredRttMs);}return;}
   if(data.type==='arcade-ack'){
    if(!this.active||data.epoch!==this.epoch||!conn.snapshotFlow||conn.snapshotFlow.epoch!==this.epoch)return;
@@ -226,7 +282,7 @@ export class Multiplayer {
   }
   if(incoming){
    if(this.connections.get(conn.peer)!==conn)return;
-   if(data.type==='leave'){this.detach(conn,true,'The player left the room.',false);conn.close();return;}
+   if(data.type==='leave'){this.recordConnectionEvent('player-left',conn,{source:'action'});this.detach(conn,true,'The player left the room.',false,'player-left','action');conn.close();return;}
    const member=this.members.find(x=>x.id===conn.peer);if(!member)return;
    if(['ready','chat-submit'].includes(data.type)){
     const session=this.sessions.get(conn.peer),saved=session?.commands.get(data.command);if(saved){this.send(conn,saved);return;}
@@ -236,12 +292,12 @@ export class Multiplayer {
     else{const valid=this.acceptChat(conn.peer,data.text);this.acknowledge(conn,data,valid,valid?'':'Message could not be sent. Try again in the lobby.');}
    }
    else if(data.type==='prepared'&&this.phase==='preparing'&&data.epoch===this.epoch&&data.revision===this.revision){this.prepared.add(conn.peer);this.tryGo();}
-   else if(data.type==='prepare-failed'&&this.phase==='preparing'&&data.epoch===this.epoch)this.end('The cabinet could not prepare: '+String(data.reason).slice(0,160),conn.peer);
+   else if(data.type==='prepare-failed'&&this.phase==='preparing'&&data.epoch===this.epoch)this.end('The cabinet could not prepare: '+String(data.reason).slice(0,160),conn.peer,'prepare-failed','reported');
    else if(data.type==='stop'&&(this.active||this.phase==='preparing')&&data.epoch===this.epoch){
     // The connection identifies the requester; clients cannot name another cabinet.
-    this.end(String(data.reason||'The cabinet stopped.').slice(0,180),conn.peer);
+    this.receiveHealth(conn,data);this.end(String(data.reason||'The cabinet stopped.').slice(0,180),conn.peer,STOP_CAUSES.includes(data.cause)?data.cause:'requested-stop','reported');
    }
-   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){this.distributor.accept(conn.peer,data.frames,data.bytes);this.acknowledgeSnapshot(conn,data);}
+   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){if(this.distributor.accept(conn.peer,data.frames,data.bytes))conn.lastStateAt=performance.now();this.acknowledgeSnapshot(conn,data);}
   }else{
    if(this.server!==conn)return;
    if(data.type==='command-ack'){
@@ -270,7 +326,7 @@ export class Multiplayer {
     if(message&&message.seq>(this.chat.at(-1)?.seq??0)){this.chat.push(message);if(this.chat.length>CHAT_HISTORY_LIMIT)this.chat.shift();this.changed();}
    }
    else if(data.type==='roster'){if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;this.lastLobbySequence=data.sequence;if(this.awaitingStop&&data.phase==='lobby')this.awaitingStop=false;this.members=this.validateMembers(data.members);this.settings=validateSettings(data.settings);this.revision=data.revision;this.changed();}
-   else if(data.type==='prepare'&&this.phase==='lobby'){this.revision=data.revision;void this.prepare(data).catch(e=>this.end(e.message));}
+   else if(data.type==='prepare'&&this.phase==='lobby'){this.revision=data.revision;void this.prepare(data).catch(e=>this.end(e.message,this.id,'prepare-failed'));}
    else if(data.type==='go'&&this.phase==='preparing'&&data.epoch===this.epoch)this.go();
    else if(data.type==='stop'&&(data.epoch===this.epoch||(this.awaitingStop&&data.epoch===this.endedEpoch)))this.stopLocal(String(data.reason||'The arcade link stopped.').slice(0,280));
    else if(data.type==='arcade-state'&&this.active&&data.epoch===this.epoch){
@@ -294,31 +350,33 @@ export class Multiplayer {
     if(member.id===this.id)this.receiveBytes(state);
     else this.sendSnapshot(this.connections.get(member.id),{type:'arcade-state',epoch:this.epoch,frames:this.progressFrames,sequence,encoding:'cabinet-slots',bytes:compactState(state,this.members.length)});
    }
-  }catch(e){this.end(e.message);}
+  }catch(e){this.end(e.message,e.linkPeer||this.id,e.linkCause||'receive-error');}
  }
  stopLocal(reason){const hadSession=this.active||this.phase==='preparing';this.clearSnapshots();if(this.epoch)this.endedEpoch=this.epoch;this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.epoch='';this.phase='lobby';this.error=reason;for(const x of this.members)x.ready=false;if(hadSession)this.onStop(reason);this.changed();}
- end(reason='The arcade session ended.',cabinet=this.id){
+ end(reason='The arcade session ended.',cabinet=this.id,cause='requested-stop',source='observed'){
+  cause=STOP_CAUSES.includes(cause)?cause:'requested-stop';
   const member=typeof cabinet==='string'?this.members.find(m=>m.id===cabinet):cabinet;
-  const detail=String(reason).slice(0,180);
+  const detail=String(reason).slice(0,180);this.recordConnectionEvent('session-stop',typeof cabinet==='string'?this.connections.get(cabinet):null,{member,source,cause,reason:detail});
   const message=member?`Session interrupted by ${cleanName(member.name)} (cabinet ${member.cabinet}). ${detail}`:detail;
   if(this.isHost){try{this.broadcast({type:'stop',epoch:this.epoch,reason:message});}catch{}this.stopLocal(message);this.publish();}
-  else{const hadSession=!!this.epoch;try{if(hadSession)this.send(this.server,{type:'stop',epoch:this.epoch,reason:detail});}catch{}this.stopLocal(message);this.awaitingStop=hadSession;this.changed();}
+  else{const hadSession=!!this.epoch;try{if(hadSession)this.send(this.server,{type:'stop',epoch:this.epoch,reason:detail,cause,health:this.makeHealth()});}catch{}this.stopLocal(message);this.awaitingStop=hadSession;this.changed();}
  }
  heartbeat(now=performance.now()){
+  const health=this.makeHealth(now);
   if(!this.signaling&&this.peer&&!this.peer.destroyed&&now>=this.signalRetryAt){this.signalRetryAt=now+retryDelay(this.signalAttempt++);if(this.peer.disconnected)try{this.peer.reconnect();}catch{}}
   if(this.phase==='reconnecting'){
    if(this.peer?.destroyed||now>this.reconnectUntil){const conn=this.server;this.server=null;this.failRoom('Could not reconnect. Return to room selection and try again.');try{conn?.close();}catch{}return;}
    if(!this.server&&now>=this.retryAt)this.connectHost();
   }
-  if(this.isHost){for(const [id,session] of this.sessions)if(session.until&&now>session.until)this.forget(id,'The reconnection window expired.');}
+  if(this.isHost){for(const [id,session] of this.sessions)if(session.until&&now>session.until){const m=this.members.find(m=>m.id===id)||this.pending.get(id);this.recordConnectionEvent('recovery-expired',null,{member:m});this.forget(id,'The reconnection window expired.');}}
   if(this.phase==='lobby'&&!this.isHost&&this.server?.open)for(const command of this.commands.values())if(now-command.at>=2000){command.at=now;try{this.send(this.server,command.data);}catch{this.detach(this.server,false);break;}}
-  this.checkProgress(now);if(this.isHost&&this.phase==='preparing'&&now>this.prepareDeadline){this.recordConnectionEvent('preparation-timeout');this.end('Cabinet preparation timed out.');return;}
+  this.checkProgress(now);if(this.isHost&&this.phase==='preparing'&&now>this.prepareDeadline){this.recordConnectionEvent('preparation-timeout');this.end('Cabinet preparation timed out.',this.id,'preparation-timeout');return;}
   const connections=this.isHost?[...this.connections.values()]:[this.server].filter(Boolean);
-  if(this.active){const stalled=connections.find(conn=>conn?.snapshotFlow?.oldestAgeMs(now)>PROGRESS_TIMEOUT_MS);if(stalled){this.recordConnectionEvent('snapshot-ack-timeout',stalled);this.end('No arcade snapshot receipt for 10 seconds. Return to the room and start again.',stalled.peer);return;}}
+  if(this.active){const stalled=connections.find(conn=>conn?.snapshotFlow?.oldestAgeMs(now)>PROGRESS_TIMEOUT_MS);if(stalled){this.recordConnectionEvent('snapshot-ack-timeout',stalled);this.end('No arcade snapshot receipt for 10 seconds. Return to the room and start again.',stalled.peer,'snapshot-ack-timeout');return;}}
   for(const conn of connections){
    if(!conn.open){if(!conn.wasOpened&&conn.openingUntil>now)continue;const opening=!!conn.openingUntil&&!conn.wasOpened;this.recordConnectionEvent(opening?'opening-timeout':'channel-not-open',conn);this.detach(conn,this.isHost,opening?'The data channel did not open within 30 seconds.':'The connection closed.');try{conn.close();}catch{}continue;}
    if(now-conn.lastSeen>CONNECTION_TIMEOUT_MS){this.recordConnectionEvent('silence-timeout',conn);this.detach(conn,this.isHost,'No response for 20 seconds.');try{conn.close();}catch{}continue;}
-   try{this.flushSnapshot(conn);this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0});}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
+   try{this.flushSnapshot(conn);this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0,...(!this.isHost?{health}:{})});}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
   }
   if(this.isHost&&['lobby','playing'].includes(this.phase))this.publish();else this.changed();
  }
@@ -341,14 +399,15 @@ export class Multiplayer {
     let pair;for(const value of stats.values())if(value.type==='transport'&&value.selectedCandidatePairId)pair=stats.get(value.selectedCandidatePairId);
     if(!pair)for(const value of stats.values())if(value.type==='candidate-pair'&&value.nominated&&value.state==='succeeded')pair=value;
     if(pair){const local=stats.get(pair.localCandidateId),remote=stats.get(pair.remoteCandidateId);
-     next.set(conn,{rttMs:Number.isFinite(pair.currentRoundTripTime)?pair.currentRoundTripTime*1000:null,relay:local?.candidateType==='relay'||remote?.candidateType==='relay'});
+     next.set(conn,{at:performance.now(),rttMs:Number.isFinite(pair.currentRoundTripTime)?pair.currentRoundTripTime*1000:null,relay:local?.candidateType==='relay'||remote?.candidateType==='relay'});
     }
    }catch{} // Stats are optional; never interrupt the arcade link.
   }));
-  if(generation===this.generation)this.networkStats=next;
+  if(generation===this.generation)this.networkStats=new Map([...next].filter(([c])=>c.open&&(this.isHost?this.connections.get(c.peer)===c:this.server===c)));
  }
  leave(){
   const hadSession=this.active||this.phase==='preparing';
+  if(this.isHost&&this.members.length){this.recordConnectionEvent('room-closed',null,{source:'action'});this.lastHostReport={...this.consoleSnapshot(),live:false,phase:'closed'};this.lastHostReport.rows=this.lastHostReport.rows.map(r=>({...r,archived:true}));}
   // Best effort: peer closure or the presence timeout still cleans up if this message is lost.
   const connections=this.isHost?[...this.connections.values()]:[this.server].filter(Boolean);
   for(const conn of connections)try{this.send(conn,{type:this.isHost?'room-closed':'leave'});}catch{}

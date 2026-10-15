@@ -1,14 +1,16 @@
-DAYTONA CENTRAL LINK — EXPERIMENTAL 9
-Build: daytona-rev-a-central-experimental-9
+DAYTONA CENTRAL LINK — EXPERIMENTAL 10
+Build: daytona-rev-a-central-experimental-10
 
-Independent native motion recovery experiment; version 8 and its ZIP preserved.
-All players must use build 9. Upload the contents of this ZIP to GitHub Pages.
-Adaptive pose reserve 4–16 source-clock ticks; recovery blend 12 local simulation ticks.
-Scene/car changes and implausible spatial resets are applied immediately.
-Actual old/new samples bracket short gaps; no additional extrapolation over the original TGP.
-Only verified XYZ/speed/angle fields change. NPC, control, checksum and timestamp bytes retained.
-The original reliable ordered transport, window of eight, compact states, protection and disconnect policy remain.
-This is stage one: long network gaps still stall remote state; no hot rejoin or host migration.
-Engine O2; simulation loop, audio and renderer source unchanged. Single-player native parity tested.
-See docs/INTERPOLATION_RECOVERY.md and docs/INTERPOLATION_RESULTS.json for measurements and limits.
-No ROM, test injection, diagnostic engine or build objects included.
+Independent host connection console, based on experiment 9.
+All players must use build 10. Upload the ZIP contents to GitHub Pages.
+The host opens Connections in the lobby or race menu; gameplay continues.
+Players: individual host/player RTT, participant-reported SIM and queue/traffic details.
+Events: observed transport conditions, reported cabinet causes and room actions.
+Export report downloads JSON without invitation or connection credentials.
+Last host report remains in Experimental settings until the page reloads.
+Status rides the existing one-second ping; no per-frame telemetry messages.
+Underlying failure causes and packet loss percentages may be unavailable.
+Native engine / loader identical to experiment 9; its motion recovery is retained.
+Transport, disconnect limits, audio, simulation timing and renderer are retained.
+See docs/CONNECTION_CONSOLE.md for sources, measurements and validation scope.
+No ROM, test fixtures, test injection, diagnostic engine or build objects included.

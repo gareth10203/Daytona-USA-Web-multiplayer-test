@@ -10,6 +10,7 @@ import { gamepadSteering } from './steering.js';
 import { createWheelControls } from './wheel-controls.js';
 import { Multiplayer } from './multiplayer.js';
 import { createRoomUI } from './room-ui.js';
+import { mountHostConsole } from './host-console.js';
 import { prepareCabinet } from './room-settings.js';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
@@ -37,10 +38,11 @@ const settings=loadSettings(settingsStorage,{mobile:mobileDevice});
 let enhanced = settings.drawDistance>0;
 let settingsOpen=false;
 let multiplayerProfile=false,linkStartedAt=0;
-let roomUI;
+let roomUI,hostConsole;
 const room=new Multiplayer({
  isVisible:()=>!document.hidden,
- onChange:state=>roomUI?.render(state),
+ readHealth:()=>({receiveBytes:wasm?._daytona_link_pending_bytes()||0,backlogMs:Math.max(0,lagMs)}),
+ onChange:state=>{roomUI?.render(state);hostConsole?.sync();},
  onPrepare:async(config,cancelled)=>{
   running=false;started=false;held.clear();touch.clear();rumble.stop();multiplayerProfile=true;
   ui.start.disabled=true;ui.close.hidden=true;
@@ -118,6 +120,7 @@ for(const tab of settingsTabs){
   });
 }
 function showMainMenu(focus=true){
+  if(hostConsole?.isOpen())return;
   wheelControls.cancel();
   settingsOpen=false;$('mainMenu').hidden=false;$('settingsModal').hidden=true;
   $('menuDialog').setAttribute('aria-labelledby','gameTitle');ui.overlay.scrollTop=0;
@@ -143,6 +146,7 @@ const touch=createTouchControls($('touchControls'),{
 });
 const joinChime=createLobbySound({context:()=>ctxAudio,output:()=>audioGain,muted:()=>soundMuted||settings.volume===0});
 roomUI=createRoomUI(room,{notifyRequest:joinChime,single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
+hostConsole=mountHostConsole(room);
 document.documentElement.classList.toggle('touch-device',navigator.maxTouchPoints>0 || matchMedia('(any-pointer:coarse)').matches);
 function saveNVRAM() {
   if(multiplayerProfile)return;
@@ -165,7 +169,7 @@ function cString(pointer) {
   return new TextDecoder().decode(mem.subarray(pointer, end));
 }
 function failure(message) {
-  if(room.active||room.phase==='preparing')room.end(message);
+  if(room.active||room.phase==='preparing')room.end(message,room.id,'local-runtime-error');
   running = false;
   setStatus('Error');
   openMenu();
@@ -224,6 +228,7 @@ function inputs() {
 const keyActions = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter','Digit5','KeyQ','KeyW','F2','F3','Digit1','Digit2','Digit3','Digit4','KeyA','KeyS','KeyD','KeyF']);
 window.addEventListener('keydown',(event)=>{
   if(event.code==='Escape'){
+    if(hostConsole?.isOpen()){event.preventDefault();hostConsole.close();return;}
     if(settingsOpen){event.preventDefault();showMainMenu();return;}
     if(started){event.preventDefault();ui.overlay.hidden?openMenu():resumeGame();return;}
   }
@@ -283,8 +288,8 @@ function frame(now) {
       }
       const state=wasm._daytona_link_state();
       roomUI.link(state,wasm._daytona_link_id(),wasm._daytona_link_count());
-      if(state===3){room.end('The original arcade reported a lost link. Return to the room and restart.');return;}
-      if(now-linkStartedAt>45000&&state!==2){room.end('The cabinets could not establish their original arcade link.');return;}
+      if(state===3){room.end('The original arcade reported a lost link. Return to the room and restart.',room.id,'arcade-link-error');return;}
+      if(now-linkStartedAt>45000&&state!==2){room.end('The cabinets could not establish their original arcade link.',room.id,'arcade-start-timeout');return;}
     }
     if(document.hasFocus() && !document.hidden)
       rumble.update(feedbackGamepad(),wasm._daytona_rumble_strong(),wasm._daytona_rumble_weak(),now,wasm._daytona_rumble_centring());
@@ -381,7 +386,7 @@ function openMenu() {
   ui.startLabel.textContent=started?'Resume arcade':'Enter arcade';
   if(started && ui.status.textContent!=='Error')setStatus(room.active?'Linked arcade running':'Arcade paused',true);
   if(!room.active)ctxAudio?.suspend().catch(console.warn);
-  (started?(room.active?$('returnRoomGame'):ui.start):(!$('playerModes').hidden?$('singlePlayer'):(!$('roomPanel').hidden?$('leaveRoom'):ui.dropzone))).focus();
+  (hostConsole?.isOpen()?$('hostConsoleBack'):started?(room.active?$('returnRoomGame'):ui.start):(!$('playerModes').hidden?$('singlePlayer'):(!$('roomPanel').hidden?$('leaveRoom'):ui.dropzone))).focus();
 }
 async function resumeGame() {
   if(!wasm?._daytona_ready() || ui.start.disabled)return;
