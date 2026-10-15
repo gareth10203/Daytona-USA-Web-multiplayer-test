@@ -5,7 +5,7 @@ const fields=(source,keys)=>Object.fromEntries(keys.filter(k=>valid(source?.[k])
 const metrics=['simulationHz','drawHz','cpuMeanMs','cpuP95Ms','maxStepGapMs','discardedMs','audioResets','heapBytes','callbackSlots','receiveBytes','frames','progressFrames','backlogMs','drawDistance'];
 const nativeMetrics=['listWritesHz','fgEdgesHz','dataBlocksHz','parseHz','fgReadsHz','frameCaps','vblankCaps','dataInFg','groupedFgReads','cancelledFgBatches','video30Frames','poseApplicationsHz','poseHeldPercent','poseBufferTicks'];
 const networkMetrics=['connections','rttMs','bufferedBytes','payloadSentBytes','payloadReceivedBytes','sentBytesPerSecond','receivedBytesPerSecond','sentPacketsPerSecond','receivedPacketsPerSecond','relayConnections'];
-const flowMetrics=['cabinet','inFlight','pending','pendingBytes','coalesced','ackRttMs','sendIntervalMs'];
+const flowMetrics=['cabinet','inFlight','pending','pendingBytes','coalesced','ackRttMs','sendIntervalMs','oldestAckAgeMs','ackProgressAgeMs'];
 export function normalizePerformanceSample(source){
  if(!source||!Number.isSafeInteger(source.sequence)||source.sequence<1||!valid(source.time)||!valid(source.capturedAt,8640000000000000)||!valid(source.seconds,3600)||source.seconds<.5||source.linked!==true||typeof source.running!=='boolean'||!['MASTER','SLAVE'].includes(source.role))return null;
  for(const key of ['simulationHz','drawHz','cpuMeanMs','cpuP95Ms','maxStepGapMs'])if(!valid(source[key]))return null;

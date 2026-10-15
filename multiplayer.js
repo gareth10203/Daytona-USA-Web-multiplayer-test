@@ -86,7 +86,7 @@ export class Multiplayer {
   const health=report?Object.fromEntries(Object.entries(report).filter(([key])=>key!=='receivedAt')):null;
   const row={serial:record.serial,name:cleanName(member.name),cabinet:member.cabinet??null,self:false,pending:this.pending.has(member.id),archived:false,connection:member.connection||'connected',
    rttMs:conn?.measuredRttMs??stats?.rttMs??null,rttSource:Number.isFinite(conn?.measuredRttMs)?'room-ping':stats?.rttMs!=null?'browser':null,transportRttMs:stats?.rttMs??null,statsAgeMs:stats?.at==null?null:Math.max(0,now-stats.at),path:stats?stats.relay?'relay':'direct':null,channelState:conn?.dataChannel?.readyState??(conn?.open?'open':null),connectionState:conn?.peerConnection?.connectionState??null,iceState:conn?.peerConnection?.iceConnectionState??null,
-   bufferedBytes:conn?.dataChannel?.bufferedAmount??null,inFlight:flow?.inFlight??null,pendingStates:flow?.pending??null,ackAgeMs:conn?.snapshotFlow?.oldestAgeMs(now)??null,
+   bufferedBytes:conn?.dataChannel?.bufferedAmount??null,inFlight:flow?.inFlight??null,pendingStates:flow?.pending??null,ackAgeMs:conn?.snapshotFlow?.oldestAgeMs(now)??null,ackProgressAgeMs:conn?.snapshotFlow?.ackProgressAgeMs(now)??null,
    lastMessageAgeMs:age(conn?.lastSeen),progressAgeMs:age(conn?.emulation?.epoch===this.epoch?conn.emulation.at:null),lastStateAgeMs:age(conn?.lastStateAt),reportAgeMs:age(report?.receivedAt),health,
    sentBytes:conn?.consoleCounters?.tx??0,receivedBytes:conn?.consoleCounters?.rx??0,txBytesPerSecond:conn?.consoleRate?.txRate??null,rxBytesPerSecond:conn?.consoleRate?.rxRate??null,performance:this.performanceHistory.summary(member.id)};
   record.row=row;return row;
@@ -408,7 +408,7 @@ export class Multiplayer {
   if(this.phase==='lobby'&&!this.isHost&&this.server?.open)for(const command of this.commands.values())if(now-command.at>=2000){command.at=now;try{this.send(this.server,command.data);}catch{this.detach(this.server,false);break;}}
   this.checkProgress(now);if(this.isHost&&this.phase==='preparing'&&now>this.prepareDeadline){this.recordConnectionEvent('preparation-timeout');this.end('Cabinet preparation timed out.',this.id,'preparation-timeout');return;}
   const connections=this.isHost?[...this.connections.values()]:[this.server].filter(Boolean);
-  if(this.active){const stalled=connections.find(conn=>conn?.snapshotFlow?.oldestAgeMs(now)>PROGRESS_TIMEOUT_MS);if(stalled){this.recordConnectionEvent('snapshot-ack-timeout',stalled);this.end('No arcade snapshot receipt for 10 seconds. Return to the room and start again.',stalled.peer,'snapshot-ack-timeout');return;}}
+  if(this.active){const stalled=connections.find(conn=>conn?.snapshotFlow?.ackProgressAgeMs(now)>PROGRESS_TIMEOUT_MS);if(stalled){this.recordConnectionEvent('snapshot-ack-timeout',stalled);this.end('No arcade snapshot acknowledgment progress for 10 seconds. Return to the room and start again.',stalled.peer,'snapshot-ack-timeout');return;}}
   for(const conn of connections){
    if(!conn.open){if(!conn.wasOpened&&conn.openingUntil>now)continue;const opening=!!conn.openingUntil&&!conn.wasOpened;this.recordConnectionEvent(opening?'opening-timeout':'channel-not-open',conn);this.detach(conn,this.isHost,opening?'The data channel did not open within 30 seconds.':'The connection closed.');try{conn.close();}catch{}continue;}
    if(now-conn.lastSeen>CONNECTION_TIMEOUT_MS){this.recordConnectionEvent('silence-timeout',conn);this.detach(conn,this.isHost,'No response for 20 seconds.');try{conn.close();}catch{}continue;}

@@ -36,7 +36,7 @@ const explanations={
  'visibility-interruption':['Tab became inactive','The cabinet’s game tab became hidden.'],
  'local-progress-timeout':['Local simulation stopped advancing','No local emulation steps were observed for 10 seconds.'],
  'remote-progress-timeout':['Remote progress timeout','No newer remote emulation counter arrived for 10 seconds. Network delay and a stalled remote simulation cannot be distinguished from this alone.'],
- 'snapshot-ack-timeout':['State receipt timeout','No receipt for an outstanding arcade state arrived within 10 seconds.'],
+ 'snapshot-ack-timeout':['State receipt progress timeout','Outstanding arcade states received no new valid acknowledgment for 10 seconds. The age of an individual old state alone does not trigger this timeout.'],
  'silence-timeout':['Connection silent','No message arrived from this connection for 20 seconds.'],
  'preparation-timeout':['Cabinet setup timeout','The cabinets did not all finish preparation within the allowed time.'],
  'prepare-failed':['Cabinet setup failed','A cabinet reported that it could not prepare the arcade.'],

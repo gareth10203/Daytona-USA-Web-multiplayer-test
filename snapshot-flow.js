@@ -2,7 +2,7 @@
 // handed to SCTP but not yet received. Bound both that flight and pending work.
 export const SNAPSHOT_WINDOW=8, SNAPSHOT_BUFFER_LIMIT=16*1024;
 export class SnapshotFlow {
- constructor(epoch,rttHintMs=0){this.epoch=epoch;this.sent=0;this.acked=0;this.pending=null;this.coalesced=0;this.lastAckMs=null;this.sentAt=new Map();this.rttEstimateMs=Number.isFinite(rttHintMs)?Math.max(0,rttHintMs):0;this.nextSendAt=0;}
+ constructor(epoch,rttHintMs=0){this.epoch=epoch;this.sent=0;this.acked=0;this.pending=null;this.coalesced=0;this.lastAckMs=null;this.lastAckAt=null;this.sentAt=new Map();this.rttEstimateMs=Number.isFinite(rttHintMs)?Math.max(0,rttHintMs):0;this.nextSendAt=0;}
  get intervalMs(){return this.rttEstimateMs>80?this.rttEstimateMs/(SNAPSHOT_WINDOW-2):0;}
  offer(data){if(data.epoch!==this.epoch)throw Error('Snapshot epoch mismatch.');if(this.pending)this.coalesced++;this.pending=data;}
  flush(bufferedBytes,send,now=performance.now()){
@@ -13,9 +13,13 @@ export class SnapshotFlow {
  acknowledge(delivery,now=performance.now()){
   if(!Number.isSafeInteger(delivery)||delivery<1||delivery>this.sent)throw Error('Invalid snapshot acknowledgment.');
   if(!this.sentAt.has(delivery))return false;
-  this.lastAckMs=Math.max(0,now-this.sentAt.get(delivery));this.rttEstimateMs=this.rttEstimateMs?this.rttEstimateMs*.75+this.lastAckMs*.25:this.lastAckMs;this.acked++;this.sentAt.delete(delivery);
+  this.lastAckMs=Math.max(0,now-this.sentAt.get(delivery));this.lastAckAt=now;this.rttEstimateMs=this.rttEstimateMs?this.rttEstimateMs*.75+this.lastAckMs*.25:this.lastAckMs;this.acked++;this.sentAt.delete(delivery);
   return true;
  }
  oldestAgeMs(now=performance.now()){return this.sentAt.size?Math.max(0,now-this.sentAt.values().next().value):0;}
- snapshot(){return {inFlight:this.sentAt.size,pending:this.pending?1:0,pendingBytes:this.pending?.bytes.byteLength||0,coalesced:this.coalesced,ackRttMs:this.lastAckMs,sendIntervalMs:this.intervalMs};}
+ // An old delivery may still be draining after SCTP recovery while later
+ // receipts advance. Only a valid receipt grants credit or renews this watch.
+ // Once the flight empties, a later send starts its own idle interval.
+ ackProgressAgeMs(now=performance.now()){return this.sentAt.size?Math.max(0,now-Math.max(this.sentAt.values().next().value,this.lastAckAt??-Infinity)):0;}
+ snapshot(now=performance.now()){return {inFlight:this.sentAt.size,pending:this.pending?1:0,pendingBytes:this.pending?.bytes.byteLength||0,coalesced:this.coalesced,ackRttMs:this.lastAckMs,sendIntervalMs:this.intervalMs,oldestAckAgeMs:this.oldestAgeMs(now),ackProgressAgeMs:this.ackProgressAgeMs(now)};}
 }

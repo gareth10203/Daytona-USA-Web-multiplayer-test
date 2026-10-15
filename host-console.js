@@ -38,7 +38,7 @@ export function mountHostConsole(room){
    view.value('Browser RTT',ms(row.transportRttMs));view.value('Last message / progress',`${ms(row.lastMessageAgeMs)} / ${ms(row.progressAgeMs)}`);
    view.value('Status report age',ms(row.reportAgeMs));view.value('Reported tab / signaling',row.health?`${row.health.visible?'Visible':'Hidden'} / ${row.health.signaling?'Connected':'Reconnecting'}`:'Unavailable');
    view.value('SIM sample duration',ms(row.health?.sampleMs));view.value('States in flight / pending',row.inFlight==null?'—':`${row.inFlight} / ${row.pendingStates}`);
-   view.value('Oldest state receipt wait',ms(row.ackAgeMs));view.value('Game payload sent / received',`${bytes(row.sentBytes)} / ${bytes(row.receivedBytes)}`);
+   view.value('Oldest state receipt wait',ms(row.ackAgeMs));view.value('No receipt progress for',ms(row.ackProgressAgeMs));view.value('Game payload sent / received',`${bytes(row.sentBytes)} / ${bytes(row.receivedBytes)}`);
    view.value('Game payload TX / RX',`${bytes(row.txBytesPerSecond)}/s / ${bytes(row.rxBytesPerSecond)}/s`);
    view.value('Reported receive queue / backlog',`${bytes(row.health?.receiveBytes)} / ${ms(row.health?.backlogMs)}`);
    const captureOff=row.health?.captureMode==='off',perf=row.performance;view.value('Diagnostics',row.health?.captureMode?captureOff?'Off · supervised connection':'On · detailed recording':'Awaiting status');

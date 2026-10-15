@@ -1,20 +1,10 @@
-DAYTONA USA — COORDINATED FRAME PACING — REVISION 16
-Build: daytona-rev-a-central-experimental-16-coordinated
-
-Version 15 and its ZIP preserved; initial build-16 ZIP also preserved.
-Fixed native clock coordinated with RAF timestamps and timer fallback.
-Cooperative catch-up; lazy visual preparation; at most three GPU frames in flight.
-Do not enqueue another repeat of a state already pending presentation.
-No Workers, background-execution guarantee or new simulation frequency.
-Retains build-15 GPU layers and original game/audio/transport objects.
-
-TESTED IN SINGLE PLAYER ONLY, as requested. Multiplayer was not tested.
-20 exact real-ROM image/native comparisons; 13 shader fixtures; 14 clock tests.
-Seven live pacing trials, limited presentation, delayed GPU signal, controls,
-actual main-thread hitch recovery, ESC/settings/resume and cache invalidation.
-14 comparative trials: source-state omissions and full renderer-process CPU.
-No physical three-monitor, iPhone or remote-device certification.
-
-Upload the ZIP CONTENTS to GitHub Pages. Frontend and engine must stay together.
-All room participants require this build. No ROM or test hooks included.
-See docs/COORDINATED_RESULTS.md and docs/FRAME_PACING.md for results and limits.
+DAYTONA USA — ACK RECOVERY — REVISION 17
+Build: daytona-rev-a-central-experimental-17-ack-recovery
+Preserves version 16 and its ZIP. Original engine, simulation clock and graphics.
+Valid individual receipts renew the 10-second receipt-progress watchdog.
+Eight outstanding deliveries and one newest pending state per connection.
+Duplicate or invalid acknowledgments and pings do not grant credit or renew it.
+Tested with eight actual engines and real impaired TURN/UDP channels locally.
+Real WAN, mobile devices and subjective smoothness remain outside this test.
+All participants require this build. Upload ZIP CONTENTS to GitHub Pages.
+No ROM or test hooks included. See docs/ACK_RECOVERY.md.
