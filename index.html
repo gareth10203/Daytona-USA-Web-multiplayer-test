@@ -84,7 +84,7 @@
             </section>
           </div>
           <footer class="room-footer"><p id="roomMessage" role="status" aria-live="polite"></p><div class="room-actions"><button id="leaveRoom" type="button" class="quiet-btn">← Leave room</button><button id="hostConsoleBtn" type="button" class="quiet-btn" aria-controls="hostConsole" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>Connections</button><span class="action-spacer"></span><button id="readyRoom" type="button" aria-pressed="false">I’M READY</button><button id="startRoom" type="button" class="launch-btn" disabled>START GAME <span aria-hidden="true">→</span></button><button id="stopRoom" type="button" hidden>Return all to room</button><button id="returnRoomGame" type="button" class="launch-btn" hidden>RETURN TO GAME <span aria-hidden="true">→</span></button></div></footer>
-          <p class="room-note">Keep the game tab visible during a race.</p>
+          <p class="room-note">Keep the game tab visible during a race. Game performance is shared with your room host for diagnostics.</p>
         </section>
         <p class="first-run">First visit: Single cabinet · Export region · Zero credits.<br>Let attract mode play, or insert a coin to race.</p>
       </section>
@@ -145,7 +145,7 @@
           <div id="wheelControls"></div>
           <div class="diagnostics-settings"><h3>Multiplayer diagnostics</h3>
             <label class="setting-switch" for="diagnosticsEnabled"><span>Show performance overlay</span><input id="diagnosticsEnabled" type="checkbox"></label>
-            <p class="wheel-help">Simulation speed, CPU time and connection delay. Measurements stay on this device. Enable on both cabinets when testing.</p>
+            <p class="wheel-help">Game performance is recorded automatically in multiplayer and shared with the room host. This switch only shows the local performance overlay.</p>
             <button id="downloadDiagnostics" type="button" class="quiet-btn">Download local report</button>
             <button id="lastHostConsoleBtn" type="button" class="quiet-btn" aria-controls="hostConsole" hidden>Last host room report</button>
           </div>
@@ -154,13 +154,13 @@
       </section>
       <section id="hostConsole" class="rom-modal connection-console" hidden aria-labelledby="hostConsoleTitle">
         <div class="modal-stripe" aria-hidden="true"></div>
-        <header class="connection-header"><button id="hostConsoleBack" type="button" class="quiet-btn">← Back</button><div><span class="room-eyebrow">HOST TOOLS</span><h1 id="hostConsoleTitle">Connection console</h1></div><button id="hostConsoleExport" type="button">Export report ↓</button></header>
+        <header class="connection-header"><button id="hostConsoleBack" type="button" class="quiet-btn">← Back</button><div><span class="room-eyebrow">HOST TOOLS</span><h1 id="hostConsoleTitle">Connection console</h1></div><button id="hostConsoleExport" type="button">Export all reports ↓</button></header>
         <div class="connection-summary"><span id="hostConsoleState" class="phase-pill"></span><p id="hostConsoleSummary"></p></div>
         <p id="hostConsoleIncident" class="connection-incident" hidden></p>
         <div class="settings-tabs connection-tabs" role="tablist" aria-label="Connection console view"><button id="connectionPlayersTab" role="tab" aria-selected="true" aria-controls="connectionPlayersPanel" type="button">Players <span id="connectionPlayerCount"></span></button><button id="connectionEventsTab" role="tab" aria-selected="false" aria-controls="connectionEventsPanel" tabindex="-1" type="button">Events <span id="connectionEventCount"></span></button></div>
         <section id="connectionPlayersPanel" role="tabpanel" aria-labelledby="connectionPlayersTab">
           <div class="connection-scroll" tabindex="0" aria-label="Connection measurements"><table class="connection-table"><caption class="sr-only">Host observations and each participant’s reported simulation cadence</caption><thead><tr><th scope="col">Driver / details</th><th scope="col">Connection</th><th scope="col">RTT</th><th scope="col">SIM</th><th scope="col">Game update age</th><th scope="col">Outgoing queue</th></tr></thead><tbody id="connectionRows"></tbody></table><p id="connectionRowsEmpty" class="connection-empty" hidden>No participants recorded.</p></div>
-          <p class="connection-help">RTT: host ↔ each player, round trip. SIM: emulation steps per second, reported by that device; not display FPS. “—” means unavailable. Open a driver for transport and traffic details.</p>
+          <p class="connection-help">RTT: host ↔ each player. SIM: emulation steps/s, not display FPS. Game performance is recorded automatically, up to ~5 minutes per driver. Export all reports, or open a driver to download theirs. “—” means unavailable.</p>
         </section>
         <section id="connectionEventsPanel" role="tabpanel" aria-labelledby="connectionEventsTab" hidden><div class="connection-scroll"><ol id="connectionEvents" class="connection-events" tabindex="0" aria-label="Connection event history"></ol><p id="connectionEventsEmpty" class="connection-empty">No connection events recorded.</p></div><p class="connection-help">Observed = measured here · Reported = stated by that cabinet · Action = a room request. A closed channel alone cannot tell us the underlying network cause.</p></section>
         <footer class="connection-footer"><span id="hostConsoleUpdated"></span><span>Opening this panel keeps the race running.</span></footer>

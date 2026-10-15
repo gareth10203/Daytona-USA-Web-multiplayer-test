@@ -38,11 +38,12 @@ const settings=loadSettings(settingsStorage,{mobile:mobileDevice});
 let enhanced = settings.drawDistance>0;
 let settingsOpen=false;
 let multiplayerProfile=false,linkStartedAt=0;
-let roomUI,hostConsole;
+let roomUI,hostConsole,diagnostics;
 const room=new Multiplayer({
  isVisible:()=>!document.hidden,
  readHealth:()=>({receiveBytes:wasm?._daytona_link_pending_bytes()||0,backlogMs:Math.max(0,lagMs)}),
- onChange:state=>{roomUI?.render(state);hostConsole?.sync();},
+ readPerformance:(epoch,after)=>diagnostics?.share(epoch,after),
+ onChange:state=>{diagnostics?.setAutomatic(state.phase==='playing');roomUI?.render(state);hostConsole?.sync();},
  onPrepare:async(config,cancelled)=>{
   running=false;started=false;held.clear();touch.clear();rumble.stop();multiplayerProfile=true;
   ui.start.disabled=true;ui.close.hidden=true;
@@ -63,7 +64,7 @@ const room=new Multiplayer({
   if(!wasm._daytona_link_receive(bytes.length))throw Error('The arcade receive queue overflowed.');
  }
 });
-const diagnostics=mountDiagnostics({element:$('diagnosticsHud'),toggle:$('diagnosticsEnabled'),download:$('downloadDiagnostics'),room,
+diagnostics=mountDiagnostics({element:$('diagnosticsHud'),toggle:$('diagnosticsEnabled'),download:$('downloadDiagnostics'),room,
  read:()=>({heapBytes:wasm?.HEAPU8.buffer.byteLength||0,callbackSlots:wasm?._daytona_callback_slots()||0,receiveBytes:wasm?._daytona_link_pending_bytes()||0,frames:wasm?._daytona_total_frames()||0,linked:room.active,hidden:document.hidden,drawDistance:settings.drawDistance,
  role:room.active?(room.isHost?'MASTER':'SLAVE'):null,sessionId:room.active?room.epoch:null,progressFrames:room.progressFrames,backlogMs:Math.max(0,lagMs),
  peers:(room.isHost?[...room.connections.values()]:[room.server]).filter(c=>c?.emulation?.epoch===room.epoch&&room.active).map(c=>({cabinet:room.members.find(m=>m.id===c.peer)?.cabinet??null,frames:c.emulation.frames,ageMs:performance.now()-c.emulation.at,observedFrameDelta:room.progressFrames-c.emulation.frames}))})});
@@ -272,14 +273,14 @@ function frame(now) {
   // Never block the browser rendering dozens of late game frames.
   for(let n=0;n<2&&lagMs>=FIXED_MS;n++) {
     const i=inputs();
-    if(diagnostics.enabled)wasm._daytona_probe_reset();
-    const stepBegin=diagnostics.enabled?performance.now():0;
+    if(diagnostics.collecting)wasm._daytona_probe_reset();
+    const stepBegin=diagnostics.collecting?performance.now():0;
     if(!wasm._daytona_step(i.steer,i.accel,i.brake,i.gear,i.buttons)) {
       failure(cString(wasm._daytona_error()));return;
     }
     room.advance();
     simulated++;
-    if(diagnostics.enabled)diagnostics.step(performance.now()-stepBegin,new Float64Array(wasm.HEAPU8.buffer,wasm._daytona_probe_ptr(),24));
+    if(diagnostics.collecting)diagnostics.step(performance.now()-stepBegin,new Float64Array(wasm.HEAPU8.buffer,wasm._daytona_probe_ptr(),24));
     if(room.active){
       for(let packet=0;packet<64;packet++){
         const size=wasm._daytona_link_tx_size();if(!size)break;

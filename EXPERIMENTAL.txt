@@ -1,16 +1,18 @@
-DAYTONA CENTRAL LINK — EXPERIMENTAL 10
-Build: daytona-rev-a-central-experimental-10
+DAYTONA CENTRAL LINK — EXPERIMENTAL 11
+Build: daytona-rev-a-central-experimental-11
 
-Independent host connection console, based on experiment 9.
-All players must use build 10. Upload the ZIP contents to GitHub Pages.
-The host opens Connections in the lobby or race menu; gameplay continues.
-Players: individual host/player RTT, participant-reported SIM and queue/traffic details.
-Events: observed transport conditions, reported cabinet causes and room actions.
-Export report downloads JSON without invitation or connection credentials.
-Last host report remains in Experimental settings until the page reloads.
-Status rides the existing one-second ping; no per-frame telemetry messages.
-Underlying failure causes and packet loss percentages may be unavailable.
-Native engine / loader identical to experiment 9; its motion recovery is retained.
-Transport, disconnect limits, audio, simulation timing and renderer are retained.
-See docs/CONNECTION_CONSOLE.md for sources, measurements and validation scope.
-No ROM, test fixtures, test injection, diagnostic engine or build objects included.
+Independent remote game-performance reports, based on experiment 10.
+All players must use build 11. Upload the ZIP contents to GitHub Pages.
+Connections > Export all reports downloads host and participant game histories.
+Open a driver > Download performance downloads their individual report.
+Collection is automatic in linked gameplay; Show performance overlay is optional.
+Up to 300 samples per cabinet, approximately five minutes of collected gameplay.
+Measurements received by the host remain available after returning to the lobby.
+Small acknowledged batches ride existing one-second pings and retry retained samples.
+Reports distinguish device-reported metrics, host observations, coverage and gaps.
+Last host room report remains in Experimental settings until the page reloads.
+No invitation, connection/session IDs, network addresses or user agent in shared reports.
+Native engine / loader identical to experiments 9 and 10; motion recovery is retained.
+State transport, disconnect limits, simulation timing, audio and renderer are retained.
+See docs/REMOTE_PERFORMANCE.md for format, limits, cost and validation scope.
+No ROM, fixtures, test injection, diagnostic engine or build objects included.

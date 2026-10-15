@@ -8,6 +8,7 @@ const time=v=>new Date(v).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit
 export function mountHostConsole(room){
  const panel=$('hostConsole'),dialog=$('menuDialog'),tabs=[$('connectionPlayersTab'),$('connectionEventsTab')],rows=new Map(),events=new Map();
  let open=false,origin=null,previous=null,roomGeneration=null,timer=null,polling=false,nextStats=0,lastReport=null;
+ function downloadReport(report,name){const url=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json'})),link=node('a');link.href=url;link.download=`${name}-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
  function select(tab,focus=false){for(const t of tabs){const selected=t===tab;t.setAttribute('aria-selected',String(selected));t.tabIndex=selected?0:-1;$(t.getAttribute('aria-controls')).hidden=!selected;}if(focus)tab.focus();}
  for(const tab of tabs){tab.onclick=()=>select(tab);tab.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();select(e.key==='Home'?tabs[0]:e.key==='End'?tabs[1]:tabs[1-tabs.indexOf(tab)],true);}});}
  function rowElement(row){
@@ -16,9 +17,10 @@ export function mountHostConsole(room){
   const name=node('strong'),seat=node('small');button.append(name,seat);tr.append(node('td'));tr.firstChild.append(button);
   const values=['Connection','RTT','SIM','Game update age','Outgoing queue'].map(label=>{const td=node('td');td.dataset.label=label;tr.append(td);return td;});
   const status=node('span',undefined,'connection-badge');values[0].append(status);
-  const list=node('dl',undefined,'connection-detail-list');cell.append(list);const details=new Map();
+  const list=node('dl',undefined,'connection-detail-list'),download=node('button','Download performance','connection-performance-download');download.type='button';cell.append(list,download);const details=new Map();
+  download.onclick=()=>{const report=room.consoleSnapshot({includePerformance:true}),cabinet=report?.performance?.cabinets.find(c=>c.serial===row.serial);if(cabinet?.samples.length)downloadReport({...cabinet,build:report.build,createdAt:report.generatedAt,notes:report.performance.notes},'daytona-cabinet-'+(cabinet.cabinet??'unknown')+'-performance');};
   const value=(label,text)=>{let dd=details.get(label);if(!dd){const pair=node('div');dd=node('dd');pair.append(node('dt',label),dd);list.append(pair);details.set(label,dd);}dd.textContent=text;};
-  return {tr,detail,button,name,seat,values,status,value};
+  return {tr,detail,button,name,seat,values,status,value,download};
  }
  function renderRows(report){
   const ids=new Set();
@@ -39,6 +41,9 @@ export function mountHostConsole(room){
    view.value('Oldest state receipt wait',ms(row.ackAgeMs));view.value('Game payload sent / received',`${bytes(row.sentBytes)} / ${bytes(row.receivedBytes)}`);
    view.value('Game payload TX / RX',`${bytes(row.txBytesPerSecond)}/s / ${bytes(row.rxBytesPerSecond)}/s`);
    view.value('Reported receive queue / backlog',`${bytes(row.health?.receiveBytes)} / ${ms(row.health?.backlogMs)}`);
+   const perf=row.performance;view.value('Recorded game performance',perf?.sampleCount?`${perf.sampleCount} samples · ${time(perf.firstCapturedAt)} – ${time(perf.lastCapturedAt)} (device time)`:'Awaiting game measurements');
+   view.value('Performance coverage',perf?.sampleCount?`${perf.source==='local'?'Local':'Player reported'} · ${perf.discardedSamples} earlier samples discarded · ${perf.unreceivedSamples} sequence gaps`:'Collection starts automatically during linked gameplay');
+   view.download.disabled=!perf?.sampleCount;view.download.setAttribute('aria-label',`Download performance for ${row.name}`);
   }
   for(const [id,v] of rows)if(!ids.has(id)){v.tr.remove();v.detail.remove();rows.delete(id);}
   $('connectionRowsEmpty').hidden=!!ids.size;$('connectionPlayerCount').textContent=String(report.rows.filter(r=>!r.archived).length);
@@ -78,6 +83,6 @@ export function mountHostConsole(room){
   if(open)render();
  }
  $('hostConsoleBtn').onclick=()=>show($('hostConsoleBtn'));$('lastHostConsoleBtn').onclick=()=>show($('lastHostConsoleBtn'));$('hostConsoleBack').onclick=close;
- $('hostConsoleExport').onclick=()=>{render();if(!lastReport)return;const blob=new Blob([JSON.stringify({...lastReport,reportVersion:1,notes:['RTT is host-to-player round trip, not player-to-player latency.','SIM is measured emulation steps per second, not display FPS.','Remote status is participant-reported. Archived measurements are frozen.','Game payload counters exclude protocol overhead and room messages.','Packet loss percentage and underlying network failure causes are unavailable.']},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),link=node('a');link.href=url;link.download=`daytona-host-connections-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ $('hostConsoleExport').onclick=()=>{render();const report=room.consoleSnapshot({includePerformance:true});if(!report)return;downloadReport({...report,reportVersion:2,notes:['RTT is host-to-player round trip, not player-to-player latency.','SIM is measured emulation steps per second, not display FPS.','Remote status and game performance are participant-reported. Archived connection measurements are frozen.','Game payload counters exclude protocol overhead and room messages.','Packet loss percentage and underlying network failure causes are unavailable.']},'daytona-host-connections');};
  sync();return {sync,close,isOpen:()=>open};
 }

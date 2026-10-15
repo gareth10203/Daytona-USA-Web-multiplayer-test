@@ -1,25 +1,26 @@
-# Daytona USA — consola del host experimental 10
+# Daytona USA — informes de rendimiento experimental 11
 
-Build `daytona-rev-a-central-experimental-10`. Copia independiente en `multiplayer-console/`; conserva el experimento 9, sus archivos y su ZIP. El motor nativo y su cargador siguen siendo los del experimento 9.
+Build `daytona-rev-a-central-experimental-11`. Copia independiente en `multiplayer-reports/`; conserva el experimento 10 y su ZIP. Motor nativo y cargador idénticos a los de las versiones 9 y 10.
 
-El host dispone de **Connections**, con estado de cada participante, RTT individual, SIM informado, edad de actualizaciones, colas, tráfico de juego y eventos de interrupción y reconexión. Las causas observadas se distinguen de las informadas por una cabina y de las acciones de los usuarios. No se modifica la política de desconexión ni la recuperación de movimiento.
+El host puede descargar desde Connections los informes de rendimiento de todas las cabinas. Se recopilan automáticamente durante el juego, aunque Show performance overlay esté apagado, y se conservan al volver al lobby. Export all reports descarga el conjunto; al abrir un jugador, Download performance descarga su informe individual.
+
+Hasta 300 muestras por participante, aproximadamente cinco minutos recopilados. Se indican cobertura y huecos. Los informes recibidos permanecen tras una salida; la última sala del host se conserva hasta recargar la página. No se cambia la recuperación de movimiento, el transporte de estados arcade ni los límites de desconexión.
 
 ## Probar
 
-`node scripts/serve.js dist 8091`
+`node scripts/serve.js dist 8092`
 
-Abrir http://localhost:8091, cargar la ROM local y usar **build 10 en todas las cabinas**. El host abre Connections desde el lobby o el menú de carrera. Export report descarga el informe. Tras salir de la sala, Settings → Experimental permite abrir el último informe del host hasta recargar la página.
-
-El ZIP está preparado para GitHub Pages: subir su contenido conservando la estructura. No incluye ROM, sondas ni motores de diagnóstico.
+Abrir http://localhost:8092 y cargar la ROM local. Usar **build 11 en todas las cabinas**. El ZIP está preparado para GitHub Pages: subir su contenido conservando la estructura. No incluye ROM ni motores de diagnóstico.
 
 ## Verificar
 
-- `npm test`: 71 pruebas del lobby, flujo y formato de estados, informes y causas.
-- `npm run build`: copia el frontend a dist conservando el motor.
-- `tests/host-console-browser.cjs`: consola con dos cabinas reales, exportación, interrupción identificada y reconexión; fixtures visuales de ocho participantes.
-- `tests/lobby-browser.cjs`: regresión de lobby, juego enlazado y restauración de single player.
-- `scripts/package-runtime.py`: comprueba preservación del 9 y genera el ZIP 10.
+- `npm test`: 86 pruebas de lobby, flujo, consola y rendimiento compartido.
+- `npm run build`: copia el frontend conservando el motor.
+- `tests/performance-browser.cjs`: tres cabinas reales, comparación de mediciones, descargas y recuperación de informes pendientes.
+- `tests/host-console-browser.cjs`: consola y disposición desktop/mobile.
+- `tests/lobby-browser.cjs`: lobby, juego enlazado, reinicio y single player.
+- `scripts/package-runtime.py`: preservación del 10 y generación del ZIP 11.
 
-Para los tests de navegador, PLAYWRIGHT_PATH debe señalar el paquete Playwright instalado; se requiere Chrome y la ROM local de prueba. Los scripts nativos y ensayos de red heredados son históricos del experimento 9 y conservan sus puertos y dependencias. Esta versión no recompila el motor.
+Los tests de navegador requieren Chrome, Playwright y la ROM de prueba local. Los ensayos nativos y de red heredados son históricos y conservan sus puertos y dependencias.
 
-[Funcionamiento y límites de la consola](docs/CONNECTION_CONSOLE.md). [Recuperación de movimiento conservada del 9](docs/INTERPOLATION_RECOVERY.md). Los documentos y resultados históricos mantienen el alcance de sus builds.
+[Contenido, límites y protocolo de informes](docs/REMOTE_PERFORMANCE.md). [Consola original del 10](docs/CONNECTION_CONSOLE.md). [Recuperación de movimiento conservada del 9](docs/INTERPOLATION_RECOVERY.md).
