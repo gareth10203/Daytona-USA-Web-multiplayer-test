@@ -1,18 +1,5 @@
-// WebGPU Model 2: CPU tile layers surround GPU polygon rendering.
-const layerShader = `
-@group(0) @binding(0) var image: texture_2d<f32>;
-struct Screen { size: vec2f, pad: vec2f, origin: vec2f, unused: vec2f }
-@group(0) @binding(1) var<uniform> screen: Screen;
-@vertex fn vs(@builtin(vertex_index) id:u32)->@builtin(position) vec4f {
- let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));
- return vec4f(p[id],0,1);
-}
-@fragment fn fs(@builtin(position) p:vec4f)->@location(0) vec4f {
- let at=vec2i((p.xy-screen.origin)/screen.pad.y+vec2f(screen.pad.x,0));
- let c=textureLoad(image,clamp(at,vec2i(0),vec2i(textureDimensions(image))-vec2i(1)),0);
- if(all(c==vec4f(0))){discard;}
- return vec4f(c.bgr,1);
-}`;
+// WebGPU Model 2 polygons surrounded by GPU-composed System-24 layers.
+import {createGpuLayers} from './gpu-layers.js';
 
 export async function createRenderer(canvas, onFailure) {
   if (!globalThis.isSecureContext || !navigator.gpu)
@@ -29,8 +16,7 @@ export async function createRenderer(canvas, onFailure) {
   const response = await fetch(new URL('./model2.wgsl', import.meta.url));
   if (!response.ok) throw Error('Could not load model2.wgsl.');
   const modelShader = device.createShaderModule({label:'Model 2',code:await response.text()});
-  const layerModule = device.createShaderModule({label:'Capas System 24',code:layerShader});
-  for (const shader of [modelShader, layerModule]) {
+  for (const shader of [modelShader]) {
     const result = await shader.getCompilationInfo();
     const errors = result.messages.filter(m => m.type === 'error');
     if (errors.length) throw Error(errors.map(m => `${m.lineNum}: ${m.message}`).join('\n'));
@@ -48,23 +34,19 @@ export async function createRenderer(canvas, onFailure) {
     primitive:{topology:'triangle-list',cullMode:'none'},
     depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less'}
   });
-  const layerPipeline = await device.createRenderPipelineAsync({
-    layout:'auto',vertex:{module:layerModule,entryPoint:'vs'},
-    fragment:{module:layerModule,entryPoint:'fs',targets:[{format}]},
-    primitive:{topology:'triangle-list'},
-    depthStencil:{format:'depth32float',depthWriteEnabled:false,depthCompare:'always'}
-  });
   const buffer = (size,usage) => device.createBuffer({size,usage:usage|GPUBufferUsage.COPY_DST});
   const screen = buffer(32,GPUBufferUsage.UNIFORM);
+  const layers=await createGpuLayers(device,format,screen);
   const texram = buffer(0x400000,GPUBufferUsage.STORAGE);
   const luma = buffer(0x20000,GPUBufferUsage.STORAGE);
   const xlat = buffer(0x6000*4,GPUBufferUsage.STORAGE);
   const polyGroup = device.createBindGroup({layout:polyPipeline.getBindGroupLayout(0),entries:
     [screen,texram,luma,xlat].map((b,binding)=>({binding,resource:{buffer:b}}))});
-  let vertexBuffer=null, vertexCapacity=0, depth=null, back=null, front=null;
-  let backGroup,frontGroup,width=0,height=0,outputWidth=0,outputHeight=0,textureGeneration=-1;
+  let vertexBuffer=null, vertexCapacity=0, depth=null;
+  let width=0,height=0,outputWidth=0,outputHeight=0,textureGeneration=-1;
   let uploadedModule=null,uploadedFrame=-1,uploadedHeap=null,layoutKey='',textureModule=null;
   let vertexSize=0,batchDraws=[];
+  let inFlight=0;
   const screenValues=new Float32Array(8);
   let enhanced=false,drawDistance=1,displayKey='';
   function invalidate() {
@@ -76,22 +58,17 @@ export async function createRenderer(canvas, onFailure) {
     const ratio=Math.min(1,limit/Math.max(w,h));
     return [Math.max(1,Math.round(w*ratio)),Math.max(1,Math.round(h*ratio))];
   };
-  const layerGroup = texture => device.createBindGroup({layout:layerPipeline.getBindGroupLayout(0),
-    entries:[{binding:0,resource:texture.createView()},{binding:1,resource:{buffer:screen}}]});
   function resize(w,h,ow,oh) {
     if(ow!==outputWidth || oh!==outputHeight){
       depth?.destroy();outputWidth=ow;outputHeight=oh;canvas.width=ow;canvas.height=oh;
       depth=device.createTexture({size:[ow,oh],format:'depth32float',usage:GPUTextureUsage.RENDER_ATTACHMENT});
     }
     if(w===width && h===height)return;
-    back?.destroy();front?.destroy();width=w;height=h;
-    const descriptor={size:[w,h],format:'rgba8unorm',usage:GPUTextureUsage.COPY_DST|GPUTextureUsage.TEXTURE_BINDING};
-    back=device.createTexture(descriptor);front=device.createTexture(descriptor);
-    backGroup=layerGroup(back);frontGroup=layerGroup(front);
+    width=w;height=h;
     invalidate();
   }
   return {
-    reset() {textureGeneration=-1;displayKey='';invalidate();},
+    reset() {textureGeneration=-1;displayKey='';layers.reset();invalidate();},
     setEnhanced(on) {enhanced=on;displayKey='';canvas.classList.toggle('enhanced',on);},
     setDrawDistance(level) {drawDistance=level;enhanced=level>0;displayKey='';canvas.classList.toggle('enhanced',enhanced);},
     prepare(wasm) {
@@ -106,12 +83,23 @@ export async function createRenderer(canvas, onFailure) {
       }
     },
     draw(wasm) {
+      // A small bounded queue tolerates delayed completion callbacks without
+      // blocking RAF. Pending repeats below never consume another slot.
+      if(inFlight>=3)return false;
+      const frame=wasm._daytona_total_frames();
+      // A pending presentation already contains this state. Repeating it in
+      // the queue can occupy the slot needed by the next actual game step.
+      if(inFlight&&wasm===uploadedModule&&frame===uploadedFrame&&wasm.HEAPU8.buffer===uploadedHeap){
+        const [ow,oh]=enhanced?extent():[width,height];
+        if(ow===outputWidth&&oh===outputHeight)return false;
+      }
+      if(!wasm._daytona_prepare_visual())throw Error('Could not prepare graphics for the latest game state.');
       const w=wasm._daytona_width(),h=wasm._daytona_height();
       const [ow,oh]=enhanced?extent():[w,h];resize(w,h,ow,oh);
       const scale=enhanced?Math.min(oh/h,ow/496):oh/h,viewWidth=ow/scale,offset=(w-viewWidth)/2;
       const top=(oh-h*scale)/2;
       const mem=wasm.HEAPU8; // reacquire after wasm memory growth
-      const frame=wasm._daytona_total_frames(),key=`${w}:${h}:${ow}:${oh}:${enhanced}`;
+      const key=`${w}:${h}:${ow}:${oh}:${enhanced}`;
       const layoutChanged=key!==layoutKey;
       // Continue presenting on every browser refresh. Only the GPU input data
       // and batch clipping are reused when no simulation step changed them.
@@ -124,9 +112,7 @@ export async function createRenderer(canvas, onFailure) {
       }
       if(dataChanged){
         const view=(ptr,size)=>mem.subarray(ptr,ptr+size);
-        const uploadLayer=(texture,ptr)=>device.queue.writeTexture({texture},view(ptr,w*h*4),{bytesPerRow:w*4},[w,h]);
-        uploadLayer(back,wasm._daytona_background_ptr());
-        uploadLayer(front,wasm._daytona_foreground_ptr());
+        layers.update(wasm);
         const gen=wasm._daytona_texture_generation();
         const tp0=wasm._daytona_tex0_ptr(),tp1=wasm._daytona_tex1_ptr();
         if(tp0 && tp1 && (wasm!==textureModule || gen!==textureGeneration)){
@@ -156,11 +142,12 @@ export async function createRenderer(canvas, onFailure) {
         uploadedModule=wasm;uploadedFrame=frame;uploadedHeap=mem.buffer;layoutKey=key;
       }
       const encoder=device.createCommandEncoder();
+      layers.compose(encoder);
       const pass=encoder.beginRenderPass({colorAttachments:[{view:context.getCurrentTexture().createView(),
         loadOp:'clear',storeOp:'store',clearValue:{r:0,g:0,b:0,a:1}}],
         depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'discard',depthClearValue:1}});
       pass.setViewport(0,top,ow,h*scale,0,1);
-      pass.setPipeline(layerPipeline);pass.setBindGroup(0,backGroup);pass.draw(3);
+      layers.back(pass);
       if(vertexSize){
         pass.setPipeline(polyPipeline);pass.setBindGroup(0,polyGroup);pass.setVertexBuffer(0,vertexBuffer);
         for(let n=0;n<batchDraws.length;n+=6){
@@ -168,8 +155,10 @@ export async function createRenderer(canvas, onFailure) {
           pass.draw(batchDraws[n+4],1,batchDraws[n+5]);
         }
       }
-      pass.setScissorRect(0,0,ow,oh);pass.setPipeline(layerPipeline);pass.setBindGroup(0,frontGroup);pass.draw(3);
-      pass.end();device.queue.submit([encoder.finish()]);
+      pass.setScissorRect(0,0,ow,oh);layers.front(pass);
+      pass.end();device.queue.submit([encoder.finish()]);inFlight++;
+      device.queue.onSubmittedWorkDone().then(()=>{inFlight--;},error=>{inFlight--;onFailure('The graphics queue failed: '+error.message);});
+      return true;
     }
   };
 }

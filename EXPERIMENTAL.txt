@@ -1,18 +1,20 @@
-DAYTONA CENTRAL LINK — EXPERIMENTAL 11
-Build: daytona-rev-a-central-experimental-11
+DAYTONA USA — COORDINATED FRAME PACING — REVISION 16
+Build: daytona-rev-a-central-experimental-16-coordinated
 
-Independent remote game-performance reports, based on experiment 10.
-All players must use build 11. Upload the ZIP contents to GitHub Pages.
-Connections > Export all reports downloads host and participant game histories.
-Open a driver > Download performance downloads their individual report.
-Collection is automatic in linked gameplay; Show performance overlay is optional.
-Up to 300 samples per cabinet, approximately five minutes of collected gameplay.
-Measurements received by the host remain available after returning to the lobby.
-Small acknowledged batches ride existing one-second pings and retry retained samples.
-Reports distinguish device-reported metrics, host observations, coverage and gaps.
-Last host room report remains in Experimental settings until the page reloads.
-No invitation, connection/session IDs, network addresses or user agent in shared reports.
-Native engine / loader identical to experiments 9 and 10; motion recovery is retained.
-State transport, disconnect limits, simulation timing, audio and renderer are retained.
-See docs/REMOTE_PERFORMANCE.md for format, limits, cost and validation scope.
-No ROM, fixtures, test injection, diagnostic engine or build objects included.
+Version 15 and its ZIP preserved; initial build-16 ZIP also preserved.
+Fixed native clock coordinated with RAF timestamps and timer fallback.
+Cooperative catch-up; lazy visual preparation; at most three GPU frames in flight.
+Do not enqueue another repeat of a state already pending presentation.
+No Workers, background-execution guarantee or new simulation frequency.
+Retains build-15 GPU layers and original game/audio/transport objects.
+
+TESTED IN SINGLE PLAYER ONLY, as requested. Multiplayer was not tested.
+20 exact real-ROM image/native comparisons; 13 shader fixtures; 14 clock tests.
+Seven live pacing trials, limited presentation, delayed GPU signal, controls,
+actual main-thread hitch recovery, ESC/settings/resume and cache invalidation.
+14 comparative trials: source-state omissions and full renderer-process CPU.
+No physical three-monitor, iPhone or remote-device certification.
+
+Upload the ZIP CONTENTS to GitHub Pages. Frontend and engine must stay together.
+All room participants require this build. No ROM or test hooks included.
+See docs/COORDINATED_RESULTS.md and docs/FRAME_PACING.md for results and limits.

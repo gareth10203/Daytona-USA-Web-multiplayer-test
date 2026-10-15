@@ -41,8 +41,9 @@ export function mountHostConsole(room){
    view.value('Oldest state receipt wait',ms(row.ackAgeMs));view.value('Game payload sent / received',`${bytes(row.sentBytes)} / ${bytes(row.receivedBytes)}`);
    view.value('Game payload TX / RX',`${bytes(row.txBytesPerSecond)}/s / ${bytes(row.rxBytesPerSecond)}/s`);
    view.value('Reported receive queue / backlog',`${bytes(row.health?.receiveBytes)} / ${ms(row.health?.backlogMs)}`);
-   const perf=row.performance;view.value('Recorded game performance',perf?.sampleCount?`${perf.sampleCount} samples · ${time(perf.firstCapturedAt)} – ${time(perf.lastCapturedAt)} (device time)`:'Awaiting game measurements');
-   view.value('Performance coverage',perf?.sampleCount?`${perf.source==='local'?'Local':'Player reported'} · ${perf.discardedSamples} earlier samples discarded · ${perf.unreceivedSamples} sequence gaps`:'Collection starts automatically during linked gameplay');
+   const captureOff=row.health?.captureMode==='off',perf=row.performance;view.value('Diagnostics',row.health?.captureMode?captureOff?'Off · supervised connection':'On · detailed recording':'Awaiting status');
+   view.value('Recorded game performance',perf?.sampleCount?`${perf.sampleCount} samples · ${time(perf.firstCapturedAt)} – ${time(perf.lastCapturedAt)} (device time)${captureOff?' · earlier recording':''}`:captureOff?'Detailed recording is off':'Awaiting game measurements');
+   view.value('Performance coverage',perf?.sampleCount?`${perf.source==='local'?'Local':'Player reported'} · ${perf.discardedSamples} earlier samples discarded · ${perf.unreceivedSamples} sequence gaps`:captureOff?'Connection status is still supervised':'Recording starts during linked gameplay when enabled by the host');
    view.download.disabled=!perf?.sampleCount;view.download.setAttribute('aria-label',`Download performance for ${row.name}`);
   }
   for(const [id,v] of rows)if(!ids.has(id)){v.tr.remove();v.detail.remove();rows.delete(id);}
@@ -78,8 +79,8 @@ export function mountHostConsole(room){
  }
  function close(){if(!open)return;open=false;clearInterval(timer);timer=null;panel.hidden=true;dialog.classList.remove('host-console-view');$('mainMenu').hidden=previous.main;$('settingsModal').hidden=previous.settings;dialog.setAttribute('aria-labelledby',previous.title||'gameTitle');if(origin&&!origin.hidden)origin.focus();}
  function sync(){
-  $('hostConsoleBtn').hidden=!room.isHost||!room.members.length;$('lastHostConsoleBtn').hidden=!room.lastHostReport&&!room.isHost;
-  $('lastHostConsoleBtn').textContent=room.isHost?'Open connection console':'Last host room report';
+  $('hostConsoleBtn').hidden=!room.isHost||!room.members.length;$('lastHostConsoleBtn').hidden=room.isHost||!room.lastHostReport;
+  $('lastHostConsoleBtn').textContent='Last connection report';
   if(open)render();
  }
  $('hostConsoleBtn').onclick=()=>show($('hostConsoleBtn'));$('lastHostConsoleBtn').onclick=()=>show($('lastHostConsoleBtn'));$('hostConsoleBack').onclick=close;

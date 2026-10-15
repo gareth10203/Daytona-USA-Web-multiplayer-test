@@ -5,6 +5,7 @@ const number=(v,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=max;
 export function normalizeHealth(h){
  if(!h||h.version!==1||!Number.isSafeInteger(h.sequence)||h.sequence<1||!HEALTH_PHASES.includes(h.phase)||typeof h.visible!=='boolean'||typeof h.signaling!=='boolean')return null;
  const result={version:1,sequence:h.sequence,phase:h.phase,visible:h.visible,signaling:h.signaling};
+ if(['full','off'].includes(h.captureMode))result.captureMode=h.captureMode;
  for(const [key,max] of Object.entries({simulationHz:240,sampleMs:120000,bufferedBytes:1024**3,inFlight:8,pending:1,ackRttMs:120000,receiveBytes:16*1024**2,backlogMs:120000})){
   if(h[key]===null){result[key]=null;continue;}if(!number(h[key],max))return null;result[key]=h[key];
  }
@@ -18,11 +19,12 @@ export class HealthSampler {
   if(this.phase!==room.phase||this.epoch!==room.epoch||room.progressFrames<this.frames){this.phase=room.phase;this.epoch=room.epoch;this.at=now;this.frames=room.progressFrames;this.hz=null;this.duration=null;}
   if(room.active&&now-this.at>=500){this.duration=now-this.at;this.hz=(room.progressFrames-this.frames)*1000/this.duration;this.at=now;this.frames=room.progressFrames;}
   const conn=room.server,flow=conn?.snapshotFlow?.snapshot();
-  return {version:1,sequence:++this.sequence,phase:room.phase,visible:!!room.isVisible(),signaling:!!room.signaling,simulationHz:room.active?this.hz:null,sampleMs:room.active?this.duration:null,
+  return {version:1,sequence:++this.sequence,captureMode:room.performanceCaptureEnabled===false?'off':'full',phase:room.phase,visible:!!room.isVisible(),signaling:!!room.signaling,simulationHz:room.active?this.hz:null,sampleMs:room.active?this.duration:null,
    bufferedBytes:conn?.dataChannel?.bufferedAmount||0,inFlight:flow?.inFlight||0,pending:flow?.pending||0,ackRttMs:flow?.ackRttMs??null,receiveBytes:number(extra.receiveBytes,16*1024**2)?extra.receiveBytes:null,backlogMs:number(extra.backlogMs,120000)?extra.backlogMs:null};
  }
 }
 const explanations={
+ 'diagnostics-changed':['Diagnostics recording changed','The host changed detailed recording for the room. Connection supervision remains active.'],
  'channel-open':['Connected','The data channel opened.'],
  'channel-close':['Channel closed','The browser reported a closed data channel. This alone does not identify why it closed.'],
  'channel-not-open':['Channel unavailable','The data channel is no longer open.'],

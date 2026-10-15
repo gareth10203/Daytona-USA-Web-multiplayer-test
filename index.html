@@ -5,6 +5,7 @@
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="host-console.css">
+  <link rel="stylesheet" href="controller-settings.css">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -89,7 +90,7 @@
         <p class="first-run">First visit: Single cabinet · Export region · Zero credits.<br>Let attract mode play, or insert a coin to race.</p>
       </section>
       <section class="controls-guide" aria-label="How to play">
-        <div class="guide-heading"><span>DRIVER CONTROLS</span><span class="guide-rule"></span><div class="menu-quick-controls"><label><input id="vibrationEnabled" type="checkbox" checked>Controller vibration</label><button id="settingsBtn" type="button" aria-controls="settingsModal"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 3h4l.5 2.5 2 1.2 2.4-.8 2 3.4-1.9 1.7v2l1.9 1.7-2 3.4-2.4-.8-2 1.2L14 21h-4l-.5-2.5-2-1.2-2.4.8-2-3.4L5 13v-2L3.1 9.3l2-3.4 2.4.8 2-1.2L10 3Z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button></div></div>
+        <div class="guide-heading"><span>DRIVER CONTROLS</span><span class="guide-rule"></span><div class="menu-quick-controls"><label><input id="vibrationEnabled" type="checkbox" checked>Controller vibration</label><button id="lastHostConsoleBtn" type="button" aria-controls="hostConsole" hidden>Last connection report</button><button id="settingsBtn" type="button" aria-controls="settingsModal"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10 3h4l.5 2.5 2 1.2 2.4-.8 2 3.4-1.9 1.7v2l1.9 1.7-2 3.4-2.4-.8-2 1.2L14 21h-4l-.5-2.5-2-1.2-2.4.8-2-3.4L5 13v-2L3.1 9.3l2-3.4 2.4.8 2-1.2L10 3Z"/><circle cx="12" cy="12" r="3"/></svg>Settings</button></div></div>
         <div class="guide-columns">
           <div><h2><span aria-hidden="true">⌨</span> Keyboard</h2><dl>
             <div><dt>Steer / accelerate / brake</dt><dd><kbd>←</kbd><kbd>→</kbd> <kbd>↑</kbd><kbd>↓</kbd></dd></div>
@@ -98,10 +99,10 @@
             <div><dt>Camera views</dt><dd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd></dd></div>
           </dl></div>
           <div><h2><span aria-hidden="true">✚</span> Gamepad</h2><dl>
-            <div><dt>Steer</dt><dd>Left stick</dd></div>
-            <div><dt>Accelerate / brake</dt><dd>RT / LT</dd></div>
-            <div><dt>Gears / shift down & up</dt><dd>B A X Y / LB RB</dd></div>
-            <div><dt>Coin / start / camera</dt><dd>Back / Start / D-pad ↑ → ↓ ←</dd></div>
+            <div><dt>Steer</dt><dd id="guideGamepadSteer">Left stick</dd></div>
+            <div><dt>Accelerate / brake</dt><dd id="guideGamepadPedals">RT / LT</dd></div>
+            <div><dt>Gears / shift down & up</dt><dd id="guideGamepadGears">B A X Y / LB RB</dd></div>
+            <div><dt>Coin / start / camera</dt><dd id="guideGamepadViews">Back / Start / D-pad ↑ → ↓ ←</dd></div>
           </dl></div>
         </div>
         <p class="touch-guide">On phone: drag the left pad to steer; hold GAS or BRAKE with your right thumb. Tap + / − to shift and VIEW to change camera. COIN adds credit; START begins a race. GAS also confirms selections. ☰ pauses; ♫ toggles sound; ⋯ reveals F2 and arcade menu controls. Landscape works best.</p>
@@ -118,13 +119,15 @@
           <button id="soundTab" type="button" role="tab" aria-selected="false" aria-controls="soundPanel" tabindex="-1"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 9h4l5-4v14l-5-4H3V9ZM16 8a6 6 0 0 1 0 8M19 5a10 10 0 0 1 0 14"/></svg>Sound</button>
           <button id="experimentalTab" type="button" role="tab" aria-selected="false" aria-controls="experimentalPanel" tabindex="-1"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 3h6M10 3v6l-6 10a1.3 1.3 0 0 0 1.2 2h13.6a1.3 1.3 0 0 0 1.2-2L14 9V3M7 15h10M10 18h.01M14 17h.01"/></svg>Experimental</button>
         </div>
-        <section id="controllerPanel" class="settings-panel" role="tabpanel" aria-labelledby="controllerTab" hidden>
-          <h2>Feel the road</h2><p class="settings-intro">Feedback follows the arcade game's steering forces.</p>
-          <label class="setting-toggle"><span>Controller vibration<small>Turn all controller feedback on or off.</small></span><input id="settingsVibrationEnabled" type="checkbox" checked></label>
+        <section id="controllerPanel" class="settings-panel controller-panel" role="tabpanel" aria-labelledby="controllerTab" hidden>
+          <div id="controllerControls"></div>
+          <div id="controllerFeelContent" hidden>
+<div class="controller-axis-row"><label for="controllerSteeringAxis">Steering input<select id="controllerSteeringAxis"></select></label><label class="controller-invert"><input id="controllerSteeringInvert" type="checkbox">Invert axis</label></div>          <label class="setting-toggle"><span>Controller vibration<small>Turn all controller feedback on or off.</small></span><input id="settingsVibrationEnabled" type="checkbox" checked></label>
           <div class="setting-slider"><div><label for="rumbleIntensity">Vibration intensity</label><output id="rumbleValue" for="rumbleIntensity">100%</output></div><input id="rumbleIntensity" type="range" min="0" max="100" step="5" value="100" aria-describedby="rumbleHelp"><p id="rumbleHelp">Forces from the arcade wheel, translated into controller vibration.</p></div>
           <div class="setting-slider"><div><label for="centringIntensity">Centring feedback</label><output id="centringValue" for="centringIntensity">5%</output></div><input id="centringIntensity" type="range" min="0" max="100" step="5" value="5" aria-describedby="centringHelp"><p id="centringHelp">A gentle, gradual cue as you turn. Set to 0 to disable centring only.</p></div>
           <p id="rumbleStatus" class="device-status" role="status">Connect a controller</p>
           <div class="setting-slider"><div><label for="joystickSensitivity">Joystick sensitivity</label><output id="joystickSensitivityValue" for="joystickSensitivity">100%</output></div><input id="joystickSensitivity" type="range" min="25" max="175" step="5" value="100" aria-describedby="joystickSensitivityHelp"><p id="joystickSensitivityHelp">100% keeps the current softened steering. Lower for finer turns; higher for a quicker response.</p></div>
+          </div>
         </section>
         <section id="graphicsPanel" class="settings-panel" role="tabpanel" aria-labelledby="graphicsTab">
           <h2>Your view of the circuit</h2><p class="settings-intro">Choose how much scenery is drawn ahead.</p>
@@ -143,12 +146,6 @@
           <p class="settings-intro">Choose your wheel, assign its inputs and capture the steering and pedal positions. Profiles save per device.</p>
           <p class="wheel-help">If a device is missing, press one of its buttons, use PC mode and check its manufacturer's driver. Devices must be recognised by your browser. This setup handles inputs; manufacturer-specific wheel force feedback is not available.</p>
           <div id="wheelControls"></div>
-          <div class="diagnostics-settings"><h3>Multiplayer diagnostics</h3>
-            <label class="setting-switch" for="diagnosticsEnabled"><span>Show performance overlay</span><input id="diagnosticsEnabled" type="checkbox"></label>
-            <p class="wheel-help">Game performance is recorded automatically in multiplayer and shared with the room host. This switch only shows the local performance overlay.</p>
-            <button id="downloadDiagnostics" type="button" class="quiet-btn">Download local report</button>
-            <button id="lastHostConsoleBtn" type="button" class="quiet-btn" aria-controls="hostConsole" hidden>Last host room report</button>
-          </div>
         </section>
         <footer class="settings-footer">Saved automatically on this device.<span>Back returns to the menu · Esc goes back</span></footer>
       </section>
@@ -156,11 +153,12 @@
         <div class="modal-stripe" aria-hidden="true"></div>
         <header class="connection-header"><button id="hostConsoleBack" type="button" class="quiet-btn">← Back</button><div><span class="room-eyebrow">HOST TOOLS</span><h1 id="hostConsoleTitle">Connection console</h1></div><button id="hostConsoleExport" type="button">Export all reports ↓</button></header>
         <div class="connection-summary"><span id="hostConsoleState" class="phase-pill"></span><p id="hostConsoleSummary"></p></div>
+        <div class="connection-diagnostics-tools"><label class="connection-diagnostics-toggle"><input id="roomDiagnosticsEnabled" type="checkbox" checked><span>Record diagnostics<small>Applies to every cabinet in this room</small></span></label><div class="connection-local-tools"><label><input id="diagnosticsEnabled" type="checkbox">Show local overlay</label><button id="downloadDiagnostics" type="button" class="quiet-btn">Local report ↓</button></div><p id="roomDiagnosticsStatus" role="status"></p></div>
         <p id="hostConsoleIncident" class="connection-incident" hidden></p>
         <div class="settings-tabs connection-tabs" role="tablist" aria-label="Connection console view"><button id="connectionPlayersTab" role="tab" aria-selected="true" aria-controls="connectionPlayersPanel" type="button">Players <span id="connectionPlayerCount"></span></button><button id="connectionEventsTab" role="tab" aria-selected="false" aria-controls="connectionEventsPanel" tabindex="-1" type="button">Events <span id="connectionEventCount"></span></button></div>
         <section id="connectionPlayersPanel" role="tabpanel" aria-labelledby="connectionPlayersTab">
           <div class="connection-scroll" tabindex="0" aria-label="Connection measurements"><table class="connection-table"><caption class="sr-only">Host observations and each participant’s reported simulation cadence</caption><thead><tr><th scope="col">Driver / details</th><th scope="col">Connection</th><th scope="col">RTT</th><th scope="col">SIM</th><th scope="col">Game update age</th><th scope="col">Outgoing queue</th></tr></thead><tbody id="connectionRows"></tbody></table><p id="connectionRowsEmpty" class="connection-empty" hidden>No participants recorded.</p></div>
-          <p class="connection-help">RTT: host ↔ each player. SIM: emulation steps/s, not display FPS. Game performance is recorded automatically, up to ~5 minutes per driver. Export all reports, or open a driver to download theirs. “—” means unavailable.</p>
+          <p class="connection-help">RTT: host ↔ each player. SIM: emulation steps/s, not display FPS. Diagnostics records up to ~5 minutes per driver when enabled by the host. Disabling it keeps connection supervision; previous samples remain in exports. “—” means unavailable.</p>
         </section>
         <section id="connectionEventsPanel" role="tabpanel" aria-labelledby="connectionEventsTab" hidden><div class="connection-scroll"><ol id="connectionEvents" class="connection-events" tabindex="0" aria-label="Connection event history"></ol><p id="connectionEventsEmpty" class="connection-empty">No connection events recorded.</p></div><p class="connection-help">Observed = measured here · Reported = stated by that cabinet · Action = a room request. A closed channel alone cannot tell us the underlying network cause.</p></section>
         <footer class="connection-footer"><span id="hostConsoleUpdated"></span><span>Opening this panel keeps the race running.</span></footer>

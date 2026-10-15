@@ -4,17 +4,18 @@ import {performanceBatch} from './performance-history.js';
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {
     Object.assign(this,{clock,read,network,render});
-    this.enabled=false;this.automatic=false;this.sequence=0;this.history=[];this.latest=null;this.reset();
+    this.enabled=false;this.automatic=false;this.captureEnabled=true;this.sequence=0;this.history=[];this.latest=null;this.reset();
   }
-  get collecting(){return this.enabled||this.automatic;}
-  reset() {this.since=this.clock();this.steps=0;this.draws=0;this.cpu=[];this.discardedMs=0;this.audioResets=0;this.maxGap=0;this.previousStep=null;this.nativeTotals=Array(24).fill(0);this.nativeSamples=0;this.windowNetwork=this.network();}
+  get collecting(){return this.captureEnabled&&(this.enabled||this.automatic);}
+  reset() {this.since=this.clock();this.steps=0;this.draws=0;this.cpu=[];this.discardedMs=0;this.audioResets=0;this.maxGap=0;this.previousStep=null;this.nativeTotals=Array(24).fill(0);this.nativeSamples=0;this.windowNetwork=this.collecting?this.network():{};}
   step(ms,counters) {if(!this.collecting)return;const now=this.clock();if(this.previousStep!==null)this.maxGap=Math.max(this.maxGap,now-this.previousStep);this.previousStep=now;this.steps++;this.cpu.push(ms);if(counters){this.nativeSamples++;for(let i=0;i<24;i++)this.nativeTotals[i]+=counters[i]||0;}}
   draw() {if(this.collecting)this.draws++;}
   discard(ms) {if(this.collecting)this.discardedMs+=Math.max(0,ms);}
   audioReset() {if(this.collecting)this.audioResets++;}
-  enable(on) {const before=this.collecting;this.enabled=!!on;if(before!==this.collecting)this.reset();this.render(this.latest,this.enabled);}
+  enable(on) {const before=this.collecting;this.enabled=this.captureEnabled&&!!on;if(before!==this.collecting)this.reset();this.render(this.latest,this.enabled);}
+  setCaptureEnabled(on) {on=!!on;if(on===this.captureEnabled)return;this.captureEnabled=on;if(!on)this.enabled=false;this.reset();this.render(this.latest,this.enabled);}
   setAutomatic(on) {on=!!on;if(on===this.automatic)return;const before=this.collecting;this.automatic=on;if(on||before!==this.collecting)this.reset();if(on)this.latest=null;}
-  share(epoch,after=0){return performanceBatch(this.history,epoch,after);}
+  share(epoch,after=0){return this.captureEnabled?performanceBatch(this.history,epoch,after):null;}
   update(running) {
     if(!this.collecting)return;
     const now=this.clock(),seconds=(now-this.since)/1000;if(seconds<1)return;
@@ -33,7 +34,7 @@ export class Diagnostics {
     this.latest=sample;this.history.push(sample);if(this.history.length>300)this.history.shift();
     if(this.enabled)this.render(sample,true);this.reset();
   }
-  report() {return {schema:3,build:BUILD_ID,createdAt:new Date().toISOString(),connectionEvents:this.network().connectionEvents||[],
+  report() {return {schema:3,build:BUILD_ID,captureMode:this.captureEnabled?'full':'off',createdAt:new Date().toISOString(),connectionEvents:this.network().connectionEvents||[],
     userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Centralized DATA counts local shared-RAM applications with real control data and buffered/interpolated remote poses. poseBufferTicks is the additional playout distance in source game ticks, excluding network transit; poseHeldPercent counts applications that reached the newest available sample, not necessarily a visually stationary car. Packet intervals cover the last 256 gaps and include cabinet samples and host states. Central agesMs measures time since receipt by the host, excluding network transit. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
 }
 
