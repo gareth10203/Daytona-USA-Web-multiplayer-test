@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=18-temporal-1';
-export const BUILD_ID='daytona-rev-a-central-experimental-18-temporal-prediction';
+import {DEFAULT_EEPROM} from './nvram.js?v=19-deluxe-lobby-1';
+export const BUILD_ID='daytona-rev-a-central-experimental-19-deluxe-lobby';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];
@@ -12,6 +12,22 @@ export function configurationInputs({master,cabinet,...settings}){
  if(!Number.isInteger(cabinet)||cabinet<1||cabinet>8)throw Error('Invalid cabinet number.');
  const buttons=[4,8,8,2,...Array(8).fill(128),...Array(master?1:2).fill(64),8,...Array(cabinet-1).fill(64),8,8,8,...Array(settings.difficulty).fill(64),8,8,...Array(settings.mode).fill(64),8,8,2,128,128,2];
  return buttons;
+}
+// Upgrade an existing single-player save through the original menu, allowing
+// the arcade to write its checksum. Keep scores and all other settings.
+export async function ensureDeluxeCabinet(wasm,reload){
+ const ptr=wasm._daytona_eeprom_ptr(),type=wasm.HEAPU8[ptr+26];
+ if(type===0)return false;
+ if(type!==1&&type!==2)throw Error('Unsupported cabinet settings.');
+ const backup=wasm.HEAPU8.slice(wasm._daytona_backup_ptr(),wasm._daytona_backup_ptr()+wasm._daytona_backup_size());
+ const step=async(n,buttons=0)=>{for(let i=0;i<n;i++){if(!wasm._daytona_step(0,0,0,1,buttons))throw Error('Could not apply DELUXE cabinet settings.');if(i%20===19)await new Promise(r=>setTimeout(r,0));}};
+ await step(600);
+ const inputs=[4,8,8,2,...Array(8).fill(128),8,8,...Array(3-type).fill(64),...Array(6).fill(8),2,128,128,2];
+ for(const buttons of inputs){await step(20,buttons);await step(20);}
+ await step(60);
+ const eeprom=wasm.HEAPU8.slice(wasm._daytona_eeprom_ptr(),wasm._daytona_eeprom_ptr()+wasm._daytona_eeprom_size());
+ if(eeprom[26]!==0)throw Error('The arcade did not confirm DELUXE cabinet settings.');
+ reload();wasm.HEAPU8.set(eeprom,wasm._daytona_eeprom_ptr());wasm.HEAPU8.set(backup,wasm._daytona_backup_ptr());return true;
 }
 // Have the original game's menu write its own settings/checksum. Start from
 // a known single/Export profile, then cold-boot with that resulting EEPROM.

@@ -1,10 +1,12 @@
-import {parseInvitation,invitation} from './room-settings.js?v=18-temporal-1';
+import {parseInvitation,invitation} from './room-settings.js?v=19-deluxe-lobby-1';
+import {createLobbyNotifications} from './lobby-notifications.js?v=19-deluxe-lobby-1';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
-export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
+export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{}}){
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry');
  let verified=false,pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0;
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
+ const notifications=createLobbyNotifications({notifyChat,notifyReady});
  const utilities=document.querySelector('.menu-quick-controls'),utilitiesHome=utilities.parentElement;
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
  function layout(active,showGuide=false){$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
@@ -53,7 +55,8 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
  $('newChatMessages').onclick=scrollChat;
  $('chatLog').addEventListener('scroll',()=>{const log=$('chatLog');if(log.scrollTop+log.clientHeight>=log.scrollHeight-20)markRead();});
  $('chatInput').addEventListener('input',()=>{$('chatLength').textContent=`${$('chatInput').value.length}/240`;$('chatSend').disabled=room.phase!=='lobby'||!$('chatInput').value.trim();});
- $('chatForm').addEventListener('submit',e=>{e.preventDefault();try{if(room.submitChat($('chatInput').value)){$('chatInput').value='';$('chatLength').textContent='0/240';$('chatSend').disabled=true;$('chatFeedback').textContent=room.isHost?'Message sent.':'Sending…';scrollChat();$('chatInput').focus();}}catch(err){$('chatFeedback').textContent=err.message;}});
+ $('chatInput').addEventListener('pointerdown',()=>{void unlockAudio();});
+ $('chatForm').addEventListener('submit',e=>{e.preventDefault();void unlockAudio();try{if(room.submitChat($('chatInput').value)){$('chatInput').value='';$('chatLength').textContent='0/240';$('chatSend').disabled=true;$('chatFeedback').textContent=room.isHost?'Message sent.':'Sending…';scrollChat();$('chatInput').focus();}}catch(err){$('chatFeedback').textContent=err.message;}});
  function renderChat(state){
   const log=$('chatLog'),visible=log.getClientRects().length>0,nearBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-24,chat=state.chat||[];
   const wanted=new Set(chat.map(m=>m.seq));for(const [seq,node] of messages)if(!wanted.has(seq)){node.remove();messages.delete(seq);}
@@ -91,6 +94,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){
   running(){choices.hidden=true;entry.hidden=true;$('startBtn').hidden=false;},
   link(state,id,count){const text=state===2?`Central link · Cabinet ${id} / ${count}`:'Linking arcade cabinets…';for(const name of ['networkStatus','arcadeLinkStatus'])if($(name).textContent!==text)$(name).textContent=text;},
   render(state){
+   notifications.update(state);
    $('networkStatus').hidden=state.phase!=='playing';$('arcadeLinkStatus').hidden=state.phase!=='playing';
    const key=state.host||state.id||'idle';if(key!==roomKey){roomKey=key;pendingIDs=new Set();pendingStamp='';lastChatSeq=0;lastAckCommand=0;messages.clear();$('chatLog').replaceChildren();cards.clear();emptySeats.clear();$('playersList').replaceChildren();$('chatInput').value='';$('chatLength').textContent='0/240';markRead();mobileTab('grid');}
    if(state.phase==='idle')return;

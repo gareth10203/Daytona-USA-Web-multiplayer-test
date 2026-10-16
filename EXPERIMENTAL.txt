@@ -1,10 +1,9 @@
-DAYTONA USA — TEMPORAL PREDICTION — EXPERIMENT 18
-Build: daytona-rev-a-central-experimental-18-temporal-prediction
-Independent copy; revision 17 and all of its ZIPs are preserved.
-Four-timestamp source-age estimation, host retention and second-hop timing.
-Adaptive reserve, bounded horizontal prediction and gradual error correction.
-Compensates the original game's two-step TGP projection.
-No new authoritative physics, ranking or finish adjudication.
-Real local Chrome/RTC/UDP tests do not certify WAN/mobile smoothness.
+DAYTONA USA — DELUXE AND LOBBY NOTIFICATIONS — REVISION 19
+Build: daytona-rev-a-central-experimental-19-deluxe-lobby
+Independent copy of revision 18 including its startup fix.
+DELUXE cabinet type by default; SINGLE / MASTER / SLAVE link roles unchanged.
+Soft incoming-chat sound and last-unready reminders after 5 seconds, then every 12 seconds.
+Existing game volume and mute apply. Automatic cabinet numbering unchanged.
+Original production engine and network logic match revision 18.
 All participants require this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM or test hooks included. See docs/TEMPORAL_PREDICTION.md.
+No ROM or test hooks included. See docs/DELUXE_LOBBY.md.

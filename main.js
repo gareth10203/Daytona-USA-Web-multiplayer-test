@@ -1,20 +1,20 @@
-import {SimulationClock} from './simulation-clock.js?v=18-temporal-1';
-import {nativeTimedState} from './link-timing.js?v=18-temporal-1';
-import {linkIdForSeat} from './central-link.js?v=18-temporal-1';
-import {createLobbySound} from './lobby-sound.js?v=18-temporal-1';
-import { mountDiagnostics } from './diagnostics.js?v=18-temporal-1';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=18-temporal-1';
-import {createControllerControls} from './controller-controls.js?v=18-temporal-1';
-import { createRenderer } from './renderer.js?v=18-temporal-1';
-import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=18-temporal-1';
-import { createTouchControls } from './touch.js?v=18-temporal-1';
-import { createGamepadRumble } from './haptics.js?v=18-temporal-1';
-import { loadSettings, saveSettings } from './preferences.js?v=18-temporal-1';
-import { createWheelControls } from './wheel-controls.js?v=18-temporal-1';
-import { Multiplayer } from './multiplayer.js?v=18-temporal-1';
-import { createRoomUI } from './room-ui.js?v=18-temporal-1';
-import { mountHostConsole } from './host-console.js?v=18-temporal-1';
-import { prepareCabinet } from './room-settings.js?v=18-temporal-1';
+import {SimulationClock} from './simulation-clock.js?v=19-deluxe-lobby-1';
+import {nativeTimedState} from './link-timing.js?v=19-deluxe-lobby-1';
+import {linkIdForSeat} from './central-link.js?v=19-deluxe-lobby-1';
+import {createLobbySound} from './lobby-sound.js?v=19-deluxe-lobby-1';
+import { mountDiagnostics } from './diagnostics.js?v=19-deluxe-lobby-1';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=19-deluxe-lobby-1';
+import {createControllerControls} from './controller-controls.js?v=19-deluxe-lobby-1';
+import { createRenderer } from './renderer.js?v=19-deluxe-lobby-1';
+import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=19-deluxe-lobby-1';
+import { createTouchControls } from './touch.js?v=19-deluxe-lobby-1';
+import { createGamepadRumble } from './haptics.js?v=19-deluxe-lobby-1';
+import { loadSettings, saveSettings } from './preferences.js?v=19-deluxe-lobby-1';
+import { createWheelControls } from './wheel-controls.js?v=19-deluxe-lobby-1';
+import { Multiplayer } from './multiplayer.js?v=19-deluxe-lobby-1';
+import { createRoomUI } from './room-ui.js?v=19-deluxe-lobby-1';
+import { mountHostConsole } from './host-console.js?v=19-deluxe-lobby-1';
+import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=19-deluxe-lobby-1';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -26,6 +26,7 @@ const ui = {
   menu: $('menuBtn'), close: $('closeBtn'), fileLabel: $('fileLabel'), startLabel: $('startLabel')
 };
 let wasm = null, renderer = null, started = false, running = false;
+let engineReady = null, engineStartupError = '';
 let simulationClock=null;
 let ctxAudio = null, audioGain = null, audioNext = 0;
 const audioSources=new Set();
@@ -150,7 +151,7 @@ const touch=createTouchControls($('touchControls'),{
   settings:()=>{const panel=$('touchControls').querySelector('.touch-service');panel.hidden=!panel.hidden;}
 });
 const joinChime=createLobbySound({context:()=>ctxAudio,output:()=>audioGain,muted:()=>soundMuted||settings.volume===0});
-roomUI=createRoomUI(room,{notifyRequest:joinChime,single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
+roomUI=createRoomUI(room,{notifyRequest:joinChime,notifyChat:()=>joinChime('chat'),notifyReady:()=>joinChime('ready'),single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;await applyDeluxeDefault();}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
 hostConsole=mountHostConsole(room);
 document.documentElement.classList.toggle('touch-device',navigator.maxTouchPoints>0 || matchMedia('(any-pointer:coarse)').matches);
 function saveNVRAM() {
@@ -347,7 +348,16 @@ gameSurface.addEventListener('pointerdown',()=>{
   if(running && audioLoaded && !soundMuted && ctxAudio?.state!=='running')void activateAudio();
 },{capture:true});
 async function loadROM(file) {
-  if(!wasm){failure('The arcade engine is still loading. Please try again in a moment.');return;}
+  // WASM can finish before the asynchronous GPU/shader initialization. Keep
+  // the selected file waiting for both, and retain a failed startup's cause.
+  if(!renderer){
+    if(!engineStartupError)ui.metadata.textContent='Waiting for the graphics engine…';
+    await engineReady;
+  }
+  if(engineStartupError||!wasm||!renderer){
+    const message=engineStartupError||'The arcade engine could not finish starting. Reload the page to try again.';
+    failure(message);ui.metadata.textContent=message;return;
+  }
   if(!/\.zip$/i.test(file.name)){failure('Choose a Daytona USA Revision A (1994) ROM ZIP.');return;}
   room.leave();roomUI.loading();multiplayerProfile=false;
   rumble.stop();
@@ -367,12 +377,20 @@ async function loadROM(file) {
     if(!loaded)throw Error(cString(wasm._daytona_error()));
     renderer.reset();
     restoreNVRAM(wasm);
+    await applyDeluxeDefault();
     ui.metadata.textContent=`✓ ${file.name} · ROM verified · Ready to play`;
     ui.start.disabled=false;ui.sound.disabled=!audioLoaded;
     openMenu();roomUI.verified();ui.message.textContent='ROM verified. Choose Single Player or Multiplayer.';
     setStatus('ROM ready',true);
     ui.fileLabel.textContent=file.name;
   }catch(err){failure(err.message||String(err));ui.metadata.textContent=err.message||String(err);}
+}
+async function applyDeluxeDefault(){
+  let applied=false;try{applied=settingsStorage.getItem('daytona-deluxe-default-v1')==='1';}catch{}
+  if(applied)return;
+  await ensureDeluxeCabinet(wasm,reloadEngine);
+  saveNVRAM();
+  try{settingsStorage.setItem('daytona-deluxe-default-v1','1');}catch{}
 }
 ui.input.addEventListener('change',(event)=>{const f=event.target.files?.[0];if(f)loadROM(f);});
 for(const name of ['dragenter','dragover'])ui.dropzone.addEventListener(name,e=>{e.preventDefault();ui.dropzone.classList.add('drag');});
@@ -388,7 +406,7 @@ function openMenu() {
   ui.close.hidden=!started;
   ui.startLabel.textContent=started?'Resume arcade':'Enter arcade';
   if(started && ui.status.textContent!=='Error')setStatus(room.active?'Linked arcade running':'Arcade paused',true);
-  if(!room.active)ctxAudio?.suspend().catch(console.warn);
+  if(!room.active&&!room.occupied)ctxAudio?.suspend().catch(console.warn);
   (hostConsole?.isOpen()?$('hostConsoleBack'):started?(room.active?$('returnRoomGame'):ui.start):(!$('playerModes').hidden?$('singlePlayer'):(!$('roomPanel').hidden?$('leaveRoom'):ui.dropzone))).focus();
 }
 async function resumeGame() {
@@ -452,12 +470,13 @@ async function main() {
   setStatus('Loading engine…');
   const factory = typeof createDaytonaModule === 'function' ? createDaytonaModule : window.createDaytonaModule;
   if(typeof factory!=='function'){
+    engineStartupError='The arcade engine files could not be loaded. Reload the page and check that all files were uploaded.';
     setStatus('Engine files missing');
-    ui.message.textContent='The compiled arcade engine is missing. Run scripts/build_web.ps1, then serve the dist folder.';
+    ui.message.textContent=engineStartupError;
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=18-temporal-1'});
+    wasm=await factory({locateFile:(path)=>path+'?v=19-deluxe-lobby-1'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
@@ -465,6 +484,6 @@ async function main() {
     applyGraphics();
     setStatus('Engine ready');
     ui.message.textContent='Choose your ROM to bring the arcade to life.';
-  }catch(err){failure('Could not start the arcade engine: '+(err.message||String(err)));}
+  }catch(err){engineStartupError='Could not start the arcade engine: '+(err.message||String(err));failure(engineStartupError);}
 }
-main();
+engineReady=main();

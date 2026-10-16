@@ -8,8 +8,9 @@ or:
 Open http://localhost:8080 and import your Revision A (1994) ROM ZIP.
 A WebGPU browser is required. Do not open index.html through file://.
 
-First run: Single cabinet, Export region, zero credits. Let attract mode
-play, or insert a coin to race. Existing saves retain settings and credits.
+First run: SINGLE link, DELUXE cabinet type, Export region, zero credits.
+Let attract mode play, or insert a coin to race. Existing saves receive a
+one-time DELUXE update while preserving scores and unrelated settings.
 
 Arrow keys: steering and pedals. 5: coin. Enter: start.
 1–4: gear. Q/W: shift down/up. A/S/D/F: camera views.
