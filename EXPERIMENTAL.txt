@@ -1,10 +1,10 @@
-DAYTONA USA — ACK RECOVERY — REVISION 17
-Build: daytona-rev-a-central-experimental-17-ack-recovery
-Preserves version 16 and its ZIP. Original engine, simulation clock and graphics.
-Valid individual receipts renew the 10-second receipt-progress watchdog.
-Eight outstanding deliveries and one newest pending state per connection.
-Duplicate or invalid acknowledgments and pings do not grant credit or renew it.
-Tested with eight actual engines and real impaired TURN/UDP channels locally.
-Real WAN, mobile devices and subjective smoothness remain outside this test.
+DAYTONA USA — TEMPORAL PREDICTION — EXPERIMENT 18
+Build: daytona-rev-a-central-experimental-18-temporal-prediction
+Independent copy; revision 17 and all of its ZIPs are preserved.
+Four-timestamp source-age estimation, host retention and second-hop timing.
+Adaptive reserve, bounded horizontal prediction and gradual error correction.
+Compensates the original game's two-step TGP projection.
+No new authoritative physics, ranking or finish adjudication.
+Real local Chrome/RTC/UDP tests do not certify WAN/mobile smoothness.
 All participants require this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM or test hooks included. See docs/ACK_RECOVERY.md.
+No ROM or test hooks included. See docs/TEMPORAL_PREDICTION.md.

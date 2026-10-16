@@ -1,8 +1,9 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js';
-import {SnapshotFlow} from './snapshot-flow.js';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=18-temporal-1';
+import {SnapshotFlow} from './snapshot-flow.js?v=18-temporal-1';
+import {LinkClock,receivedTiming} from './link-timing.js?v=18-temporal-1';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=18-temporal-1';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=18-temporal-1';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=18-temporal-1';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -307,8 +308,8 @@ export class Multiplayer {
    const previous=conn.emulation;
    if(!previous||previous.epoch!==this.epoch||data.frames>previous.frames)conn.emulation={epoch:this.epoch,frames:data.frames,at:performance.now()};
   }
-  if(data.type==='ping'){this.receiveHealth(conn,data);const performanceAck=this.receivePerformance(conn,data);this.send(conn,{type:'pong',time:data.time,epoch:this.epoch,frames:this.active?this.progressFrames:0,...(this.isHost?{performanceAck}:{})});return;}
-  if(data.type==='pong'){if(!this.isHost&&this.server===conn&&Number.isSafeInteger(data.performanceAck)&&data.performanceAck>this.performanceAck&&data.performanceAck<=this.performanceOffered)this.performanceAck=data.performanceAck;if(Number.isFinite(data.time)){const member=this.members.find(x=>x.id===conn.peer);conn.measuredRttMs=Math.max(0,performance.now()-data.time);if(member)member.rtt=Math.round(conn.measuredRttMs);}return;}
+  if(data.type==='ping'){const clockReceived=performance.now();this.receiveHealth(conn,data);const performanceAck=this.receivePerformance(conn,data);this.send(conn,{type:'pong',time:data.time,clockReceived,clockSent:performance.now(),epoch:this.epoch,frames:this.active?this.progressFrames:0,...(this.isHost?{performanceAck}:{})});return;}
+  if(data.type==='pong'){const now=performance.now();(conn.clockSync??=new LinkClock()).observe(data.time,data.clockReceived,data.clockSent,now);if(!this.isHost&&this.server===conn&&Number.isSafeInteger(data.performanceAck)&&data.performanceAck>this.performanceAck&&data.performanceAck<=this.performanceOffered)this.performanceAck=data.performanceAck;if(Number.isFinite(data.time)){const member=this.members.find(x=>x.id===conn.peer);conn.measuredRttMs=Math.max(0,now-data.time);if(member)member.rtt=Math.round(conn.measuredRttMs);}return;}
   if(data.type==='arcade-ack'){
    if(!this.active||data.epoch!==this.epoch||!conn.snapshotFlow||conn.snapshotFlow.epoch!==this.epoch)return;
    if(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn)return;
@@ -332,7 +333,7 @@ export class Multiplayer {
     // The connection identifies the requester; clients cannot name another cabinet.
     this.receiveHealth(conn,data);this.receivePerformance(conn,data);this.end(String(data.reason||'The cabinet stopped.').slice(0,180),conn.peer,STOP_CAUSES.includes(data.cause)?data.cause:'requested-stop','reported');
    }
-   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){if(this.distributor.accept(conn.peer,data.frames,data.bytes))conn.lastStateAt=performance.now();this.acknowledgeSnapshot(conn,data);}
+   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){const timing=conn.clockSync?.age(data.publishedAt,performance.now())??null;if(this.distributor.accept(conn.peer,data.frames,data.bytes,timing))conn.lastStateAt=performance.now();this.acknowledgeSnapshot(conn,data);}
   }else{
    if(this.server!==conn)return;
    if(data.type==='diagnostics-policy'){if(this.applyDiagnosticsPolicy(data.diagnostics))this.changed();return;}
@@ -369,22 +370,22 @@ export class Multiplayer {
     if(data.encoding!==undefined&&data.encoding!=='cabinet-slots')throw Error('Invalid state encoding.');
     const bytes=data.encoding==='cabinet-slots'?expandState(data.bytes,this.members.length):data.bytes;
     if(!Number.isSafeInteger(data.sequence)||data.sequence<1||!(bytes instanceof ArrayBuffer)||bytes.byteLength!==STATE_BYTES||new Uint8Array(bytes)[0]!==STATE_TAG)throw Error('Invalid centralized state.');
-    if(data.sequence>this.stateSequence){this.stateSequence=data.sequence;this.receiveBytes(bytes);}this.acknowledgeSnapshot(conn,data);
+    if(data.sequence>this.stateSequence){this.stateSequence=data.sequence;const transit=conn.clockSync?.age(data.timing?.at,performance.now())??null;this.receiveBytes(bytes,receivedTiming(data.timing,this.members.length,transit));}this.acknowledgeSnapshot(conn,data);
    }
   }
  }
- receiveBytes(bytes){if(!(bytes instanceof ArrayBuffer)||bytes.byteLength<1||bytes.byteLength>4096)throw Error('Invalid arcade packet.');this.onBytes(new Uint8Array(bytes));}
+ receiveBytes(bytes,timing=null){if(!(bytes instanceof ArrayBuffer)||bytes.byteLength<1||bytes.byteLength>4096)throw Error('Invalid arcade packet.');this.onBytes(new Uint8Array(bytes),timing);}
  write(bytes){
   if(!this.active)return;
-  const data={type:'arcade-sample',epoch:this.epoch,frames:this.progressFrames,bytes:bytes.slice().buffer};
+  const data={type:'arcade-sample',epoch:this.epoch,frames:this.progressFrames,publishedAt:performance.now(),bytes:bytes.slice().buffer};
   try{
    if(!this.isHost){this.sendSnapshot(this.server,data);return;}
-   if(!this.distributor.accept(this.id,data.frames,data.bytes)||!this.distributor.ready)return;
+   if(!this.distributor.accept(this.id,data.frames,data.bytes,{ageMs:0,uncertaintyMs:0})||!this.distributor.ready)return;
    const sequence=++this.distributor.sequence;
    for(const member of this.members){
-    const state=this.distributor.snapshot(member.id);
-    if(member.id===this.id)this.receiveBytes(state);
-    else this.sendSnapshot(this.connections.get(member.id),{type:'arcade-state',epoch:this.epoch,frames:this.progressFrames,sequence,encoding:'cabinet-slots',bytes:compactState(state,this.members.length)});
+    const state=this.distributor.snapshot(member.id),timing=this.distributor.timing(member.id);
+    if(member.id===this.id)this.receiveBytes(state,receivedTiming(timing,this.members.length,{ageMs:0,uncertaintyMs:0}));
+    else this.sendSnapshot(this.connections.get(member.id),{type:'arcade-state',epoch:this.epoch,frames:this.progressFrames,sequence,encoding:'cabinet-slots',bytes:compactState(state,this.members.length),timing});
    }
   }catch(e){this.end(e.message,e.linkPeer||this.id,e.linkCause||'receive-error');}
  }
@@ -412,7 +413,7 @@ export class Multiplayer {
   for(const conn of connections){
    if(!conn.open){if(!conn.wasOpened&&conn.openingUntil>now)continue;const opening=!!conn.openingUntil&&!conn.wasOpened;this.recordConnectionEvent(opening?'opening-timeout':'channel-not-open',conn);this.detach(conn,this.isHost,opening?'The data channel did not open within 30 seconds.':'The connection closed.');try{conn.close();}catch{}continue;}
    if(now-conn.lastSeen>CONNECTION_TIMEOUT_MS){this.recordConnectionEvent('silence-timeout',conn);this.detach(conn,this.isHost,'No response for 20 seconds.');try{conn.close();}catch{}continue;}
-   try{this.flushSnapshot(conn);const share=!this.isHost&&performanceData&&(conn.dataChannel?.bufferedAmount||0)<16*1024?performanceData:null;this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0,...(!this.isHost?{health,...(share?{performance:share}:{})}:{})});if(share)this.performanceOffered=Math.max(this.performanceOffered,share.samples.at(-1).sequence);}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
+   try{this.flushSnapshot(conn);const share=!this.isHost&&performanceData&&(conn.dataChannel?.bufferedAmount||0)<16*1024?performanceData:null;(conn.clockSync??=new LinkClock()).sent(now);this.send(conn,{type:'ping',time:now,epoch:this.epoch,frames:this.active?this.progressFrames:0,...(!this.isHost?{health,...(share?{performance:share}:{})}:{})});if(share)this.performanceOffered=Math.max(this.performanceOffered,share.samples.at(-1).sequence);}catch(e){this.detach(conn,this.isHost,e.message);try{conn.close();}catch{}}
   }
   if(this.isHost&&['lobby','playing'].includes(this.phase))this.publish();else this.changed();
  }

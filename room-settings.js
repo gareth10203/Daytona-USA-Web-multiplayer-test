@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js';
-export const BUILD_ID='daytona-rev-a-central-experimental-17-ack-recovery';
+import {DEFAULT_EEPROM} from './nvram.js?v=18-temporal-1';
+export const BUILD_ID='daytona-rev-a-central-experimental-18-temporal-prediction';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

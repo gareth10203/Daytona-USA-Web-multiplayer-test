@@ -1,5 +1,5 @@
-import {BUILD_ID} from './room-settings.js';
-import {performanceBatch} from './performance-history.js';
+import {BUILD_ID} from './room-settings.js?v=18-temporal-1';
+import {performanceBatch} from './performance-history.js?v=18-temporal-1';
 // Local, bounded measurements. Linked game samples can be shared with the room host.
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {

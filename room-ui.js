@@ -1,4 +1,4 @@
-import {parseInvitation,invitation} from './room-settings.js';
+import {parseInvitation,invitation} from './room-settings.js?v=18-temporal-1';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
 export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{}}){

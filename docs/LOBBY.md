@@ -1,25 +1,15 @@
-# Daytona USA — recuperación de confirmaciones, revisión 17
+# Daytona USA — predicción temporal, experimento 18
 
-Build `daytona-rev-a-central-experimental-17-ack-recovery`. Copia independiente de la 16 coordinada. Se conservan su carpeta y sus ZIP.
+Build `daytona-rev-a-central-experimental-18-temporal-prediction`. Copia independiente de la revisión 17 con el botón de Discord corregido. La carpeta y los ZIP de la 17 se conservan.
 
-## Cambio
+Esta revisión intenta reducir la diferencia entre la posición que conduce una cabina y la que ven las demás. Estima la antigüedad de las muestras con intercambios de cuatro marcas de tiempo, incluye la retención en el host y el segundo trayecto entre clientes, reduce la reserva de interpolación y permite una continuación horizontal corta basada en velocidad y dirección auténticas. Compensa los dos pasos de proyección que ya aplica el programa arcade para evitar predecir dos veces.
 
-La sesión supervisa el tiempo sin nuevas confirmaciones válidas de estados, en lugar de detenerse únicamente porque un envío antiguo sigue pendiente. Una confirmación individual válida renueva esa supervisión; duplicados, confirmaciones inválidas, otra carrera y pings no lo hacen.
+No introduce un servidor de física ni una clasificación nueva. Las reglas, clasificación y resultado siguen perteneciendo al juego original. Las posiciones y contactos de todas las cabinas no se vuelven idénticos con este cambio. Sigue siendo un experimento para comparar personalmente con la 17.
 
-Se conservan diez segundos sin progreso de confirmaciones, ocho entregas en vuelo y un único estado pendiente por conexión. No se perdonan créditos sin confirmar ni se amplían las colas. El reloj, los gráficos, la física, el audio nativo, la interpolación y el motor WASM son idénticos a la 16 coordinada.
+Para probar: `npm run serve`, abrir http://localhost:8100 y cargar la ROM local. Todas las cabinas deben usar la misma revisión. El ZIP `daytona_temporal_prediction_experimental_18_github_pages.zip` contiene los archivos para publicar en la raíz de GitHub Pages, sin ROM ni instrumentos de prueba. Los módulos, estilos, motor y WASM incluyen una referencia de versión para evitar mezclar archivos de la 17 que conserve la caché.
 
-Connections permite distinguir la espera del estado más antiguo de la espera sin progreso de confirmaciones. Ambas medidas se conservan en los informes de rendimiento.
+Se conservan el enlace central, ocho estados en vuelo y uno pendiente por conexión, la supervisión de confirmaciones de la 17 y el retorno al lobby al ocultar una cabina. Single player conserva el funcionamiento anterior; la predicción sólo se utiliza en el enlace central multiplayer.
 
-## Probar
+Detalles, metodología y límites en [docs/TEMPORAL_PREDICTION.md](docs/TEMPORAL_PREDICTION.md). Los documentos de las revisiones anteriores en `docs/` son históricos.
 
-`node scripts/serve.js dist 8098`
-
-Abrir http://localhost:8098 y cargar la ROM local. Todas las cabinas deben usar esta revisión. El ZIP publicable es `daytona_ack_recovery_experimental_17_github_pages.zip`: extraer su contenido en la raíz de GitHub Pages. No incluye ROM ni hooks de prueba.
-
-## Validación
-
-Los resultados y límites de esta revisión se documentan en [docs/ACK_RECOVERY.md](docs/ACK_RECOVERY.md). La matriz anterior que detectó el problema pertenece a la 16 y se conserva en [docs/NETWORK_MATRIX_16.md](docs/NETWORK_MATRIX_16.md).
-
-`node --test tests/*.test.js` ejecuta las regresiones. `tests/multiplayer-network-matrix.cjs` usa ocho motores reales o ocho conexiones con muestras sintéticas a través de TURN/UDP local. El deterioro se aplica a datagramas antes de SCTP, después de negociar ICE. No certifica ocho hogares, iPhone/Safari ni ausencia de tirones remotos tras pérdidas.
-
-`node scripts/build.mjs` copia el frontend a dist sin recompilar el motor. `scripts/package-ack-recovery.py` verifica el alcance de los cambios, las pruebas y la preservación de la 16 antes de empaquetar.
+`npm test` ejecuta las regresiones de JavaScript. Las pruebas nativas están en `tests/temporal-motion.cpp` y `tests/temporal-comm.cpp`. Las comparaciones con dos motores reales, canal RTC y deterioro de datagramas se realizan con `tests/finish-line-audit.cjs`; sus instrumentos sólo se compilan en `build/finish-audit`, nunca en el motor publicable. `tests/single-player-parity.cjs` compara audio, geometría, guardados, controles y píxeles contra la 17. `scripts/package-temporal.py` verifica las pruebas y la preservación de la 17 antes de crear el ZIP.

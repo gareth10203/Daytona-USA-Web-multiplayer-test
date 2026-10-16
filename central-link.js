@@ -25,16 +25,21 @@ export class HostDistributor {
   if(!Array.isArray(members)||members.length<2||members.length>8||new Set(members.map(m=>m.id)).size!==members.length||members.some((m,i)=>typeof m.id!=='string'||m.cabinet!==i+1))throw Error('Invalid centralized grid.');
   this.members=members.map(m=>({...m}));this.samples=new Map();this.sequence=0;this.discarded=0;
  }
- accept(id,frames,bytes){
+ accept(id,frames,bytes,timing=null){
   const member=this.members.find(m=>m.id===id);
   if(!member||!Number.isSafeInteger(frames)||frames<0||!(bytes instanceof ArrayBuffer)||bytes.byteLength!==SAMPLE_BYTES)throw Error('Invalid cabinet sample.');
   const sample=new Uint8Array(bytes);
   if(sample[0]!==linkIdForSeat(member.cabinet,this.members.length))throw Error('Cabinet sample identity mismatch.');
   const previous=this.samples.get(id);
   if(previous&&frames<=previous.frames){this.discarded++;return false;}
-  this.samples.set(id,{frames,bytes:sample.slice(1,1+SLOT_BYTES),clock:new DataView(bytes).getUint32(1+SLOT_BYTES,true),at:performance.now()});return true;
+  this.samples.set(id,{frames,bytes:sample.slice(1,1+SLOT_BYTES),clock:new DataView(bytes).getUint32(1+SLOT_BYTES,true),at:performance.now(),timing});return true;
  }
  get ready(){return this.samples.size===this.members.length;}
+ timing(id,now=performance.now()){
+  const target=this.members.findIndex(m=>m.id===id);if(target<0||!this.ready)return null;
+  return {version:1,at:now,slots:this.members.map((_,slot)=>{const index=(target-1-slot+this.members.length*8)%this.members.length,s=this.samples.get(this.members[index].id),t=s.timing;
+   return t&&Number.isFinite(t.ageMs)&&Number.isFinite(t.uncertaintyMs)?{clock:s.clock,ageMs:t.ageMs+Math.max(0,now-s.at),uncertaintyMs:t.uncertaintyMs}:null;})};
+ }
  snapshot(id){
   if(!this.ready)return null;
   const target=this.members.findIndex(m=>m.id===id);if(target<0)throw Error('Unknown state recipient.');

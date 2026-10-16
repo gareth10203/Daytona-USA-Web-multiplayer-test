@@ -1,19 +1,20 @@
-import {SimulationClock} from './simulation-clock.js';
-import {linkIdForSeat} from './central-link.js';
-import {createLobbySound} from './lobby-sound.js';
-import { mountDiagnostics } from './diagnostics.js';
-import { mountRoomDiagnostics } from './room-diagnostics.js';
-import {createControllerControls} from './controller-controls.js';
-import { createRenderer } from './renderer.js';
-import { restoreNVRAM, STORAGE_ID } from './nvram.js';
-import { createTouchControls } from './touch.js';
-import { createGamepadRumble } from './haptics.js';
-import { loadSettings, saveSettings } from './preferences.js';
-import { createWheelControls } from './wheel-controls.js';
-import { Multiplayer } from './multiplayer.js';
-import { createRoomUI } from './room-ui.js';
-import { mountHostConsole } from './host-console.js';
-import { prepareCabinet } from './room-settings.js';
+import {SimulationClock} from './simulation-clock.js?v=18-temporal-1';
+import {nativeTimedState} from './link-timing.js?v=18-temporal-1';
+import {linkIdForSeat} from './central-link.js?v=18-temporal-1';
+import {createLobbySound} from './lobby-sound.js?v=18-temporal-1';
+import { mountDiagnostics } from './diagnostics.js?v=18-temporal-1';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=18-temporal-1';
+import {createControllerControls} from './controller-controls.js?v=18-temporal-1';
+import { createRenderer } from './renderer.js?v=18-temporal-1';
+import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=18-temporal-1';
+import { createTouchControls } from './touch.js?v=18-temporal-1';
+import { createGamepadRumble } from './haptics.js?v=18-temporal-1';
+import { loadSettings, saveSettings } from './preferences.js?v=18-temporal-1';
+import { createWheelControls } from './wheel-controls.js?v=18-temporal-1';
+import { Multiplayer } from './multiplayer.js?v=18-temporal-1';
+import { createRoomUI } from './room-ui.js?v=18-temporal-1';
+import { mountHostConsole } from './host-console.js?v=18-temporal-1';
+import { prepareCabinet } from './room-settings.js?v=18-temporal-1';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -62,7 +63,8 @@ const room=new Multiplayer({
   simulationClock?.stop();running=false;started=false;held.clear();touch.clear();rumble.stop();wasm?._daytona_link_enable(0);
   ui.start.disabled=true;ui.start.hidden=true;openMenu();setStatus('Room ready',true);ui.message.textContent=reason;
  },
- onBytes:bytes=>{
+ onBytes:(bytes,timing)=>{
+  bytes=nativeTimedState(bytes,timing);
   wasm.HEAPU8.set(bytes,wasm._daytona_link_receive_ptr());
   if(!wasm._daytona_link_receive(bytes.length))throw Error('The arcade receive queue overflowed.');
  }
@@ -455,7 +457,7 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path});
+    wasm=await factory({locateFile:(path)=>path+'?v=18-temporal-1'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
