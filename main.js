@@ -416,7 +416,7 @@ ui.dropzone.addEventListener('keydown',e=>{
 });
 ui.overlay.addEventListener('keydown',e=>{
   if(e.key!=='Tab')return;
-  const targets=[...ui.overlay.querySelectorAll('button:not([disabled]),[tabindex="0"],input:not([disabled]):not([type="file"]),select:not([disabled]),textarea:not([disabled]),summary')].filter(el=>{
+  const targets=[...ui.overlay.querySelectorAll('button:not([disabled]),a[href],[tabindex="0"],input:not([disabled]):not([type="file"]),select:not([disabled]),textarea:not([disabled]),summary')].filter(el=>{
     if(!el.getClientRects().length || el.tabIndex<0)return false;
     if(el.type==='radio' && el.name){
       const group=[...ui.overlay.querySelectorAll('input[type="radio"]')].filter(input=>input.name===el.name && input.getClientRects().length);
