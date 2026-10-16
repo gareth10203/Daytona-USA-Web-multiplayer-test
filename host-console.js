@@ -1,4 +1,4 @@
-import {classifyConnection,describeEvent} from './connection-health.js?v=21-cpu-cars';
+import {classifyConnection,describeEvent} from './connection-health.js?v=22-reverse-expert';
 const $=id=>document.getElementById(id);
 const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
 const ms=v=>Number.isFinite(v)?v<1000?`${Math.round(v)} ms`:`${(v/1000).toFixed(1)} s`:'—';

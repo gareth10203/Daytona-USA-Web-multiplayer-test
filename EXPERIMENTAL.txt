@@ -1,8 +1,10 @@
-DAYTONA USA WEB — REVISION 21 — CPU CARS
-Build: daytona-rev-a-central-experimental-21-cpu-cars
-Host Race settings: CPU cars ON (default) / OFF (players only).
-Applied through the original selection on every new race, including immediate coin restarts.
-Original multiplayer vote, grid setup and request clearing remain active.
-Single player keeps original controls. Version 20 and its ZIPs are preserved.
+DAYTONA USA WEB — REVISION 22 — REVERSE EXPERT
+Build: daytona-rev-a-central-experimental-22-reverse-expert
+Host Race settings: Direction -> Reverse / Expert. Default: Normal.
+Experimental multiplayer: Expert only, standing reverse grid, CPU cars OFF.
+Original checkpoint/lap validation; direction-aware ranks, warnings and alignment.
+Validated two-cabinet finish and immediate coin/Start replay; local WebRTC startup.
+Single-player normal state parity against revision 21. 137 unit tests.
+Not yet validated: eight running reverse cabinets, all modes or network conditions.
 All participants need this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM, generated game source or test observers included. See docs/CPU_CARS.md.
+No ROM, generated game source or test observers included. See docs/REVERSE_EXPERT.md.

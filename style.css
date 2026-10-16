@@ -259,9 +259,11 @@
 
 .diagnostics-hud{position:fixed;left:12px;bottom:66px;z-index:2;max-width:calc(100vw - 24px);padding:8px 10px;border:1px solid #ffffff25;border-radius:6px;background:#080b10c9;color:#e8edf4;font:11px/1.55 ui-monospace,monospace;white-space:pre-wrap;pointer-events:none;font-variant-numeric:tabular-nums}.launcher-open .diagnostics-hud{display:none}.diagnostics-settings{margin-top:20px;padding-top:16px;border-top:1px solid #0002}.diagnostics-settings h3{font-size:14px;margin:0 0 10px}@media(max-width:600px){.diagnostics-hud{top:65px;bottom:auto;font-size:9px;padding:5px 7px}}
 
-.room-settings .cpu-cars-setting{grid-column:1/-1}
+.room-settings .cpu-cars-setting{grid-column:auto}
 @media(max-width:760px){
  .room-sidebar .room-settings,.room-sidebar .invite-card{grid-column:1/-1}
  .room-settings .race-selectors{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
  .room-sidebar .invite-actions{flex-direction:row}
 }
+
+@media(max-width:760px){.room-settings .cpu-cars-setting,.room-settings .direction-setting{grid-column:1/-1}.room-settings .room-hint:not(:empty){display:block}}

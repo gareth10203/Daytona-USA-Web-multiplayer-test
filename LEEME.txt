@@ -85,3 +85,8 @@ Host Race settings now include CPU cars ON / OFF. ON is the default.
 The choice applies again on every race, even without returning to the lobby.
 Changes reset Ready; single-player controls retain their original behavior.
 All players need revision 21. See docs/CPU_CARS.md.
+
+REVISION 22
+Experimental Expert reverse: host Race settings -> Direction -> Reverse / Expert.
+CPU cars are disabled. Normal is the default and single player stays original.
+All players need revision 22. See docs/REVERSE_EXPERT.md for tests and limits.
