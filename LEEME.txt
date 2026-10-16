@@ -90,3 +90,18 @@ REVISION 22
 Experimental Expert reverse: host Race settings -> Direction -> Reverse / Expert.
 CPU cars are disabled. Normal is the default and single player stays original.
 All players need revision 22. See docs/REVERSE_EXPERT.md for tests and limits.
+
+REVISION 23
+Expert reverse checkpoints and lap validation require the selected direction.
+Tested host/client U-turns and three-cabinet classification; precise reported first-place jump remains unconfirmed.
+All players need revision 23. See docs/REVERSE_DIRECTION_FIX.md.
+
+REVISION 24
+Expert reverse collision/out-of-track recovery now faces the selected direction.
+Original recovery duration and movement are preserved. Normal stays original.
+All players need revision 24. See docs/REVERSE_RECOVERY.md.
+
+REVISION 25
+Host: Direction > Advanced reverse / Expert reverse. CPU cars OFF.
+Advanced inverse grid, checkpoints, ranking and recovery use the selected direction.
+All players need revision 25. See docs/REVERSE_ADVANCED.md.

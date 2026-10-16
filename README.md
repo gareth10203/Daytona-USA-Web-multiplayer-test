@@ -1,13 +1,15 @@
-# Daytona USA Web — Reverse Expert — revision 22
+# Daytona USA Web — Advanced reverse — revision 25
 
-Independent experimental version based on revision 21. Revision 21 and its distribution ZIP are preserved.
+Independent experimental version based on revision 24. That revision and its distribution ZIP are preserved.
 
-Run `npm run serve` and open http://localhost:8104. Upload the contents of the distribution ZIP to GitHub Pages. No ROM is included. Everyone in a room must use this version.
+Run `npm run serve` and open http://localhost:8107. Upload the contents of the distribution ZIP to GitHub Pages. No ROM is included. Everyone in a room must use this version.
 
-The host can choose **Direction → Reverse · Expert** in Race settings. It selects Expert for every cabinet, disables CPU cars and places stopped cars facing the opposite direction. The original physics, checkpoints and lap validation run the race. Progress comparisons and road alignment use the chosen direction. The normal direction remains the default, and single player retains its original behavior.
+The host chooses **Race settings → Direction → Advanced reverse** or **Expert reverse**. It forces the chosen course and CPU cars OFF, starts the cars stopped and applies the chosen direction to ranking, warnings, checkpoint/lap validation and recovery. Normal remains the default. Changing room settings resets Ready.
 
-Changing direction resets Ready. Reverse remains active for immediate coin/Start races without returning to the room. Returning to Normal unlocks the CPU cars selector again.
+Revision 25 reuses the corrected original ranking, checkpoint and recovery consumers for Advanced. With CPU cars OFF its original start hands over stationary cars; this revision uses that path rather than adding a rolling-start script. Recovery movement and duration remain original. The angular correction follows the shortest turn across the signed heading boundary.
 
-Validated with two running cabinets, a genuine reverse race finish and another race in the same session; actual local WebRTC startup; 137 unit tests; and normal single-player state parity against revision 21. This is an experimental Expert-only feature, not a validated reverse conversion for all tracks or CPU opponents. Eight-cabinet settings propagation is unit tested; eight running reverse cabinets and internet conditions have not been validated for this feature.
+Verification includes Advanced's complete four-lap reverse race and immediate replay, wrong-way checkpoints/ranking, collision recovery, Expert regressions, production WebRTC startup, normal single-player RAM parity and 138 unit tests.
 
-See [docs/REVERSE_EXPERT.md](docs/REVERSE_EXPERT.md) for implementation, evidence and limits. Existing CPU car behavior is documented in [docs/CPU_CARS.md](docs/CPU_CARS.md).
+This remains experimental and without CPU opponents. The complete races use two running cabinets and local delivery. Eight running reverse cabinets, every track location, every race mode and internet conditions are not comprehensively validated.
+
+See [docs/REVERSE_ADVANCED.md](docs/REVERSE_ADVANCED.md) for implementation and evidence. Previous discovery notes remain in `docs/REVERSE_EXPERT.md`, `docs/REVERSE_DIRECTION_FIX.md` and `docs/REVERSE_RECOVERY.md`.

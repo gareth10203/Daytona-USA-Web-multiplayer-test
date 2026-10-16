@@ -1,10 +1,9 @@
-DAYTONA USA WEB — REVISION 22 — REVERSE EXPERT
-Build: daytona-rev-a-central-experimental-22-reverse-expert
-Host Race settings: Direction -> Reverse / Expert. Default: Normal.
-Experimental multiplayer: Expert only, standing reverse grid, CPU cars OFF.
-Original checkpoint/lap validation; direction-aware ranks, warnings and alignment.
-Validated two-cabinet finish and immediate coin/Start replay; local WebRTC startup.
-Single-player normal state parity against revision 21. 137 unit tests.
-Not yet validated: eight running reverse cabinets, all modes or network conditions.
-All participants need this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM, generated game source or test observers included. See docs/REVERSE_EXPERT.md.
+DAYTONA USA WEB — REVISION 25 — ADVANCED REVERSE
+Build: daytona-rev-a-central-experimental-25-reverse-advanced
+Host chooses Direction: Advanced reverse or Expert reverse; CPU cars OFF.
+Reverse grid, direction-aware checkpoints/ranking/warnings and recovery.
+Advanced full four-lap finish/replay, wrong-way regression, real collision recovery.
+Expert finish/replay and 21/64-tick recoveries preserved; normal RAM parity.
+Production local TURN/UDP WebRTC startup; 138 unit tests.
+All players need this build. Upload ZIP CONTENTS to GitHub Pages.
+No ROM or test observer included. See docs/REVERSE_ADVANCED.md.

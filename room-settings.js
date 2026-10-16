@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=22-reverse-expert';
-export const BUILD_ID='daytona-rev-a-central-experimental-22-reverse-expert';
+import {DEFAULT_EEPROM} from './nvram.js?v=25-reverse-advanced';
+export const BUILD_ID='daytona-rev-a-central-experimental-25-reverse-advanced';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];
@@ -7,8 +7,11 @@ export function validateSettings(value){
  if(!value||!Number.isInteger(value.mode)||value.mode<0||value.mode>2||!Number.isInteger(value.difficulty)||value.difficulty<0||value.difficulty>3||value.region!=='Export')throw Error('Unsupported room settings.');
  if(value.cpuCars!==undefined&&typeof value.cpuCars!=='boolean')throw Error('Unsupported CPU car setting.');
  if(value.reverseExpert!==undefined&&typeof value.reverseExpert!=='boolean')throw Error('Unsupported circuit direction.');
+ if(value.reverseAdvanced!==undefined&&typeof value.reverseAdvanced!=='boolean')throw Error('Unsupported circuit direction.');
  const reverseExpert=value.reverseExpert??false;
- return {mode:value.mode,difficulty:value.difficulty,region:'Export',cpuCars:reverseExpert?false:value.cpuCars??true,reverseExpert};
+ const reverseAdvanced=value.reverseAdvanced??false;
+ if(reverseExpert&&reverseAdvanced)throw Error('Choose one reverse circuit.');
+ return {mode:value.mode,difficulty:value.difficulty,region:'Export',cpuCars:reverseExpert||reverseAdvanced?false:value.cpuCars??true,reverseExpert,reverseAdvanced};
 }
 export function configurationInputs({master,cabinet,...settings}){
  validateSettings(settings);

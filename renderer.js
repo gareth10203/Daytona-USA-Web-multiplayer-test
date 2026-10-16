@@ -1,5 +1,5 @@
 // WebGPU Model 2 polygons surrounded by GPU-composed System-24 layers.
-import {createGpuLayers} from './gpu-layers.js?v=22-reverse-expert';
+import {createGpuLayers} from './gpu-layers.js?v=25-reverse-advanced';
 
 export async function createRenderer(canvas, onFailure) {
   if (!globalThis.isSecureContext || !navigator.gpu)
@@ -13,7 +13,7 @@ export async function createRenderer(canvas, onFailure) {
   if (!context) throw Error('Could not create the WebGPU context.');
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({device, format, alphaMode:'opaque'});
-  const response = await fetch(new URL('./model2.wgsl?v=22-reverse-expert', import.meta.url));
+  const response = await fetch(new URL('./model2.wgsl?v=25-reverse-advanced', import.meta.url));
   if (!response.ok) throw Error('Could not load model2.wgsl.');
   const modelShader = device.createShaderModule({label:'Model 2',code:await response.text()});
   for (const shader of [modelShader]) {

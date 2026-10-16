@@ -1,5 +1,7 @@
 # Expert inverso — revisión experimental 22
 
+Documento de la implementación inicial. La revisión 23 añade validación del sentido en checkpoints y meta; véase [REVERSE_DIRECTION_FIX.md](REVERSE_DIRECTION_FIX.md) para el comportamiento actual, las pruebas nuevas y el síntoma aún no reproducido.
+
 Versión independiente de `multiplayer-cpu-cars` (revisión 21). La revisión anterior y su ZIP se verifican por SHA-256 antes de empaquetar esta versión.
 
 ## Activación
