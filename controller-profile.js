@@ -1,4 +1,4 @@
-import {gamepadSteering} from './steering.js?v=19-deluxe-lobby-1';
+import {gamepadSteering} from './steering.js?v=21-cpu-cars';
 export const CONTROLLER_KEY='daytona-controller-profiles-v1';
 export const CONTROLLER_ACTIONS=Object.freeze({accel:'Accelerate',brake:'Brake',gear1:'Gear 1',gear2:'Gear 2',gear3:'Gear 3',gear4:'Gear 4',shiftDown:'Shift down',shiftUp:'Shift up',camera1:'Camera 1',camera2:'Camera 2',camera3:'Camera 3',camera4:'Camera 4',coin:'Insert coin',start:'Start'});
 export const DEFAULT_BUTTONS=Object.freeze({accel:7,brake:6,gear1:1,gear2:0,gear3:2,gear4:3,shiftDown:4,shiftUp:5,camera1:12,camera2:15,camera3:13,camera4:14,coin:8,start:9});
@@ -37,7 +37,7 @@ export function controllerButtonName(index,standard=true,id=''){
 export class ControllerInput {
  constructor(){this.reset();}
  reset(){this.key='';this.previous=new Set();this.blocked=new Set();}
- read(pad,profile,sensitivity=1){
+ read(pad,profile,sensitivity=1,deadzone=.08){
   if(!pad){this.reset();return {steer:0,accel:0,brake:0,buttons:0,shift:0,gear:null};}
   const key=`${pad.index}:${pad.id}`,pressed=new Set(pad.buttons.map((_,i)=>i).filter(i=>buttonPressed(pad,i)));
   if(key!==this.key){this.key=key;this.blocked=new Set(pressed);this.previous=new Set();}
@@ -47,6 +47,6 @@ export class ControllerInput {
   let gear=null,buttons=0;for(let i=1;i<=4;i++){if(active('gear'+i))gear=i;if(active('camera'+i))buttons|=1<<(3+i);}
   if(active('coin'))buttons|=1;if(active('start'))buttons|=2;
   this.previous=new Set(Object.keys(CONTROLLER_ACTIONS).filter(active));
-  return {steer:gamepadSteering((pad.axes[profile.steeringAxis]||0)*(profile.invert?-1:1),sensitivity),accel:Math.round(buttonValue(pad,profile.buttons.accel)*100),brake:Math.round(buttonValue(pad,profile.buttons.brake)*100),gear,shift,buttons};
+  return {steer:gamepadSteering((pad.axes[profile.steeringAxis]||0)*(profile.invert?-1:1),sensitivity,deadzone),accel:Math.round(buttonValue(pad,profile.buttons.accel)*100),brake:Math.round(buttonValue(pad,profile.buttons.brake)*100),gear,shift,buttons};
  }
 }

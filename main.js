@@ -1,20 +1,22 @@
-import {SimulationClock} from './simulation-clock.js?v=19-deluxe-lobby-1';
-import {nativeTimedState} from './link-timing.js?v=19-deluxe-lobby-1';
-import {linkIdForSeat} from './central-link.js?v=19-deluxe-lobby-1';
-import {createLobbySound} from './lobby-sound.js?v=19-deluxe-lobby-1';
-import { mountDiagnostics } from './diagnostics.js?v=19-deluxe-lobby-1';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=19-deluxe-lobby-1';
-import {createControllerControls} from './controller-controls.js?v=19-deluxe-lobby-1';
-import { createRenderer } from './renderer.js?v=19-deluxe-lobby-1';
-import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=19-deluxe-lobby-1';
-import { createTouchControls } from './touch.js?v=19-deluxe-lobby-1';
-import { createGamepadRumble } from './haptics.js?v=19-deluxe-lobby-1';
-import { loadSettings, saveSettings } from './preferences.js?v=19-deluxe-lobby-1';
-import { createWheelControls } from './wheel-controls.js?v=19-deluxe-lobby-1';
-import { Multiplayer } from './multiplayer.js?v=19-deluxe-lobby-1';
-import { createRoomUI } from './room-ui.js?v=19-deluxe-lobby-1';
-import { mountHostConsole } from './host-console.js?v=19-deluxe-lobby-1';
-import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=19-deluxe-lobby-1';
+import {protectTouchSurface} from './touch-guard.js?v=21-cpu-cars';
+import {createKeyboardControls} from './keyboard-controls.js?v=21-cpu-cars';
+import {SimulationClock} from './simulation-clock.js?v=21-cpu-cars';
+import {nativeTimedState} from './link-timing.js?v=21-cpu-cars';
+import {linkIdForSeat} from './central-link.js?v=21-cpu-cars';
+import {createLobbySound} from './lobby-sound.js?v=21-cpu-cars';
+import { mountDiagnostics } from './diagnostics.js?v=21-cpu-cars';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=21-cpu-cars';
+import {createControllerControls} from './controller-controls.js?v=21-cpu-cars';
+import { createRenderer } from './renderer.js?v=21-cpu-cars';
+import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=21-cpu-cars';
+import { createTouchControls } from './touch.js?v=21-cpu-cars';
+import { createGamepadRumble } from './haptics.js?v=21-cpu-cars';
+import { loadSettings, saveSettings } from './preferences.js?v=21-cpu-cars';
+import { createWheelControls } from './wheel-controls.js?v=21-cpu-cars';
+import { Multiplayer } from './multiplayer.js?v=21-cpu-cars';
+import { createRoomUI } from './room-ui.js?v=21-cpu-cars';
+import { mountHostConsole } from './host-console.js?v=21-cpu-cars';
+import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=21-cpu-cars';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -28,7 +30,7 @@ const ui = {
 let wasm = null, renderer = null, started = false, running = false;
 let engineReady = null, engineStartupError = '';
 let simulationClock=null;
-let ctxAudio = null, audioGain = null, audioNext = 0;
+let ctxAudio = null, audioGain = null, uiAudioGain = null, audioNext = 0;
 const audioSources=new Set();
 let soundMuted = false;
 let lastTime = 0, lagMs = 0, statTime = performance.now(), rendered = 0, simulated = 0;
@@ -50,18 +52,19 @@ const room=new Multiplayer({
  readPerformance:(epoch,after)=>diagnostics?.share(epoch,after),
  onChange:state=>{diagnostics?.setAutomatic(state.phase==='playing');roomDiagnostics?.sync();roomUI?.render(state);hostConsole?.sync();},
  onPrepare:async(config,cancelled)=>{
-  simulationClock?.stop();running=false;started=false;held.clear();touch.clear();rumble.stop();multiplayerProfile=true;
+  simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();rumble.stop();multiplayerProfile=true;
   ui.start.disabled=true;ui.close.hidden=true;
   setStatus('Preparing linked cabinet…',true);
   await prepareCabinet(wasm,reloadEngine,config,cancelled);
   if(!wasm._daytona_central_config(linkIdForSeat(config.cabinet,room.members.length),room.members.length))throw Error('Invalid centralized cabinet configuration.');
+  if(!wasm._daytona_set_cpu_cars(Number(config.cpuCars)))throw Error('Could not apply the room CPU car setting.');
   renderer.reset();applyGraphics();
  },
  onStart:()=>{wasm._daytona_delivery_mode(1);ui.start.disabled=false;linkStartedAt=performance.now();roomUI.running();void resumeGame();},
  onStop:reason=>{
   wasm?._daytona_delivery_mode(0);wasm?._daytona_central_config(0,0);
   for(const source of audioSources){try{source.stop();}catch{}}audioSources.clear();audioNext=0;
-  simulationClock?.stop();running=false;started=false;held.clear();touch.clear();rumble.stop();wasm?._daytona_link_enable(0);
+  simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();rumble.stop();wasm?._daytona_link_enable(0);
   ui.start.disabled=true;ui.start.hidden=true;openMenu();setStatus('Room ready',true);ui.message.textContent=reason;
  },
  onBytes:(bytes,timing)=>{
@@ -85,6 +88,8 @@ const rumble=createGamepadRumble(status=>{$('rumbleStatus').textContent=status;}
 function connectedDevices(){try{return [...(navigator.getGamepads?.() ?? [])].filter(pad=>pad?.connected);}catch{return [];}}
 const wheelControls=createWheelControls($('wheelControls'),{storage:settingsStorage,getPads:connectedDevices,onChange:()=>rumble.stop()});
 const controllerControls=createControllerControls($('controllerControls'),{storage:settingsStorage,reservedIds:()=>wheelControls.reservedIds(),wheelPad:()=>wheelControls.feedbackPad(),onChange:()=>rumble.stop()});
+const keyboardControls=createKeyboardControls($('keyboardControls'),{held,storage:settingsStorage,settings,mobile:mobileDevice,onSetting:changeSetting});
+if(mobileDevice){$('inputTabLabel').textContent='Touch controls';$('inputTab').querySelector('svg').innerHTML='<path d="M8 12V5a2 2 0 0 1 4 0v6-3a2 2 0 0 1 4 0v3-1a2 2 0 0 1 4 0v5c0 4-3 7-7 7h-1c-2 0-3-1-4-2l-4-5a2 2 0 0 1 3-3l1 1Z"/>'; }
 function applyGraphics(){
   enhanced=settings.drawDistance>0;
   renderer?.setDrawDistance(settings.drawDistance);
@@ -95,25 +100,28 @@ function syncSettings(){
   rumble.setIntensity(settings.vibrationEnabled?settings.rumble:0);
   rumble.setCentringIntensity(settings.centring);
   for(const id of ['vibrationEnabled','settingsVibrationEnabled'])$(id).checked=settings.vibrationEnabled;
-  for(const [key,input,output] of [['rumble','rumbleIntensity','rumbleValue'],['centring','centringIntensity','centringValue'],['volume','volumeIntensity','volumeValue'],['joystickSensitivity','joystickSensitivity','joystickSensitivityValue']]){
+  for(const [key,input,output] of [['rumble','rumbleIntensity','rumbleValue'],['centring','centringIntensity','centringValue'],['volume','volumeIntensity','volumeValue'],['uiVolume','uiVolumeIntensity','uiVolumeValue'],['joystickSensitivity','joystickSensitivity','joystickSensitivityValue'],['joystickDeadzone','joystickDeadzone','joystickDeadzoneValue']]){
     $(input).value=Math.round(settings[key]*100);
-    $(output).textContent=settings[key]===0?(key==='volume'?'Silent':'Off'):`${Math.round(settings[key]*100)}%`;
+    $(output).textContent=settings[key]===0&&key!=='joystickDeadzone'?(['volume','uiVolume'].includes(key)?'Silent':'Off'):`${Math.round(settings[key]*100)}%`;
     $(input).disabled=(key==='rumble' || key==='centring') && !settings.vibrationEnabled;
   }
   for(const radio of document.querySelectorAll('[name="drawDistance"]'))radio.checked=Number(radio.value)===settings.drawDistance;
   $('distance1Default').hidden=!mobileDevice;$('distance2Default').hidden=mobileDevice;
   if(audioGain)audioGain.gain.setTargetAtTime(settings.volume,ctxAudio.currentTime,0.025);
+  if(uiAudioGain)uiAudioGain.gain.setTargetAtTime(settings.uiVolume,ctxAudio.currentTime,.025);
+  keyboardControls.sync();
+  $('touchControls').style.setProperty('--touch-button-scale',settings.touchButtonScale);$('touchControls').style.setProperty('--touch-steering-width',settings.touchSteeringWidth);
   applyGraphics();
 }
 function changeSetting(key,value){settings[key]=value;syncSettings();saveSettings(settingsStorage,settings);}
 for(const id of ['vibrationEnabled','settingsVibrationEnabled'])$(id).addEventListener('change',event=>changeSetting('vibrationEnabled',event.target.checked));
-for(const [id,key] of [['rumbleIntensity','rumble'],['centringIntensity','centring'],['volumeIntensity','volume'],['joystickSensitivity','joystickSensitivity']])
+for(const [id,key] of [['rumbleIntensity','rumble'],['centringIntensity','centring'],['volumeIntensity','volume'],['uiVolumeIntensity','uiVolume'],['joystickSensitivity','joystickSensitivity'],['joystickDeadzone','joystickDeadzone']])
   $(id).addEventListener('input',event=>changeSetting(key,Number(event.target.value)/100));
 for(const radio of document.querySelectorAll('[name="drawDistance"]'))radio.addEventListener('change',event=>{if(event.target.checked)changeSetting('drawDistance',Number(event.target.value));});
 syncSettings();
 const settingsTabs=[...document.querySelectorAll('#settingsModal > .settings-tabs [role="tab"]')];
 function selectSettingsTab(tab,focus=false){
-  wheelControls.cancel();controllerControls.cancel();
+  wheelControls.cancel();controllerControls.cancel();keyboardControls.cancel();
   for(const item of settingsTabs){
     const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;
     $(item.getAttribute('aria-controls')).hidden=!selected;
@@ -130,7 +138,7 @@ for(const tab of settingsTabs){
 }
 function showMainMenu(focus=true){
   if(hostConsole?.isOpen())return;
-  wheelControls.cancel();controllerControls.cancel();
+  wheelControls.cancel();controllerControls.cancel();keyboardControls.cancel();
   settingsOpen=false;$('mainMenu').hidden=false;$('settingsModal').hidden=true;
   $('menuDialog').setAttribute('aria-labelledby','gameTitle');ui.overlay.scrollTop=0;
   if($('menuDialog').classList.contains('mp-view'))$('menuDialog').setAttribute('aria-labelledby',!$('roomPanel').hidden?'roomTitle':'entryTitle');
@@ -148,11 +156,20 @@ const touch=createTouchControls($('touchControls'),{
   isRunning:()=>running,
   shift:amount=>{currentGear=Math.max(1,Math.min(4,currentGear+amount));$('touchGear').textContent=currentGear;},
   menu:()=>openMenu(),
+  sound:()=>toggleSound(),
   settings:()=>{const panel=$('touchControls').querySelector('.touch-service');panel.hidden=!panel.hidden;}
 });
-const joinChime=createLobbySound({context:()=>ctxAudio,output:()=>audioGain,muted:()=>soundMuted||settings.volume===0});
-roomUI=createRoomUI(room,{notifyRequest:joinChime,notifyChat:()=>joinChime('chat'),notifyReady:()=>joinChime('ready'),single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;await applyDeluxeDefault();}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
+const joinChime=createLobbySound({context:()=>ctxAudio,output:()=>uiAudioGain,muted:()=>soundMuted||settings.uiVolume===0});
+function lobbySound(kind='request'){
+ if(soundMuted||settings.uiVolume===0||!ctxAudio||ctxAudio.state==='closed')return false;
+ if(ctxAudio.state==='running')return joinChime(kind);
+ // Resume only the context already unlocked by Create/Join/Ready. Browsers
+ // may suspend it when a window loses focus; never create autoplay audio here.
+ void ctxAudio.resume().then(()=>joinChime(kind)).catch(()=>{});return false;
+}
+roomUI=createRoomUI(room,{notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;await applyDeluxeDefault();}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
 hostConsole=mountHostConsole(room);
+$('previewUISound').onclick=async()=>{await activateAudio();joinChime('confirmed');};
 document.documentElement.classList.toggle('touch-device',navigator.maxTouchPoints>0 || matchMedia('(any-pointer:coarse)').matches);
 function saveNVRAM() {
   if(multiplayerProfile)return;
@@ -184,7 +201,7 @@ function failure(message) {
   console.error(message);
 }
 function pollGamepad() {
-  const value=controllerControls.read(settings.joystickSensitivity);
+  const value=controllerControls.read(settings.joystickSensitivity,settings.joystickDeadzone);
   currentGear=value.gear ?? Math.max(1,Math.min(4,currentGear+value.shift));
   return value;
 }
@@ -197,35 +214,29 @@ function inputs() {
     controllerControls.resetEdges();
   }
   const phone=touch.read();
-  const steerKey=Number(held.has('ArrowRight'))-Number(held.has('ArrowLeft'));
-  let buttons=pad.buttons|phone.buttons;
-  if(held.has('Digit5')) buttons|=1;
-  if(held.has('Enter')) buttons|=2;
-  if(held.has('F2')) buttons|=4;
-  if(held.has('F3')) buttons|=8;
-  for(let i=0;i<4;i++)if(held.has('Key'+('ASDF'[i]))) buttons|=(1<<(4+i));
+  const keyboard=keyboardControls.read(FIXED_MS/1000);
+  const buttons=pad.buttons|phone.buttons|keyboard.buttons;
   $('touchGear').textContent=currentGear;
-  return {steer:steerKey?steerKey*100:(phone.steer || pad.steer),
-    accel:held.has('ArrowUp')?100:Math.max(pad.accel,phone.accel),
-    brake:held.has('ArrowDown')?100:Math.max(pad.brake,phone.brake),
+  return {steer:keyboard.active?keyboard.steer:(phone.steer || pad.steer),
+    accel:Math.max(keyboard.accel,pad.accel,phone.accel),
+    brake:Math.max(keyboard.brake,pad.brake,phone.brake),
     gear:currentGear,buttons:room.active?buttons&~12:buttons};
 }
-const keyActions = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter','Digit5','KeyQ','KeyW','F2','F3','Digit1','Digit2','Digit3','Digit4','KeyA','KeyS','KeyD','KeyF']);
 window.addEventListener('keydown',(event)=>{
   if(event.code==='Escape'){
     if(hostConsole?.isOpen()){event.preventDefault();hostConsole.close();return;}
-    if(settingsOpen){event.preventDefault();if(controllerControls.cancel())return;showMainMenu();return;}
+    if(settingsOpen){event.preventDefault();if(controllerControls.cancel()||keyboardControls.cancel())return;showMainMenu();return;}
     if(started){event.preventDefault();ui.overlay.hidden?openMenu():resumeGame();return;}
   }
-  if(!running || !ui.overlay.hidden || !keyActions.has(event.code)||['INPUT','SELECT','BUTTON'].includes(event.target?.tagName))return;
+  if(!running || !ui.overlay.hidden || !keyboardControls.uses(event.code)||event.ctrlKey||event.metaKey||event.altKey||['INPUT','SELECT','BUTTON'].includes(event.target?.tagName))return;
   if(room.active&&(event.code==='F2'||event.code==='F3'))return;
   if(started)event.preventDefault();
-  if((event.code==='KeyQ'||event.code==='KeyW')&&!held.has(event.code))currentGear=Math.max(1,Math.min(4,currentGear+(event.code==='KeyW'?1:-1)));
-  if(/^Digit[1-4]$/.test(event.code))currentGear=Number(event.code.at(-1));
+  const action=keyboardControls.action(event.code);
+  if(!held.has(event.code)){if(action==='shiftDown'||action==='shiftUp')currentGear=Math.max(1,Math.min(4,currentGear+(action==='shiftUp'?1:-1)));if(/^gear[1-4]$/.test(action||''))currentGear=Number(action.at(-1));}
   held.add(event.code);
 });
 window.addEventListener('keyup',(event)=>held.delete(event.code));
-window.addEventListener('blur',()=>{held.clear();rumble.stop();controllerControls.cancel();controllerControls.resetEdges();});
+window.addEventListener('blur',()=>{held.clear();keyboardControls.reset();rumble.stop();controllerControls.cancel();controllerControls.resetEdges();});
 window.addEventListener('gamepaddisconnected',()=>rumble.disconnect());
 
 function pushAudio() {
@@ -246,9 +257,10 @@ function pushAudio() {
   audioNext+=frames/48000;
 }
 function updateDevices(now){
+  keyboardControls.update(now,settingsOpen&&!$('inputPanel').hidden);
   const devices=connectedDevices();
   wheelControls.update(devices,now,settingsOpen && !$('experimentalPanel').hidden);
-  controllerControls.update(devices,now,settingsOpen && !$('controllerPanel').hidden,settings.joystickSensitivity);
+  controllerControls.update(devices,now,settingsOpen && !$('controllerPanel').hidden,settings.joystickSensitivity,settings.joystickDeadzone);
 }
 function simulateStep(now){
   renderer.prepare(wasm);
@@ -316,6 +328,7 @@ async function activateAudio() {
     if(!ctxAudio || ctxAudio.state==='closed'){
       ctxAudio=new (window.AudioContext||window.webkitAudioContext)();
       audioGain=ctxAudio.createGain();audioGain.gain.value=settings.volume;audioGain.connect(ctxAudio.destination);
+      uiAudioGain=ctxAudio.createGain();uiAudioGain.gain.value=settings.uiVolume;uiAudioGain.connect(ctxAudio.destination);
     }
     // Both calls must occur inside the trusted tap, before awaiting anything.
     const resumed=ctxAudio.resume();
@@ -339,11 +352,7 @@ async function toggleSound() {
   else await activateAudio();
 }
 const gameSurface=document.querySelector('.arcade');
-// Keep Safari pinch, double-tap zoom, selection and long-press menus off the
-// driving surface. The separate launcher retains its normal reading gestures.
-for(const name of ['gesturestart','gesturechange','gestureend','contextmenu','selectstart']){
-  gameSurface.addEventListener(name,event=>{if(running)event.preventDefault();},{passive:false});
-}
+protectTouchSurface(gameSurface,{mobile:mobileDevice});
 gameSurface.addEventListener('pointerdown',()=>{
   if(running && audioLoaded && !soundMuted && ctxAudio?.state!=='running')void activateAudio();
 },{capture:true});
@@ -361,7 +370,7 @@ async function loadROM(file) {
   if(!/\.zip$/i.test(file.name)){failure('Choose a Daytona USA Revision A (1994) ROM ZIP.');return;}
   room.leave();roomUI.loading();multiplayerProfile=false;
   rumble.stop();
-  simulationClock?.stop();running=false;started=false;held.clear();touch.clear();ui.close.hidden=true;ui.start.disabled=true;ui.startLabel.textContent='Enter arcade';
+  simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.close.hidden=true;ui.start.disabled=true;ui.startLabel.textContent='Enter arcade';
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
   await ctxAudio?.suspend();
   ui.metadata.textContent=`Reading ${file.name} (${(file.size/1048576).toFixed(1)} MB)…`;
@@ -399,7 +408,7 @@ ui.dropzone.addEventListener('drop',(event)=>{const f=event.dataTransfer?.files?
 function openMenu() {
   rumble.stop();
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
-  running=room.active&&started;if(!running)simulationClock?.stop();held.clear();touch.clear();ui.overlay.hidden=false;
+  running=room.active&&started;if(!running)simulationClock?.stop();held.clear();keyboardControls.reset();touch.clear();ui.overlay.hidden=false;
   showMainMenu(false);gameSurface.inert=true;
   if(started&&!room.occupied)$('playerModes').hidden=false;
   document.documentElement.classList.add('launcher-open');
@@ -413,7 +422,7 @@ async function resumeGame() {
   if(!wasm?._daytona_ready() || ui.start.disabled)return;
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
   const keepLinkedClock=room.active&&running;
-  started=true;running=true;held.clear();touch.clear();
+  started=true;running=true;held.clear();keyboardControls.reset();touch.clear();
   if(!keepLinkedClock){statTime=performance.now();rendered=0;simulated=0;diagnostics.reset();}
   simulationClock.start({reset:!keepLinkedClock});
   ui.overlay.hidden=true;document.documentElement.classList.remove('launcher-open');
@@ -426,7 +435,6 @@ ui.start.addEventListener('click',resumeGame);
 ui.menu.addEventListener('click',openMenu);
 ui.close.addEventListener('click',resumeGame);
 ui.sound.addEventListener('click',toggleSound);
-document.querySelector('[data-sound]').addEventListener('click',toggleSound);
 ui.fullscreen.addEventListener('click',async()=>{
   if(document.fullscreenElement)await document.exitFullscreen();
   else await document.documentElement.requestFullscreen?.();
@@ -458,9 +466,9 @@ window.addEventListener('pointerdown',showHUD);
 window.addEventListener('pagehide',()=>{simulationClock?.stop();rumble.stop();saveNVRAM();room.leave();});
 document.addEventListener('visibilitychange',()=>{
   room.visibilityChanged();
-  if(document.hidden){saveNVRAM();held.clear();rumble.stop();if(started&&!room.active)openMenu();}
+  if(document.hidden){saveNVRAM();held.clear();keyboardControls.reset();rumble.stop();if(started&&!room.active)openMenu();}
 });
-export function getArcadeState(){return {running,enhanced,multiplayer:room.snapshot(),linkState:wasm?._daytona_link_state(),linkId:wasm?._daytona_link_id(),linkCount:wasm?._daytona_link_count(),drawDistance:wasm?._daytona_draw_distance(),volume:settings.volume,wheel:wheelControls.preview(),audioGain:audioGain?.gain.value,audioState:ctxAudio?.state||'uninitialized',soundMuted,touch:touch.read(),gear:currentGear,ready:!!wasm?._daytona_ready(),frames:wasm?._daytona_total_frames()||0,width:wasm?._daytona_width(),height:wasm?._daytona_height()};}
+export function getArcadeState(){return {running,enhanced,multiplayer:room.snapshot(),linkState:wasm?._daytona_link_state(),linkId:wasm?._daytona_link_id(),linkCount:wasm?._daytona_link_count(),drawDistance:wasm?._daytona_draw_distance(),volume:settings.volume,uiVolume:settings.uiVolume,uiAudioGain:uiAudioGain?.gain.value,keyboard:{...keyboardControls.bindings},wheel:wheelControls.preview(),audioGain:audioGain?.gain.value,audioState:ctxAudio?.state||'uninitialized',soundMuted,touch:touch.read(),gear:currentGear,ready:!!wasm?._daytona_ready(),frames:wasm?._daytona_total_frames()||0,width:wasm?._daytona_width(),height:wasm?._daytona_height()};}
 document.documentElement.classList.add('launcher-open');
 gameSurface.inert=true;
 ui.dropzone.focus();
@@ -476,8 +484,8 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=19-deluxe-lobby-1'});
-    for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
+    wasm=await factory({locateFile:(path)=>path+'?v=21-cpu-cars'});
+    for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_cpu_cars','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
     renderer=await createRenderer(ui.canvas,failure);

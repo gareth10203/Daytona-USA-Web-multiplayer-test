@@ -1,9 +1,8 @@
-DAYTONA USA — DELUXE AND LOBBY NOTIFICATIONS — REVISION 19
-Build: daytona-rev-a-central-experimental-19-deluxe-lobby
-Independent copy of revision 18 including its startup fix.
-DELUXE cabinet type by default; SINGLE / MASTER / SLAVE link roles unchanged.
-Soft incoming-chat sound and last-unready reminders after 5 seconds, then every 12 seconds.
-Existing game volume and mute apply. Automatic cabinet numbering unchanged.
-Original production engine and network logic match revision 18.
-All participants require this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM or test hooks included. See docs/DELUXE_LOBBY.md.
+DAYTONA USA WEB — REVISION 21 — CPU CARS
+Build: daytona-rev-a-central-experimental-21-cpu-cars
+Host Race settings: CPU cars ON (default) / OFF (players only).
+Applied through the original selection on every new race, including immediate coin restarts.
+Original multiplayer vote, grid setup and request clearing remain active.
+Single player keeps original controls. Version 20 and its ZIPs are preserved.
+All participants need this build. Upload ZIP CONTENTS to GitHub Pages.
+No ROM, generated game source or test observers included. See docs/CPU_CARS.md.

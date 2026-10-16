@@ -1,13 +1,9 @@
-# Daytona USA — DELUXE y avisos de lobby, revisión 19
+# Daytona USA Web — CPU cars — revision 21
 
-Build `daytona-rev-a-central-experimental-19-deluxe-lobby`. Copia independiente de la revisión 18 con su corrección de arranque; la versión anterior y sus ZIP se conservan.
+Independent version based on revision 20. The previous version and its ZIPs are preserved.
 
-Las cabinas usan DELUXE por defecto tanto en single player como en multiplayer. DELUXE es el tipo de cabina; el enlace sigue siendo SINGLE para jugar solo y MASTER/SLAVE en multiplayer. Los guardados anteriores se actualizan una sola vez mediante el menú original del arcade, conservando puntuaciones y demás ajustes. Después de esa actualización se respetan los cambios manuales del menú F2.
+Run `npm run serve` and open http://localhost:8103. Upload the contents of the distribution ZIP to GitHub Pages. No ROM is included. Everyone in a room must use this version.
 
-El lobby añade un aviso suave para mensajes nuevos de otros jugadores y un recordatorio para la única persona que todavía no está Ready: empieza tras 5 segundos y se repite cada 12 segundos mientras siga siendo la única pendiente. Ambos sonidos respetan el volumen y el silencio del juego. No se reproducen avisos por el historial del chat ni por tus propios mensajes.
+The host can choose **CPU cars: On · Arcade grid / Off · Players only** in Race settings. On is the default. Changes reset Ready, propagate to every cabinet and are locked for the running session. The preference applies again for every new race, including inserting coins immediately after a race without returning to the lobby. Single player keeps the original controls.
 
-La numeración de cabinas sigue siendo automática. Esta revisión no incluye selección de asiento o vehículo. El motor, el enlace central y la predicción temporal son los de la revisión 18; estos cambios no modifican las reglas de carrera ni la clasificación.
-
-Para probar: `npm run serve`, abrir http://localhost:8101 y cargar la ROM local. El ZIP `daytona_multiplayer_19_deluxe_lobby_github_pages.zip` contiene los archivos para publicar en la raíz de GitHub Pages, sin ROM ni instrumentos de prueba. Todos los participantes deben usar esta misma revisión.
-
-`npm test` ejecuta las regresiones de JavaScript. `tests/deluxe-lobby-browser.cjs` comprueba tres motores reales, chat, Ready, arranque DELUXE y retorno al lobby. `tests/deluxe-migration.cjs` verifica la actualización de guardados conservando los datos. Resultados locales en `build/`. Detalles en [docs/DELUXE_LOBBY.md](docs/DELUXE_LOBBY.md); los documentos de las revisiones anteriores son históricos.
+See [docs/CPU_CARS.md](docs/CPU_CARS.md) for implementation and validation.

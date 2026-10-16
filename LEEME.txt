@@ -45,7 +45,8 @@ boot, attract mode, track selection, racing and local saves.
 Audio fidelity has not been certified. See LICENSE and THIRD_PARTY.md.
 This package does not include the ROM ZIP.
 
-Settings opens Graphics, Control and Sound categories; Back/Esc returns.
+Settings opens Graphics, Control, Keyboard (Touch controls on mobile), Sound
+and Experimental categories; Back/Esc returns.
 Graphics: Classic (original distance), 1x (mobile default), or 2x (desktop default; more scenery).
 Sound: game volume slider. Changes save automatically on this device.
 The main vibration checkbox retains intensity settings when switched off.
@@ -70,3 +71,17 @@ ESC and settings do not pause linked play. Leaving ends the linked session.
 PeerJS Cloud handles signaling; WebRTC carries original arcade link bytes.
 Some networks need a TURN service, not included by default. Keep tabs visible.
 No hot joining during linked play. Up to 8 players; WAN behavior experimental.
+
+REVISION 20
+Keyboard steering is gradual; sensitivity and key assignments are in Settings.
+Mobile controls have adjustable button size and steering width, initially 15% wider.
+Interface volume is independent of game volume. Ready confirmations play locally
+for you and your friends; the last-unready reminder repeats every 3 seconds.
+Mobile driving blocks text selection, long-press, double-tap and pinch zoom.
+See docs/INPUT_SETTINGS.md.
+
+REVISION 21
+Host Race settings now include CPU cars ON / OFF. ON is the default.
+The choice applies again on every race, even without returning to the lobby.
+Changes reset Ready; single-player controls retain their original behavior.
+All players need revision 21. See docs/CPU_CARS.md.

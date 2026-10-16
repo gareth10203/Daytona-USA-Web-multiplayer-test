@@ -1,11 +1,12 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=19-deluxe-lobby-1';
-export const BUILD_ID='daytona-rev-a-central-experimental-19-deluxe-lobby';
+import {DEFAULT_EEPROM} from './nvram.js?v=21-cpu-cars';
+export const BUILD_ID='daytona-rev-a-central-experimental-21-cpu-cars';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];
 export function validateSettings(value){
  if(!value||!Number.isInteger(value.mode)||value.mode<0||value.mode>2||!Number.isInteger(value.difficulty)||value.difficulty<0||value.difficulty>3||value.region!=='Export')throw Error('Unsupported room settings.');
- return {mode:value.mode,difficulty:value.difficulty,region:'Export'};
+ if(value.cpuCars!==undefined&&typeof value.cpuCars!=='boolean')throw Error('Unsupported CPU car setting.');
+ return {mode:value.mode,difficulty:value.difficulty,region:'Export',cpuCars:value.cpuCars??true};
 }
 export function configurationInputs({master,cabinet,...settings}){
  validateSettings(settings);

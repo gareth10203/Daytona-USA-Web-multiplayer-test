@@ -1,12 +1,12 @@
-import {parseInvitation,invitation} from './room-settings.js?v=19-deluxe-lobby-1';
-import {createLobbyNotifications} from './lobby-notifications.js?v=19-deluxe-lobby-1';
+import {parseInvitation,invitation} from './room-settings.js?v=21-cpu-cars';
+import {createLobbyNotifications} from './lobby-notifications.js?v=21-cpu-cars';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
-export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{}}){
+export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry');
  let verified=false,pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0;
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
- const notifications=createLobbyNotifications({notifyChat,notifyReady});
+ const notifications=createLobbyNotifications({notifyChat,notifyReady,notifyConfirmed});
  const utilities=document.querySelector('.menu-quick-controls'),utilitiesHome=utilities.parentElement;
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
  function layout(active,showGuide=false){$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
@@ -45,8 +45,8 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
  $('copyCode').onclick=action(async()=>{await navigator.clipboard.writeText($('roomCode').textContent);$('roomMessage').textContent='Room code copied.';});
  $('inviteLink').onclick=event=>event.target.select();
  $('returnRoomGame').onclick=()=>$('startBtn').click();
- const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),region:'Export'});
- $('roomMode').onchange=change;$('roomDifficulty').onchange=change;
+ const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),cpuCars:$('roomCpuCars').value==='true',region:'Export'});
+ $('roomMode').onchange=change;$('roomDifficulty').onchange=change;$('roomCpuCars').onchange=change;
  function markRead(){unread=0;for(const id of ['chatUnread','mobileChatUnread'])$(id).hidden=true;$('newChatMessages').hidden=true;}
  function scrollChat(){const log=$('chatLog');log.scrollTop=log.scrollHeight;markRead();}
   function mobileTab(tab){panel.dataset.mobileTab=tab;for(const [id,name] of [['roomGridTab','grid'],['roomChatTab','chat']]){$(id).setAttribute('aria-selected',String(tab===name));$(id).tabIndex=tab===name?0:-1;}if(tab==='chat')scrollChat();}
@@ -105,7 +105,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length} / 8 drivers`;
    const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';$('inviteBlock').hidden=!state.isHost||!state.code;
-   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;for(const id of ['roomMode','roomDifficulty'])$(id).disabled=!state.isHost||state.phase!=='lobby';
+   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);for(const id of ['roomMode','roomDifficulty','roomCpuCars'])$(id).disabled=!state.isHost||state.phase!=='lobby';
    $('roomSettingsHint').textContent=state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
    $('readyCount').textContent=`${state.members.filter(x=>x.ready).length} ready`;
    renderRoster(state);renderChat(state);

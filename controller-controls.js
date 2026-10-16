@@ -1,5 +1,5 @@
-import {CONTROLLER_ACTIONS,ControllerInput,loadControllers,saveControllers,defaultControllerProfile,assignControllerButton,buttonPressed,buttonValue,controllerButtonName} from './controller-profile.js?v=19-deluxe-lobby-1';
-import {gamepadSteering} from './steering.js?v=19-deluxe-lobby-1';
+import {CONTROLLER_ACTIONS,ControllerInput,loadControllers,saveControllers,defaultControllerProfile,assignControllerButton,buttonPressed,buttonValue,controllerButtonName} from './controller-profile.js?v=21-cpu-cars';
+import {gamepadSteering} from './steering.js?v=21-cpu-cars';
 const $=(root,id)=>root.querySelector('#'+id);
 const clamp=v=>Math.max(-1,Math.min(1,Number.isFinite(v)?v:0));
 const svgButton=(i,x,y,label,r=12)=>`<g data-pad-button="${i}"><circle cx="${x}" cy="${y}" r="${r}"/><text x="${x}" y="${y+4}">${label}</text></g>`;
@@ -55,7 +55,7 @@ export function createControllerControls(root,{storage,reservedIds=()=>new Set()
  function selectTab(tab,focus=false){cancel();for(const item of tabs){const on=item===tab;item.setAttribute('aria-selected',String(on));item.tabIndex=on?0:-1;$(root,item.getAttribute('aria-controls')).hidden=!on;}if(focus)tab.focus();}
  for(const tab of tabs){tab.onclick=()=>selectTab(tab);tab.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();selectTab(e.key==='Home'?tabs[0]:e.key==='End'?tabs[1]:tabs[1-tabs.indexOf(tab)],true);}});}
  const svgNodes=[...root.querySelectorAll('[data-pad-button]')];
- function update(nextPads,now,visible,sensitivity=1){
+ function update(nextPads,now,visible,sensitivity=1,deadzone=.08){
   pads=nextPads;
   if(!visible&&pending)cancel();
   if(!visible&&now-lastUpdate<250)return;if(visible&&wasVisible&&now-lastUpdate<40)return;lastUpdate=now;wasVisible=visible;
@@ -68,10 +68,10 @@ export function createControllerControls(root,{storage,reservedIds=()=>new Set()
   if(!visible)return;
   for(const node of svgNodes){const index=Number(node.dataset.padButton),value=buttonValue(pad,index);node.classList.toggle('pressed',buttonPressed(pad,index));node.style.setProperty('--pressure',String(value));}
   for(const [id,offset] of [['controllerLeftStick',0],['controllerRightStick',2]])$(root,id).setAttribute('transform',`translate(${clamp(pad?.axes[offset])*11} ${clamp(pad?.axes[offset+1])*11})`);
-  const p=profile(),raw=pad&&p?{steer:gamepadSteering((pad.axes[p.steeringAxis]||0)*(p.invert?-1:1),sensitivity),accel:Math.round(buttonValue(pad,p.buttons.accel)*100),brake:Math.round(buttonValue(pad,p.buttons.brake)*100)}:{steer:0,accel:0,brake:0};
+  const p=profile(),raw=pad&&p?{steer:gamepadSteering((pad.axes[p.steeringAxis]||0)*(p.invert?-1:1),sensitivity,deadzone),accel:Math.round(buttonValue(pad,p.buttons.accel)*100),brake:Math.round(buttonValue(pad,p.buttons.brake)*100)}:{steer:0,accel:0,brake:0};
   for(const [name,key] of [['Steer','steer'],['Gas','accel'],['Brake','brake']]){$(root,'controller'+name+'Value').textContent=raw[key]+'%';$(root,'controller'+name+'Meter').value=raw[key];}
   const down=pad?pad.buttons.map((_,i)=>i).filter(i=>buttonPressed(pad,i)):[];const caption=pad?down.length?'Pressed · '+down.map(i=>controllerButtonName(i,pad.mapping==='standard',pad.id)).join(' + '):'Move the sticks or press a button to test.':'Press a controller button to make it visible.';if($(root,'controllerRawButtons').textContent!==caption)$(root,'controllerRawButtons').textContent=caption;
  }
  renderDevices();
- return {update,getPad,hasExplicitSelection:()=>!!state.selected,read:sensitivity=>input.read(getPad(),profile(),sensitivity),cancel,resetEdges:()=>input.reset(),profile,selectDevice(index){select.value=String(index);select.dispatchEvent(new Event('change'));},isListening:()=>!!pending};
+ return {update,getPad,hasExplicitSelection:()=>!!state.selected,read:(sensitivity,deadzone)=>input.read(getPad(),profile(),sensitivity,deadzone),cancel,resetEdges:()=>input.reset(),profile,selectDevice(index){select.value=String(index);select.dispatchEvent(new Event('change'));},isListening:()=>!!pending};
 }

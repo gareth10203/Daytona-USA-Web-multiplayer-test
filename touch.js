@@ -1,14 +1,16 @@
+import {bindTouchActivation} from './touch-guard.js?v=21-cpu-cars';
 // Independent pointer IDs allow steering and pedals to be held together.
-export function createTouchControls(root, {isRunning, shift, menu, settings}) {
+export function createTouchControls(root, {isRunning, shift, menu, settings, sound}) {
   const pointers=new Map();
   let steeringPointer=null, steering=0, camera=0;
   const pad=root.querySelector('[data-steering]');
   const knob=root.querySelector('.steering-knob');
   function move(e){
     const box=pad.getBoundingClientRect();
-    const value=Math.max(-1,Math.min(1,(e.clientX-box.left-box.width/2)/(box.width*.36)));
+    const travel=Math.max(1,box.width/2-knob.getBoundingClientRect().width/2-14);
+    const value=Math.max(-1,Math.min(1,(e.clientX-box.left-box.width/2)/travel));
     steering=Math.abs(value)<.08?0:Math.round(value*100);
-    knob.style.transform=`translateX(${steering*.35}px)`;
+    knob.style.transform=`translateX(${steering/100*travel}px)`;
   }
   function release(e){
     const action=pointers.get(e.pointerId);pointers.delete(e.pointerId);
@@ -31,8 +33,9 @@ export function createTouchControls(root, {isRunning, shift, menu, settings}) {
     });
   }
   for(const name of ['pointerup','pointercancel','lostpointercapture'])root.addEventListener(name,release);
-  root.querySelector('[data-menu]').addEventListener('click',menu);
-  root.querySelector('[data-settings]').addEventListener('click',settings);
+  bindTouchActivation(root.querySelector('[data-menu]'),menu);
+  bindTouchActivation(root.querySelector('[data-settings]'),settings);
+  bindTouchActivation(root.querySelector('[data-sound]'),sound);
   const clear=()=>{pointers.clear();steeringPointer=null;steering=0;knob.style.transform='';root.querySelectorAll('.pressed').forEach(b=>b.classList.remove('pressed'));};
   window.addEventListener('blur',clear);
   window.addEventListener('resize',clear);
