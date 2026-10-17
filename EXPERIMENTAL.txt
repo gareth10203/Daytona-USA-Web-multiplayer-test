@@ -1,9 +1,8 @@
-DAYTONA USA WEB — REVISION 29 — ADVANCED REVERSE CPU CARS
-Build: daytona-rev-a-central-experimental-29-advanced-cpu
-Host: Direction > Advanced reverse / Expert reverse; CPU cars > On / Off.
-Original CPU drivers use reversed road lines and their original speed profiles.
-Beginner reverse remains players only. Revision 27 countdown included.
-Two-cabinet full race, immediate replay, eight-cabinet local start.
-Production WebGPU + local TURN/UDP WebRTC. 139 unit tests.
-All players need this build. Upload ZIP CONTENTS to GitHub Pages.
-No ROM or test observer included. See docs/REVERSE_ADVANCED_CPU.md.
+DAYTONA USA WEB — REVISION 34 — REVERSE CHECKPOINT GUARD
+Build: daytona-rev-a-central-experimental-34-checkpoint-guard
+Expert and Advanced reverse preserve the halfway validation reference when
+an actual reverse sector interval skips both exact native reference sectors.
+Native checkpoints, finish validation and wrong-direction rejection remain.
+Includes revision 33 complete-geometry protection and all previous settings.
+All players need revision 34. Upload ZIP CONTENTS to GitHub Pages.
+No ROM or test observers included. See docs/EXPERT_CHECKPOINTS.md.

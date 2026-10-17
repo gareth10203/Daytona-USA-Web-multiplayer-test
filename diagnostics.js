@@ -1,5 +1,5 @@
-import {BUILD_ID} from './room-settings.js?v=29-advanced-cpu';
-import {performanceBatch} from './performance-history.js?v=29-advanced-cpu';
+import {BUILD_ID} from './room-settings.js?v=34-checkpoint-guard';
+import {performanceBatch} from './performance-history.js?v=34-checkpoint-guard';
 // Local, bounded measurements. Linked game samples can be shared with the room host.
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {

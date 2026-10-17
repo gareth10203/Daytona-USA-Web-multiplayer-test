@@ -1,9 +1,9 @@
-# Daytona USA Web — Advanced reverse CPU cars — revision 29
+# Daytona USA Web — revisión 34 experimental
 
-Independent extension of revision 28. That version and its ZIP remain intact.
+Corrige una vuelta perdida de Expert inverso: un salto de sectores podía omitir las referencias intermedias que exige el arcade para validar la meta, incluso con todos los checkpoints marcados. La protección ya utilizada en Advanced se extiende a Expert.
 
-Run `npm run serve` and open http://localhost:8111. In the host lobby select **Direction → Advanced reverse** and **CPU cars → On · Arcade grid**. All players must use revision 29. Upload the ZIP contents to GitHub Pages; no ROM is included.
+Se conserva la validación original de checkpoints, vueltas y sentido de marcha, además de la protección gráfica y funciones de la revisión 33. Beginner mantiene su lógica.
 
-Advanced and Expert reverse use the arcade's original CPU drivers with their own reversed road lines, speed profiles, lane changes and recovery cursors. CPU Off remains available. Beginner reverse stays players only and retains the revision 27 countdown correction.
+Ejecutar `node scripts/serve.js dist 8116` y abrir http://localhost:8116. Todos los jugadores deben usar esta revisión. El ZIP es un sitio estático para GitHub Pages, sin ROM. La versión 33 y su ZIP quedan conservados por separado.
 
-See [docs/REVERSE_ADVANCED_CPU.md](docs/REVERSE_ADVANCED_CPU.md) for implementation, checks and experimental limits.
+[Detalles y pruebas](docs/EXPERT_CHECKPOINTS.md).
