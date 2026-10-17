@@ -1,22 +1,22 @@
-import {protectTouchSurface} from './touch-guard.js?v=25-reverse-advanced';
-import {createKeyboardControls} from './keyboard-controls.js?v=25-reverse-advanced';
-import {SimulationClock} from './simulation-clock.js?v=25-reverse-advanced';
-import {nativeTimedState} from './link-timing.js?v=25-reverse-advanced';
-import {linkIdForSeat} from './central-link.js?v=25-reverse-advanced';
-import {createLobbySound} from './lobby-sound.js?v=25-reverse-advanced';
-import { mountDiagnostics } from './diagnostics.js?v=25-reverse-advanced';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=25-reverse-advanced';
-import {createControllerControls} from './controller-controls.js?v=25-reverse-advanced';
-import { createRenderer } from './renderer.js?v=25-reverse-advanced';
-import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=25-reverse-advanced';
-import { createTouchControls } from './touch.js?v=25-reverse-advanced';
-import { createGamepadRumble } from './haptics.js?v=25-reverse-advanced';
-import { loadSettings, saveSettings } from './preferences.js?v=25-reverse-advanced';
-import { createWheelControls } from './wheel-controls.js?v=25-reverse-advanced';
-import { Multiplayer } from './multiplayer.js?v=25-reverse-advanced';
-import { createRoomUI } from './room-ui.js?v=25-reverse-advanced';
-import { mountHostConsole } from './host-console.js?v=25-reverse-advanced';
-import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=25-reverse-advanced';
+import {protectTouchSurface} from './touch-guard.js?v=29-advanced-cpu';
+import {createKeyboardControls} from './keyboard-controls.js?v=29-advanced-cpu';
+import {SimulationClock} from './simulation-clock.js?v=29-advanced-cpu';
+import {nativeTimedState} from './link-timing.js?v=29-advanced-cpu';
+import {linkIdForSeat} from './central-link.js?v=29-advanced-cpu';
+import {createLobbySound} from './lobby-sound.js?v=29-advanced-cpu';
+import { mountDiagnostics } from './diagnostics.js?v=29-advanced-cpu';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=29-advanced-cpu';
+import {createControllerControls} from './controller-controls.js?v=29-advanced-cpu';
+import { createRenderer } from './renderer.js?v=29-advanced-cpu';
+import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=29-advanced-cpu';
+import { createTouchControls } from './touch.js?v=29-advanced-cpu';
+import { createGamepadRumble } from './haptics.js?v=29-advanced-cpu';
+import { loadSettings, saveSettings } from './preferences.js?v=29-advanced-cpu';
+import { createWheelControls } from './wheel-controls.js?v=29-advanced-cpu';
+import { Multiplayer } from './multiplayer.js?v=29-advanced-cpu';
+import { createRoomUI } from './room-ui.js?v=29-advanced-cpu';
+import { mountHostConsole } from './host-console.js?v=29-advanced-cpu';
+import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=29-advanced-cpu';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -58,7 +58,7 @@ const room=new Multiplayer({
   await prepareCabinet(wasm,reloadEngine,config,cancelled);
   if(!wasm._daytona_central_config(linkIdForSeat(config.cabinet,room.members.length),room.members.length))throw Error('Invalid centralized cabinet configuration.');
   if(!wasm._daytona_set_cpu_cars(Number(config.cpuCars)))throw Error('Could not apply the room CPU car setting.');
-  if(!wasm._daytona_set_reverse_course(config.reverseAdvanced?2:config.reverseExpert?1:0))throw Error('Could not apply the circuit direction.');
+  if(!wasm._daytona_set_reverse_course(config.reverseBeginner?3:config.reverseAdvanced?2:config.reverseExpert?1:0))throw Error('Could not apply the circuit direction.');
   renderer.reset();applyGraphics();
  },
  onStart:()=>{wasm._daytona_delivery_mode(1);ui.start.disabled=false;linkStartedAt=performance.now();roomUI.running();void resumeGame();},
@@ -485,7 +485,7 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=25-reverse-advanced'});
+    wasm=await factory({locateFile:(path)=>path+'?v=29-advanced-cpu'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }

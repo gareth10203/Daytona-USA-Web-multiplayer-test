@@ -1,5 +1,7 @@
 # Advanced inverso — revisión 25
 
+Documento histórico. La revisión 29 habilita CPU en Advanced y Expert inversos: véase [REVERSE_ADVANCED_CPU.md](REVERSE_ADVANCED_CPU.md).
+
 Versión independiente de la revisión 24. El empaquetado comprueba por SHA-256 que su código nativo, frontend, distribución, documentación y ZIP permanecen intactos.
 
 ## Implementación

@@ -1,5 +1,5 @@
-import {parseInvitation,invitation} from './room-settings.js?v=25-reverse-advanced';
-import {createLobbyNotifications} from './lobby-notifications.js?v=25-reverse-advanced';
+import {parseInvitation,invitation} from './room-settings.js?v=29-advanced-cpu';
+import {createLobbyNotifications} from './lobby-notifications.js?v=29-advanced-cpu';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
 export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
@@ -45,7 +45,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
  $('copyCode').onclick=action(async()=>{await navigator.clipboard.writeText($('roomCode').textContent);$('roomMessage').textContent='Room code copied.';});
  $('inviteLink').onclick=event=>event.target.select();
  $('returnRoomGame').onclick=()=>$('startBtn').click();
- const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),cpuCars:$('roomCpuCars').value==='true',reverseExpert:$('roomDirection').value==='reverse',reverseAdvanced:$('roomDirection').value==='reverse-advanced',region:'Export'});
+ const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),cpuCars:$('roomCpuCars').value==='true',reverseExpert:$('roomDirection').value==='reverse',reverseAdvanced:$('roomDirection').value==='reverse-advanced',reverseBeginner:$('roomDirection').value==='reverse-beginner',region:'Export'});
  $('roomMode').onchange=change;$('roomDifficulty').onchange=change;$('roomCpuCars').onchange=change;$('roomDirection').onchange=change;
  function markRead(){unread=0;for(const id of ['chatUnread','mobileChatUnread'])$(id).hidden=true;$('newChatMessages').hidden=true;}
  function scrollChat(){const log=$('chatLog');log.scrollTop=log.scrollHeight;markRead();}
@@ -105,9 +105,9 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length} / 8 drivers`;
    const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';$('inviteBlock').hidden=!state.isHost||!state.code;
-   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverseAdvanced?'reverse-advanced':state.settings.reverseExpert?'reverse':'normal';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection'])$(id).disabled=!state.isHost||state.phase!=='lobby';
-   if(state.settings.reverseExpert||state.settings.reverseAdvanced)$('roomCpuCars').disabled=true;
-   $('roomSettingsHint').textContent=(state.settings.reverseExpert||state.settings.reverseAdvanced)?`Experimental: ${state.settings.reverseAdvanced?'Advanced':'Expert'} reverse, standing start, no CPU cars.`:state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
+   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverseBeginner?'reverse-beginner':state.settings.reverseAdvanced?'reverse-advanced':state.settings.reverseExpert?'reverse':'normal';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection'])$(id).disabled=!state.isHost||state.phase!=='lobby';
+   if(state.settings.reverseBeginner)$('roomCpuCars').disabled=true;
+   $('roomSettingsHint').textContent=(state.settings.reverseExpert||state.settings.reverseAdvanced||state.settings.reverseBeginner)?`Experimental: ${state.settings.reverseBeginner?'Beginner':state.settings.reverseAdvanced?'Advanced':'Expert'} reverse, ${state.settings.reverseBeginner?'rolling':'standing'} start, ${!state.settings.reverseBeginner?(state.settings.cpuCars?'CPU cars on.':'players only.'):'no CPU cars.'}`:state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
    $('readyCount').textContent=`${state.members.filter(x=>x.ready).length} ready`;
    renderRoster(state);renderChat(state);
    const nextIDs=new Set(state.pending.map(m=>m.id));if(state.isHost&&state.phase==='lobby'&&state.pending.some(m=>!pendingIDs.has(m.id)))notifyRequest();pendingIDs=nextIDs;

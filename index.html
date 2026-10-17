@@ -3,10 +3,10 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=25-reverse-advanced">
-  <link rel="stylesheet" href="host-console.css?v=25-reverse-advanced">
-  <link rel="stylesheet" href="controller-settings.css?v=25-reverse-advanced">
-  <link rel="stylesheet" href="input-settings.css?v=25-reverse-advanced">
+  <link rel="stylesheet" href="style.css?v=29-advanced-cpu">
+  <link rel="stylesheet" href="host-console.css?v=29-advanced-cpu">
+  <link rel="stylesheet" href="controller-settings.css?v=29-advanced-cpu">
+  <link rel="stylesheet" href="input-settings.css?v=29-advanced-cpu">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -78,7 +78,7 @@
               <div id="pendingBlock" hidden><div class="section-label"><h3>JOIN REQUESTS</h3><div class="request-controls"><span id="pendingCount" aria-live="polite"></span></div></div><ul id="pendingList" class="room-pending"></ul></div>
             </section>
             <aside class="room-sidebar" aria-label="Room options">
-              <fieldset class="room-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label><label for="roomCpuCars" class="cpu-cars-setting">CPU cars<select id="roomCpuCars"><option value="true">On · Arcade grid</option><option value="false">Off · Players only</option></select></label><label for="roomDirection" class="direction-setting">Direction<select id="roomDirection" aria-describedby="roomSettingsHint"><option value="normal">Normal</option><option value="reverse-advanced">Advanced reverse</option><option value="reverse">Expert reverse</option></select></label></div><p class="region-label">Region <strong>Export</strong></p><p id="roomSettingsHint" class="room-hint"></p></fieldset>
+              <fieldset class="room-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label><label for="roomCpuCars" class="cpu-cars-setting">CPU cars<select id="roomCpuCars"><option value="true">On · Arcade grid</option><option value="false">Off · Players only</option></select></label><label for="roomDirection" class="direction-setting">Direction<select id="roomDirection" aria-describedby="roomSettingsHint"><option value="normal">Normal</option><option value="reverse-beginner">Beginner reverse</option><option value="reverse-advanced">Advanced reverse</option><option value="reverse">Expert reverse</option></select></label></div><p class="region-label">Region <strong>Export</strong></p><p id="roomSettingsHint" class="room-hint"></p></fieldset>
               <div id="inviteBlock" class="invite-card" hidden><h3><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>INVITE FRIENDS</h3><label for="inviteLink" class="sr-only">Private invitation link</label><input id="inviteLink" readonly aria-describedby="inviteHint"><div class="invite-actions"><button id="copyRoom" type="button">Copy link</button><button id="copyCode" type="button" class="quiet-btn">Copy code</button></div><span id="roomCode" hidden></span><p id="inviteHint" class="room-hint">Only admitted players can join the grid and chat.</p></div>
               <p id="roomConnection" class="room-connection" role="status" aria-live="polite"></p><p id="arcadeLinkStatus" class="room-hint" hidden></p>
             </aside>
@@ -174,6 +174,6 @@
       </section>
     </div>
   </div>
-  <script src="vendor/peerjs.min.js?v=25-reverse-advanced" defer></script><script src="daytona_engine.js?v=25-reverse-advanced" defer></script><script type="module" src="main.js?v=25-reverse-advanced"></script>
+  <script src="vendor/peerjs.min.js?v=29-advanced-cpu" defer></script><script src="daytona_engine.js?v=29-advanced-cpu" defer></script><script type="module" src="main.js?v=29-advanced-cpu"></script>
 </body>
 </html>

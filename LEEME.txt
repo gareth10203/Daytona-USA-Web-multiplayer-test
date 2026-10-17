@@ -1,3 +1,11 @@
+REVISION 29 — ADVANCED REVERSE CPU CARS
+Host: Advanced reverse / Expert reverse + CPU cars On. All players need revision 29.
+See docs/REVERSE_ADVANCED_CPU.md. Revision 28 is preserved separately.
+
+REVISION 28 — EXPERT REVERSE CPU CARS
+Host: Expert reverse + CPU cars On. All players need revision 28.
+See docs/REVERSE_CPU.md. Revision 27 is preserved separately.
+
 Daytona USA — WebGPU + WebAssembly
 
 Serve this folder with:
@@ -105,3 +113,13 @@ REVISION 25
 Host: Direction > Advanced reverse / Expert reverse. CPU cars OFF.
 Advanced inverse grid, checkpoints, ranking and recovery use the selected direction.
 All players need revision 25. See docs/REVERSE_ADVANCED.md.
+
+REVISION 26
+Host: Direction > Beginner reverse / Advanced reverse / Expert reverse. CPU cars OFF.
+Beginner inverse rolling start uses original 3/2/1/Go and moving handover.
+All players need revision 26. See docs/REVERSE_BEGINNER.md.
+
+REVISION 27
+Host: Direction > Beginner reverse / Advanced reverse / Expert reverse. CPU cars OFF.
+Beginner reverse coordinates original digits, sound and GO through one front-car reference.
+All players need revision 27. See docs/REVERSE_COUNTDOWN.md.

@@ -1,5 +1,5 @@
-import {BUILD_ID} from './room-settings.js?v=25-reverse-advanced';
-import {performanceBatch} from './performance-history.js?v=25-reverse-advanced';
+import {BUILD_ID} from './room-settings.js?v=29-advanced-cpu';
+import {performanceBatch} from './performance-history.js?v=29-advanced-cpu';
 // Local, bounded measurements. Linked game samples can be shared with the room host.
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {
