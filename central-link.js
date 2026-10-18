@@ -18,18 +18,19 @@ export function expandState(compact,count){
  for(let slot=0;slot<8;slot++){const index=slot%count;bytes.set(source.subarray(5+index*SLOT_BYTES,5+(index+1)*SLOT_BYTES),1+slot*SLOT_BYTES);view.setUint32(5+SLOT_BYTES*8+slot*4,old.getUint32(5+count*SLOT_BYTES+index*4,true),true);}
  return bytes.buffer;
 }
+// Transport position is admission order, independent of the selectable car number.
 // Preserve the IDs assigned by RC1's original discovery (slaves count backwards).
 export function linkIdForSeat(seat,count){return seat===1?1:count-seat+2;}
 export class HostDistributor {
  constructor(members){
-  if(!Array.isArray(members)||members.length<2||members.length>8||new Set(members.map(m=>m.id)).size!==members.length||members.some((m,i)=>typeof m.id!=='string'||m.cabinet!==i+1))throw Error('Invalid centralized grid.');
+  if(!Array.isArray(members)||members.length<2||members.length>8||members.some(m=>!m)||new Set(members.map(m=>m.id)).size!==members.length||new Set(members.map(m=>m.cabinet)).size!==members.length||members.some(m=>typeof m.id!=='string'||!Number.isInteger(m.cabinet)||m.cabinet<1||m.cabinet>8))throw Error('Invalid centralized grid.');
   this.members=members.map(m=>({...m}));this.samples=new Map();this.sequence=0;this.discarded=0;
  }
  accept(id,frames,bytes,timing=null){
   const member=this.members.find(m=>m.id===id);
   if(!member||!Number.isSafeInteger(frames)||frames<0||!(bytes instanceof ArrayBuffer)||bytes.byteLength!==SAMPLE_BYTES)throw Error('Invalid cabinet sample.');
   const sample=new Uint8Array(bytes);
-  if(sample[0]!==linkIdForSeat(member.cabinet,this.members.length))throw Error('Cabinet sample identity mismatch.');
+  if(sample[0]!==linkIdForSeat(this.members.indexOf(member)+1,this.members.length))throw Error('Cabinet sample identity mismatch.');
   const previous=this.samples.get(id);
   if(previous&&frames<=previous.frames){this.discarded++;return false;}
   this.samples.set(id,{frames,bytes:sample.slice(1,1+SLOT_BYTES),clock:new DataView(bytes).getUint32(1+SLOT_BYTES,true),at:performance.now(),timing});return true;

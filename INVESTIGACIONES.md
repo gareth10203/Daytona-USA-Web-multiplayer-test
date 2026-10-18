@@ -1,6 +1,61 @@
 # Investigaciones y documentación de Daytona USA Web
 
-Documento único de la revisión 35: reúne las investigaciones, notas de implementación, pruebas y resultados originales. Las conclusiones y límites de cada etapa se conservan; las notas de versiones anteriores son históricas y no describen necesariamente el comportamiento actual.
+<a id="webgl2-fallback"></a>
+
+## Revisión 36 — fallback WebGL2
+
+La aplicación prefiere WebGPU y utiliza WebGL2 si WebGPU no está disponible o falla durante la inicialización. La selección se hace antes de comprometer el canvas visible: WebGPU inicializa y valida sus recursos en un canvas de prueba, libera el dispositivo si falla y sólo se conecta al canvas visible al terminar correctamente. El backend activo se indica en Settings → Graphics.
+
+Para comparar manualmente: `?renderer=webgl2` fuerza WebGL2; `?renderer=webgpu` fuerza WebGPU; sin parámetro o con `?renderer=auto` se aplica la detección automática. Forzar una API implica mostrar su error si no arranca, en lugar de ocultarlo con otro backend.
+
+### Implementación y protecciones
+
+- Se reutiliza el WASM de producción de la revisión 35, sin recompilar ni modificar física, reloj, audio, comunicaciones, generación de geometría o ajustes de carrera. SHA-256: `7475cfc3fbb58d4f5ae89ff19dcdcc0a62ea67ec18bae1bcfa9bd5040d447c77`.
+- Las texturas originales y tablas de iluminación/color se almacenan en texturas enteras `R32UI`, con lecturas exactas mediante `texelFetch`. Se mantienen las reglas de textura comprimida, mipmaps, transparencia, reflejo de coordenadas y tramado.
+- Fondo y HUD se componen en GPU mediante un shader de fragmentos con dos salidas `RGBA8`, a 496×384. No se devuelve a CPU la composición proporcional al ancho de la pantalla. Se conserva la colocación del HUD y la escala posterior en GPU.
+- La profundidad usa un framebuffer explícito con `DEPTH_COMPONENT32F`, seguido de una copia de color al canvas. Esto conserva el formato de profundidad y añade un destino de color y un blit respecto a WebGPU; no se presupone el mismo coste o memoria en todos los dispositivos.
+- Se mantienen las generaciones de texturas y las páginas de 4 KiB modificadas. Reset, cambio de módulo o de heap invalidan los datos apropiados. Las presentaciones repetidas del mismo estado no vuelven a subir texturas ni vértices.
+- La cola se limita a tres presentaciones, con fences consultados sin espera. El runtime no utiliza `finish`, `readPixels` ni esperas bloqueantes para sincronizar la GPU. Los readbacks pertenecen exclusivamente a los tests.
+- Al perder el contexto WebGL2 se detiene el dibujo y se recrean programas, texturas, framebuffers y buffers al recuperarse. Se fuerza una carga completa del estado vigente, aunque no haya avanzado el contador nativo. La simulación y el audio pueden continuar durante una recuperación breve; si el contexto no se recupera en ocho segundos, se utiliza la ruta de error de la aplicación. No se cambia de API en mitad de una carrera.
+- Los recursos de una inicialización fallida, un cambio de tamaño o un cierre explícito se liberan. Los recursos de un contexto perdido se descartan antes de reconstruirlo.
+- Se corrigieron los límites enteros de la imagen vertical: la primera implementación dibujaba una fila extra al pie del viewport. Se verificó también con dimensiones impares.
+
+### Comparación visual y límites numéricos
+
+`webgl2-fixtures.cjs` pasa 16 patrones frente a una referencia escalar independiente de las reglas System-24: máscaras, prioridades, scroll, capas deshabilitadas, modos de separación, HUD desplazado, cambio de heap y tamaños verticales/horizontales. Las diferencias máximas son de un nivel por canal en algunas interpolaciones; los casos de ventanas verticales coinciden exactamente.
+
+`webgl2-model-fixtures.cjs` pasa 18 casos controlados, con coordenadas exactamente representables, para geometría sólida, tramado, texturas, transparencia, espejo, cambio de hoja, mipmaps, detalle, profundidad, recorte, vaciado de geometría, reset, cambio de heap y generación de texturas. También comprueba cero subidas de texturas y buffers al repetir presentaciones sin avanzar.
+
+No se afirma igualdad píxel por píxel entre APIs en el juego real. La interpolación y rasterización pueden seleccionar muestras adyacentes cerca de límites numéricos; una prueba sintética con coordenadas sensibles reprodujo diferencias mayores de color al cambiar el índice de una paleta. Se conservó su informe para describir ese límite, en vez de tratarlo como una validación exacta.
+
+`webgl2-parity.cjs` compara 33 estados del mismo módulo de producción sin avanzar la simulación entre las imágenes: arranque, attract, Clásico, panorámico, vertical, ultraancho, reset, cambio de heap, selección y carreras de los tres circuitos en ambos sentidos, y restauración del contexto. El peor caso observado cambia 244 píxeles de 761856 (aproximadamente 0,032 %); el promedio máximo de diferencia por canal es 0,00242 sobre 255. Algunos píxeles de borde tienen diferencias altas, por lo que se registra el estado `PASS_WITH_RASTER_DIFFERENCES`, no paridad exacta. El test establece los límites de 0,1 % de píxeles distintos y diferencia media por canal de 0,01. Las pruebas controladas independientes conservan límites más estrictos.
+
+### Rendimiento medido localmente
+
+Chrome 155 de Windows, NVIDIA GeForce GTX 1660 Ti (ANGLE/D3D11 para WebGL2), aplicación real en Single Player y audio activo. Doce intervalos de ocho segundos, con dos repeticiones por perfil/API e inversión del orden. Antes de medir se adelanta el arranque nativo con entradas normales y se deja estabilizar la aplicación durante 2,5 segundos. Durante las ventanas medidas se utiliza el reloj normal en tiempo real.
+
+| Perfil | Hilo principal WebGPU | Hilo principal WebGL2 | p95 de CPU de dibujo WebGPU / WebGL2 |
+|---|---:|---:|---:|
+| Clásico, viewport 1280×720 | 20.7 % | 18.7 % | 0.75 / 0.40 ms |
+| Resolución completa, 1280×720, 1x | 23.7 % | 21.6 % | 0.80 / 0.50 ms |
+| Ultraancho, 5760×1080, 2x | 24.0 % | 23.2 % | 0.80 / 0.50 ms |
+
+La ocupación del hilo principal se calcula con `TaskDuration` de Chrome: no representa el uso global de CPU ni mide el tiempo interno de GPU. El tiempo de dibujo incluye preparación visual y envío de comandos, no la ejecución completa en GPU. En este equipo los resultados son cercanos, con menor ocupación del hilo principal observada para WebGL2; esto no establece una ventaja universal de WebGL2.
+
+Ambas APIs mantuvieron aproximadamente 57,5 pasos/s y unas 75 presentaciones/s, con prácticamente todos los estados nuevos representados. El p95 de los intervalos RAF fue 13,4–13,5 ms. Hubo un intervalo superior a 25 ms en una repetición de Clásico/WebGPU y ninguno en las otras once ventanas. El contexto de audio se mantuvo activo; no se realizó una captura acústica. Los viewports ultraanchos no certifican tres monitores físicos. Faltan validación sostenida en hardware sin WebGPU y pruebas físicas en Safari/iPhone/Android.
+
+### Arranque, interfaz y multiplayer
+
+`webgl2-startup.cjs` pasa siete casos: automático con WebGPU, WebGL2 forzado, ausencia de WebGPU, ausencia de adaptador, dispositivo rechazado, shader WGSL inválido y fallo de ambas APIs. En el último caso muestra una causa de arranque clara y no produce el error de acceso a `reset` sobre un valor nulo al seleccionar la ROM.
+
+La prueba de interfaz de Single Player pasa sobre WebGL2: ajustes, reanudación, reinicio, memoria de preferencias y navegación. `menu-navigation.cjs` mantiene las pantallas de Multiplayer sin botones de Single Player o reanudar mezclados. Las 139 pruebas de JavaScript siguen aprobadas.
+
+`webgl2-mixed-room.cjs` crea dos sesiones reales con PeerJS y un relay TURN local de prueba sin pérdida añadida: host WebGPU/invitado WebGL2 y el orden contrario. Ambas inicializan el enlace nativo con dos cabinas, avanzan 127 pasos por cabina durante la observación de unos 2,2 segundos y vuelven al lobby correctamente. Abrir el menú conserva sólo las acciones de sala y RETURN TO GAME. Son comprobaciones locales de integración; no validan una carrera WAN prolongada ni todos los perfiles de latencia.
+
+Los informes y capturas de prueba quedan en `build/` del proyecto fuente, fuera del ZIP público. Se conservan las versiones y ZIP anteriores. Referencia de API: [WebGL 2 de Khronos](https://registry.khronos.org/webgl/specs/2.0.0/).
+
+
+Archivo acumulado de las revisiones 35 y 36: reúne las investigaciones, notas de implementación, pruebas y resultados originales. Las conclusiones y límites de cada etapa se conservan; las notas de versiones anteriores son históricas y no describen necesariamente el comportamiento actual.
 
 ## Accesos rápidos
 
@@ -83069,3 +83124,4762 @@ Origen: `docs/WASM_O2_RESULTS.json`. SHA-256 original: `55c0986cce6500566ce33945
 }
 ```
 <!-- END doc-wasm-o2-results -->
+
+<!-- WEBGL2 FINAL RECEIPTS -->
+
+## Anexos completos de pruebas — revisión 36
+
+### webgl2-fixtures
+
+SHA-256 del informe original: `d7cd3958de68cd89ad7ef13f98655b2d12ee78920e67a8903876e08afd3080c1`.
+
+```json
+{
+  "status": "PASS",
+  "scope": "Deterministic shader fixtures, scalar reference of original System-24 rules; not a substitute for real-ROM parity.",
+  "results": [
+    {
+      "name": "normal-windows",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "normal-line-scroll",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "disabled-layer",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "split-vertical",
+      "differentChannels": 33,
+      "maxDelta": 1
+    },
+    {
+      "name": "split-vertical-line",
+      "differentChannels": 36,
+      "maxDelta": 1
+    },
+    {
+      "name": "split-horizontal",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "split-horizontal-line",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "split-mode3",
+      "differentChannels": 53,
+      "maxDelta": 1
+    },
+    {
+      "name": "split-mode3-line",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "relocated-hud",
+      "differentChannels": 61,
+      "maxDelta": 1
+    },
+    {
+      "name": "relocated-hud-line",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "renderer-reset",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "heap-replacement",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "viewport-390x844",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "viewport-386x843",
+      "differentChannels": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "viewport-844x390",
+      "differentChannels": 0,
+      "maxDelta": 0
+    }
+  ],
+  "failures": [],
+  "errors": []
+}
+```
+
+### webgl2-model-fixtures
+
+SHA-256 del informe original: `82bfbde4aa3f9ec0999a9ba9cf0c80f7c62e65a5a686dd4e8c58d5a3d5eeae66`.
+
+```json
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "name": "solid",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "solid-dither",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "texture",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "transparent",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "mirror-u",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "mirror-v",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "mirror-both",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "texture-sheet-swap",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "mip-level1",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "mip-blend",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "detail",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "transparent-dither",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "depth-order",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "scissor",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "empty-after-geometry",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "reset-with-unchanged-frame",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "replacement-heap-same-frame",
+      "different": 0,
+      "maxDelta": 0
+    },
+    {
+      "name": "texture-generation-change",
+      "different": 0,
+      "maxDelta": 0
+    }
+  ],
+  "errors": [],
+  "repeatedPresentation": {
+    "textureUploads": 0,
+    "bufferUploads": 0
+  }
+}
+```
+
+### webgl2-startup
+
+SHA-256 del informe original: `875d85f85d24daf546bc968445a12bf8d3530bc0c27c378b701772acbc21a72e`.
+
+```json
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "scenario": "auto",
+      "status": "Engine ready",
+      "backend": "WebGPU",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "forced-gl",
+      "status": "Engine ready",
+      "backend": "WebGL2",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "missing-gpu",
+      "status": "Engine ready",
+      "backend": "WebGL2",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "missing-adapter",
+      "status": "Engine ready",
+      "backend": "WebGL2",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "device-rejected",
+      "status": "Engine ready",
+      "backend": "WebGL2",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "invalid-wgsl",
+      "status": "Engine ready",
+      "backend": "WebGL2",
+      "message": "Choose your ROM to bring the arcade to life."
+    },
+    {
+      "scenario": "both-failed",
+      "status": "Error",
+      "backend": "Detecting…",
+      "message": "Could not start the arcade engine: WebGPU unavailable (WebGPU requires a compatible browser and HTTPS or localhost.). WebGL2: WebGL2 shader: ERROR: 0:1: 'Invalid' : syntax error\n"
+    }
+  ],
+  "errors": [],
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "webgpu": {
+      "vendor": "nvidia",
+      "architecture": "turing",
+      "description": ""
+    },
+    "webgl2": {
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 Ti (0x00002182) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "maxTexture": 16384,
+      "maxRenderbuffer": 16384
+    }
+  }
+}
+```
+
+### webgl2-parity
+
+SHA-256 del informe original: `5464ccb5870e42fab7d4600db7cf4d793114639898ee8e4bea81f561f7ea7553`.
+
+```json
+{
+  "status": "PASS_WITH_RASTER_DIFFERENCES",
+  "cases": [
+    {
+      "name": "startup-attract-30-0",
+      "frame": 31,
+      "width": 992,
+      "height": 768,
+      "vertices": 0,
+      "batches": 0,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "startup-attract-120-1",
+      "frame": 151,
+      "width": 992,
+      "height": 768,
+      "vertices": 0,
+      "batches": 0,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "startup-attract-450-2",
+      "frame": 601,
+      "width": 992,
+      "height": 768,
+      "vertices": 3171,
+      "batches": 1,
+      "differentPixels": 19,
+      "differentChannels": 57,
+      "channelsOverOne": 57,
+      "maxDelta": 8,
+      "meanDelta": 0.00016582311267921148
+    },
+    {
+      "name": "startup-attract-1000-3",
+      "frame": 1601,
+      "width": 992,
+      "height": 768,
+      "vertices": 2703,
+      "batches": 1,
+      "differentPixels": 49,
+      "differentChannels": 128,
+      "channelsOverOne": 113,
+      "maxDelta": 8,
+      "meanDelta": 0.0002773927531362007
+    },
+    {
+      "name": "startup-attract-600-4",
+      "frame": 2201,
+      "width": 992,
+      "height": 768,
+      "vertices": 8469,
+      "batches": 1,
+      "differentPixels": 46,
+      "differentChannels": 110,
+      "channelsOverOne": 92,
+      "maxDelta": 134,
+      "meanDelta": 0.0006720430107526882
+    },
+    {
+      "name": "startup-attract-600-5",
+      "frame": 2801,
+      "width": 992,
+      "height": 768,
+      "vertices": 4296,
+      "batches": 1,
+      "differentPixels": 11,
+      "differentChannels": 32,
+      "channelsOverOne": 22,
+      "maxDelta": 8,
+      "meanDelta": 0.00006125392025089605
+    },
+    {
+      "name": "format-496x384",
+      "frame": 2802,
+      "width": 496,
+      "height": 384,
+      "vertices": 4320,
+      "batches": 1,
+      "differentPixels": 7,
+      "differentChannels": 21,
+      "channelsOverOne": 19,
+      "maxDelta": 8,
+      "meanDelta": 0.0001785114247311828
+    },
+    {
+      "name": "format-1280x720",
+      "frame": 2803,
+      "width": 1280,
+      "height": 720,
+      "vertices": 4584,
+      "batches": 1,
+      "differentPixels": 88,
+      "differentChannels": 247,
+      "channelsOverOne": 238,
+      "maxDelta": 8,
+      "meanDelta": 0.0005714699074074074
+    },
+    {
+      "name": "format-390x844",
+      "frame": 2804,
+      "width": 390,
+      "height": 844,
+      "vertices": 4434,
+      "batches": 1,
+      "differentPixels": 7,
+      "differentChannels": 21,
+      "channelsOverOne": 21,
+      "maxDelta": 8,
+      "meanDelta": 0.00014683841698059707
+    },
+    {
+      "name": "format-5760x1080",
+      "frame": 2805,
+      "width": 5760,
+      "height": 1080,
+      "vertices": 5997,
+      "batches": 1,
+      "differentPixels": 394,
+      "differentChannels": 1066,
+      "channelsOverOne": 872,
+      "maxDelta": 50,
+      "meanDelta": 0.00024873542524005485
+    },
+    {
+      "name": "format-1600x120",
+      "frame": 2806,
+      "width": 1600,
+      "height": 120,
+      "vertices": 5994,
+      "batches": 1,
+      "differentPixels": 12,
+      "differentChannels": 34,
+      "channelsOverOne": 22,
+      "maxDelta": 8,
+      "meanDelta": 0.00019618055555555556
+    },
+    {
+      "name": "format-992x768",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "reset-same-frame",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "heap-view-replacement",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "selection-0-false",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7584,
+      "batches": 1,
+      "differentPixels": 2,
+      "differentChannels": 6,
+      "channelsOverOne": 6,
+      "maxDelta": 8,
+      "meanDelta": 0.000017938648073476702
+    },
+    {
+      "name": "race-0-false-15",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 6381,
+      "batches": 1,
+      "differentPixels": 244,
+      "differentChannels": 438,
+      "channelsOverOne": 434,
+      "maxDelta": 255,
+      "meanDelta": 0.0024155920978942654
+    },
+    {
+      "name": "race-0-false-16",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 5673,
+      "batches": 1,
+      "differentPixels": 21,
+      "differentChannels": 57,
+      "channelsOverOne": 47,
+      "maxDelta": 84,
+      "meanDelta": 0.00016451052867383513
+    },
+    {
+      "name": "selection-50-false",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7590,
+      "batches": 1,
+      "differentPixels": 1,
+      "differentChannels": 3,
+      "channelsOverOne": 3,
+      "maxDelta": 8,
+      "meanDelta": 0.000010500672043010754
+    },
+    {
+      "name": "race-50-false-18",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 8106,
+      "batches": 1,
+      "differentPixels": 17,
+      "differentChannels": 48,
+      "channelsOverOne": 46,
+      "maxDelta": 9,
+      "meanDelta": 0.00013344604054659498
+    },
+    {
+      "name": "race-50-false-19",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 6342,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 149,
+      "channelsOverOne": 137,
+      "maxDelta": 8,
+      "meanDelta": 0.0003662109375
+    },
+    {
+      "name": "selection-100-false",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7596,
+      "batches": 1,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "race-100-false-21",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 9069,
+      "batches": 1,
+      "differentPixels": 9,
+      "differentChannels": 26,
+      "channelsOverOne": 26,
+      "maxDelta": 8,
+      "meanDelta": 0.00008181773633512545
+    },
+    {
+      "name": "race-100-false-22",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 10476,
+      "batches": 1,
+      "differentPixels": 13,
+      "differentChannels": 39,
+      "channelsOverOne": 39,
+      "maxDelta": 8,
+      "meanDelta": 0.0001303833445340502
+    },
+    {
+      "name": "selection-0-true",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7584,
+      "batches": 1,
+      "differentPixels": 2,
+      "differentChannels": 6,
+      "channelsOverOne": 6,
+      "maxDelta": 8,
+      "meanDelta": 0.000017938648073476702
+    },
+    {
+      "name": "race-0-true-24",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 7470,
+      "batches": 1,
+      "differentPixels": 20,
+      "differentChannels": 53,
+      "channelsOverOne": 45,
+      "maxDelta": 56,
+      "meanDelta": 0.00017938648073476704
+    },
+    {
+      "name": "race-0-true-25",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 6999,
+      "batches": 1,
+      "differentPixels": 59,
+      "differentChannels": 144,
+      "channelsOverOne": 119,
+      "maxDelta": 64,
+      "meanDelta": 0.00032595836133512545
+    },
+    {
+      "name": "selection-50-true",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7590,
+      "batches": 1,
+      "differentPixels": 1,
+      "differentChannels": 3,
+      "channelsOverOne": 3,
+      "maxDelta": 8,
+      "meanDelta": 0.000010500672043010754
+    },
+    {
+      "name": "race-50-true-27",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 10179,
+      "batches": 1,
+      "differentPixels": 47,
+      "differentChannels": 136,
+      "channelsOverOne": 129,
+      "maxDelta": 9,
+      "meanDelta": 0.00037496149753584227
+    },
+    {
+      "name": "race-50-true-28",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 6513,
+      "batches": 1,
+      "differentPixels": 30,
+      "differentChannels": 87,
+      "channelsOverOne": 84,
+      "maxDelta": 8,
+      "meanDelta": 0.00021920152889784946
+    },
+    {
+      "name": "selection-100-true",
+      "frame": 1330,
+      "width": 992,
+      "height": 768,
+      "vertices": 7596,
+      "batches": 1,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "race-100-true-30",
+      "frame": 2230,
+      "width": 992,
+      "height": 768,
+      "vertices": 10011,
+      "batches": 1,
+      "differentPixels": 37,
+      "differentChannels": 92,
+      "channelsOverOne": 92,
+      "maxDelta": 216,
+      "meanDelta": 0.0004117138496863799
+    },
+    {
+      "name": "race-100-true-31",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 12084,
+      "batches": 1,
+      "differentPixels": 15,
+      "differentChannels": 44,
+      "channelsOverOne": 44,
+      "maxDelta": 8,
+      "meanDelta": 0.00013825884856630825
+    },
+    {
+      "name": "restored-context-same-state",
+      "frame": 3130,
+      "width": 992,
+      "height": 768,
+      "vertices": 12084,
+      "batches": 1,
+      "differentPixels": 15,
+      "differentChannels": 44,
+      "channelsOverOne": 44,
+      "maxDelta": 8,
+      "meanDelta": 0.00013825884856630825
+    }
+  ],
+  "errors": [],
+  "engineSha256": "7475cfc3fbb58d4f5ae89ff19dcdcc0a62ea67ec18bae1bcfa9bd5040d447c77",
+  "acceptance": {
+    "maximumDifferentPixelFraction": 0.001,
+    "maximumMeanChannelDelta": 0.01
+  }
+}
+```
+
+### webgl2-recovery-smoke
+
+SHA-256 del informe original: `814b29e36a843488de5d9ced8630bd5d2d09983b7f57db623f7b7c57c54930fd`.
+
+```json
+{
+  "status": "PASS_WITH_RASTER_DIFFERENCES",
+  "cases": [
+    {
+      "name": "startup-attract-30-0",
+      "frame": 31,
+      "width": 992,
+      "height": 768,
+      "vertices": 0,
+      "batches": 0,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "startup-attract-120-1",
+      "frame": 151,
+      "width": 992,
+      "height": 768,
+      "vertices": 0,
+      "batches": 0,
+      "differentPixels": 0,
+      "differentChannels": 0,
+      "channelsOverOne": 0,
+      "maxDelta": 0,
+      "meanDelta": 0
+    },
+    {
+      "name": "startup-attract-450-2",
+      "frame": 601,
+      "width": 992,
+      "height": 768,
+      "vertices": 3171,
+      "batches": 1,
+      "differentPixels": 19,
+      "differentChannels": 57,
+      "channelsOverOne": 57,
+      "maxDelta": 8,
+      "meanDelta": 0.00016582311267921148
+    },
+    {
+      "name": "startup-attract-1000-3",
+      "frame": 1601,
+      "width": 992,
+      "height": 768,
+      "vertices": 2703,
+      "batches": 1,
+      "differentPixels": 49,
+      "differentChannels": 128,
+      "channelsOverOne": 113,
+      "maxDelta": 8,
+      "meanDelta": 0.0002773927531362007
+    },
+    {
+      "name": "startup-attract-600-4",
+      "frame": 2201,
+      "width": 992,
+      "height": 768,
+      "vertices": 8469,
+      "batches": 1,
+      "differentPixels": 46,
+      "differentChannels": 110,
+      "channelsOverOne": 92,
+      "maxDelta": 134,
+      "meanDelta": 0.0006720430107526882
+    },
+    {
+      "name": "startup-attract-600-5",
+      "frame": 2801,
+      "width": 992,
+      "height": 768,
+      "vertices": 4296,
+      "batches": 1,
+      "differentPixels": 11,
+      "differentChannels": 32,
+      "channelsOverOne": 22,
+      "maxDelta": 8,
+      "meanDelta": 0.00006125392025089605
+    },
+    {
+      "name": "format-496x384",
+      "frame": 2802,
+      "width": 496,
+      "height": 384,
+      "vertices": 4320,
+      "batches": 1,
+      "differentPixels": 7,
+      "differentChannels": 21,
+      "channelsOverOne": 19,
+      "maxDelta": 8,
+      "meanDelta": 0.0001785114247311828
+    },
+    {
+      "name": "format-1280x720",
+      "frame": 2803,
+      "width": 1280,
+      "height": 720,
+      "vertices": 4584,
+      "batches": 1,
+      "differentPixels": 88,
+      "differentChannels": 247,
+      "channelsOverOne": 238,
+      "maxDelta": 8,
+      "meanDelta": 0.0005714699074074074
+    },
+    {
+      "name": "format-390x844",
+      "frame": 2804,
+      "width": 390,
+      "height": 844,
+      "vertices": 4434,
+      "batches": 1,
+      "differentPixels": 7,
+      "differentChannels": 21,
+      "channelsOverOne": 21,
+      "maxDelta": 8,
+      "meanDelta": 0.00014683841698059707
+    },
+    {
+      "name": "format-5760x1080",
+      "frame": 2805,
+      "width": 5760,
+      "height": 1080,
+      "vertices": 5997,
+      "batches": 1,
+      "differentPixels": 394,
+      "differentChannels": 1066,
+      "channelsOverOne": 872,
+      "maxDelta": 50,
+      "meanDelta": 0.00024873542524005485
+    },
+    {
+      "name": "format-1600x120",
+      "frame": 2806,
+      "width": 1600,
+      "height": 120,
+      "vertices": 5994,
+      "batches": 1,
+      "differentPixels": 12,
+      "differentChannels": 34,
+      "channelsOverOne": 22,
+      "maxDelta": 8,
+      "meanDelta": 0.00019618055555555556
+    },
+    {
+      "name": "format-992x768",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "reset-same-frame",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "heap-view-replacement",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    },
+    {
+      "name": "restored-context-same-state",
+      "frame": 2807,
+      "width": 992,
+      "height": 768,
+      "vertices": 4365,
+      "batches": 1,
+      "differentPixels": 51,
+      "differentChannels": 129,
+      "channelsOverOne": 117,
+      "maxDelta": 142,
+      "meanDelta": 0.0005718490983422939
+    }
+  ],
+  "errors": [],
+  "engineSha256": "7475cfc3fbb58d4f5ae89ff19dcdcc0a62ea67ec18bae1bcfa9bd5040d447c77",
+  "acceptance": {
+    "maximumDifferentPixelFraction": 0.001,
+    "maximumMeanChannelDelta": 0.01
+  }
+}
+```
+
+### webgl2-live-benchmark
+
+SHA-256 del informe original: `c2a740480c16121d65668dab7520505a4c318d850e2546c5c74aaa889f4dc011`.
+
+```json
+{
+  "status": "PASS",
+  "runs": [
+    {
+      "round": 0,
+      "profile": {
+        "name": "classic",
+        "width": 1280,
+        "height": 720,
+        "distance": 0
+      },
+      "elapsedMs": 8004.70000000298,
+      "simulationHz": 57.591165190429166,
+      "presentations": 596,
+      "distinctStates": 460,
+      "drawCpuMedian": 0.29999999701976776,
+      "drawCpuP95": 0.6000000089406967,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 1,
+      "backlogMs": 11.579999991059097,
+      "state": {
+        "running": true,
+        "enhanced": false,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 0,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 496,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 20.044598798198592
+    },
+    {
+      "round": 0,
+      "profile": {
+        "name": "classic",
+        "width": 1280,
+        "height": 720,
+        "distance": 0
+      },
+      "elapsedMs": 8013.20000000596,
+      "simulationHz": 57.65486946533924,
+      "presentations": 601,
+      "distinctStates": 462,
+      "drawCpuMedian": 0.20000000298023224,
+      "drawCpuP95": 0.4000000059604645,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 10.179999999999794,
+      "state": {
+        "running": true,
+        "enhanced": false,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 0,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 496,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 18.619303149788976
+    },
+    {
+      "round": 0,
+      "profile": {
+        "name": "full",
+        "width": 1280,
+        "height": 720,
+        "distance": 1
+      },
+      "elapsedMs": 8000.699999997021,
+      "simulationHz": 57.619958253674255,
+      "presentations": 598,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.5,
+      "drawCpuP95": 0.9000000059604645,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 13.880000002980026,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 1,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 682,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 24.608121789352595
+    },
+    {
+      "round": 0,
+      "profile": {
+        "name": "full",
+        "width": 1280,
+        "height": 720,
+        "distance": 1
+      },
+      "elapsedMs": 8008.79999999404,
+      "simulationHz": 57.561682149678234,
+      "presentations": 598,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.20000000298023224,
+      "drawCpuP95": 0.5,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.5,
+      "rafOver25ms": 0,
+      "backlogMs": 7.979999997019561,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 1,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 682,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 21.92006293079246
+    },
+    {
+      "round": 0,
+      "profile": {
+        "name": "ultrawide",
+        "width": 5760,
+        "height": 1080,
+        "distance": 2
+      },
+      "elapsedMs": 8003.0000000029795,
+      "simulationHz": 57.6033987254565,
+      "presentations": 600,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.5,
+      "drawCpuP95": 0.7999999970197678,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.5,
+      "rafOver25ms": 0,
+      "backlogMs": 12.264000002980026,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 2,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1406,
+        "width": 2048,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 24.224565787820545
+    },
+    {
+      "round": 0,
+      "profile": {
+        "name": "ultrawide",
+        "width": 5760,
+        "height": 1080,
+        "distance": 2
+      },
+      "elapsedMs": 8004.40000000894,
+      "simulationHz": 57.59332367191609,
+      "presentations": 599,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.29999999701976776,
+      "drawCpuP95": 0.5,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.5,
+      "rafOver25ms": 0,
+      "backlogMs": 12.863999997019562,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 2,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 2048,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 22.78087052118789
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "classic",
+        "width": 1280,
+        "height": 720,
+        "distance": 0
+      },
+      "elapsedMs": 8002.5000000029795,
+      "simulationHz": 57.60699781316193,
+      "presentations": 600,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.20000000298023224,
+      "drawCpuP95": 0.4000000059604645,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 16.86399999701956,
+      "state": {
+        "running": true,
+        "enhanced": false,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 0,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1406,
+        "width": 496,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 18.81423305216419
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "classic",
+        "width": 1280,
+        "height": 720,
+        "distance": 0
+      },
+      "elapsedMs": 8003.4999999970205,
+      "simulationHz": 57.59980008748318,
+      "presentations": 600,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.4000000059604645,
+      "drawCpuP95": 0.8999999910593033,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 6.679999999999794,
+      "state": {
+        "running": true,
+        "enhanced": false,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 0,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 496,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 21.41400637222013
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "full",
+        "width": 1280,
+        "height": 720,
+        "distance": 1
+      },
+      "elapsedMs": 8001.699999988079,
+      "simulationHz": 57.612757289161905,
+      "presentations": 599,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.20000000298023224,
+      "drawCpuP95": 0.5,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 12.464000005960258,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 1,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1406,
+        "width": 682,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 21.317295074828365
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "full",
+        "width": 1280,
+        "height": 720,
+        "distance": 1
+      },
+      "elapsedMs": 8004.29999999702,
+      "simulationHz": 57.59404320180049,
+      "presentations": 598,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.3999999910593033,
+      "drawCpuP95": 0.7000000029802322,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.5,
+      "rafOver25ms": 0,
+      "backlogMs": 6.78000000894049,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 1,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 682,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 22.805779393584448
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "ultrawide",
+        "width": 5760,
+        "height": 1080,
+        "distance": 2
+      },
+      "elapsedMs": 8003.0999999999985,
+      "simulationHz": 57.60267896190227,
+      "presentations": 597,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.29999999701976776,
+      "drawCpuP95": 0.5,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.5,
+      "rafOver25ms": 0,
+      "backlogMs": 12.463999991059097,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 2,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 2048,
+        "height": 384
+      },
+      "backend": "webgl2",
+      "mainThreadCpuPercent": 23.527920430833056
+    },
+    {
+      "round": 1,
+      "profile": {
+        "name": "ultrawide",
+        "width": 5760,
+        "height": 1080,
+        "distance": 2
+      },
+      "elapsedMs": 8009.5999999940395,
+      "simulationHz": 57.55593288058618,
+      "presentations": 600,
+      "distinctStates": 461,
+      "drawCpuMedian": 0.5,
+      "drawCpuP95": 0.7999999970197678,
+      "rafMedian": 13.300000000001091,
+      "rafP95": 13.400000000001455,
+      "rafOver25ms": 0,
+      "backlogMs": 13.979999997019561,
+      "state": {
+        "running": true,
+        "enhanced": true,
+        "multiplayer": {
+          "diagnosticsEnabled": true,
+          "phase": "idle",
+          "isHost": false,
+          "id": "",
+          "host": "",
+          "code": "",
+          "members": [],
+          "pending": [],
+          "settings": {
+            "mode": 0,
+            "difficulty": 0,
+            "region": "Export",
+            "cpuCars": true,
+            "reverse": false
+          },
+          "error": "",
+          "signaling": true,
+          "awaitingStop": false,
+          "chat": [],
+          "reconnectUntil": 0,
+          "confirming": 0,
+          "readyPending": false,
+          "lastAck": null
+        },
+        "linkState": 0,
+        "linkId": 0,
+        "linkCount": 0,
+        "drawDistance": 2,
+        "volume": 1,
+        "uiVolume": 1,
+        "uiAudioGain": 1,
+        "keyboard": {
+          "left": "ArrowLeft",
+          "right": "ArrowRight",
+          "accel": "ArrowUp",
+          "brake": "ArrowDown",
+          "gear1": "Digit1",
+          "gear2": "Digit2",
+          "gear3": "Digit3",
+          "gear4": "Digit4",
+          "shiftDown": "KeyQ",
+          "shiftUp": "KeyW",
+          "camera1": "KeyA",
+          "camera2": "KeyS",
+          "camera3": "KeyD",
+          "camera4": "KeyF",
+          "coin": "Digit5",
+          "start": "Enter"
+        },
+        "wheel": {
+          "active": false,
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0,
+          "gear": null,
+          "shift": 0
+        },
+        "audioGain": 1,
+        "audioState": "running",
+        "soundMuted": false,
+        "touch": {
+          "steer": 0,
+          "accel": 0,
+          "brake": 0,
+          "buttons": 0
+        },
+        "gear": 1,
+        "ready": true,
+        "frames": 1407,
+        "width": 2048,
+        "height": 384
+      },
+      "backend": "webgpu",
+      "mainThreadCpuPercent": 23.731384838211827
+    }
+  ],
+  "errors": []
+}
+```
+
+### webgl2-mixed-room
+
+SHA-256 del informe original: `98fd7043b65fefdc9515a72edc5243dca3bda321ccb94586c6a7cc6c62ed35f5`.
+
+```json
+{
+  "status": "PASS",
+  "sessions": [
+    {
+      "host": "webgpu",
+      "guest": "webgl2",
+      "nativeLinkReady": true,
+      "frameProgress": [
+        127,
+        127
+      ],
+      "returnToLobby": true
+    },
+    {
+      "host": "webgl2",
+      "guest": "webgpu",
+      "nativeLinkReady": true,
+      "frameProgress": [
+        127,
+        127
+      ],
+      "returnToLobby": true
+    }
+  ],
+  "errors": []
+}
+```
+
+### single-player-browser
+
+SHA-256 del informe original: `60fee41a62c8f18b15f2d59083f81c321010262122eba1b00c3e9335234d9677`.
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Native standalone DELUXE/Export profile: Endurance, Easy, CPU off, free reverse; no room or link",
+    "Changed options explicitly restart; Grand Prix and Hardest verified in native EEPROM; unchanged options resume",
+    "Preferences survive reload; Back/Escape/settings/multiplayer navigation stays exclusive and accessible"
+  ],
+  "errors": [],
+  "layouts": [
+    {
+      "width": 1280,
+      "height": 900,
+      "scrollHeight": 900,
+      "clientHeight": 900,
+      "overflowX": false,
+      "panel": {
+        "x": 180,
+        "y": 128.625,
+        "width": 920,
+        "height": 461.95001220703125,
+        "top": 128.625,
+        "right": 1100,
+        "bottom": 590.5750122070312,
+        "left": 180
+      },
+      "guide": {
+        "x": 150,
+        "y": 612.5750122070312,
+        "width": 980,
+        "height": 244.8000030517578,
+        "top": 612.5750122070312,
+        "right": 1130,
+        "bottom": 857.3750152587891,
+        "left": 150
+      },
+      "parts": [
+        {
+          "name": "entry-heading single-heading",
+          "height": 73.1500015258789,
+          "margin": "0px 0px 16px",
+          "grid": "none"
+        },
+        {
+          "name": "FORM",
+          "height": 372.8000183105469,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-options",
+          "height": 251.1999969482422,
+          "margin": "0px",
+          "grid": "454px 454px"
+        },
+        {
+          "name": "single-race-option",
+          "height": 119.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 119.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 119.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 119.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-footer",
+          "height": 63.400001525878906,
+          "margin": "18px 0px 0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-status",
+          "height": 17,
+          "margin": "9px 0px 0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-saved-note",
+          "height": 11.199999809265137,
+          "margin": "3px 0px 0px",
+          "grid": "none"
+        }
+      ]
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "scrollHeight": 720,
+      "clientHeight": 720,
+      "overflowX": false,
+      "panel": {
+        "x": 180,
+        "y": 94.6500015258789,
+        "width": 920,
+        "height": 390.8999938964844,
+        "top": 94.6500015258789,
+        "right": 1100,
+        "bottom": 485.5499954223633,
+        "left": 180
+      },
+      "guide": {
+        "x": 150,
+        "y": 501.5500183105469,
+        "width": 980,
+        "height": 191.8000030517578,
+        "top": 501.5500183105469,
+        "right": 1130,
+        "bottom": 693.3500213623047,
+        "left": 150
+      },
+      "parts": [
+        {
+          "name": "entry-heading single-heading",
+          "height": 51.10000228881836,
+          "margin": "0px 0px 10px",
+          "grid": "none"
+        },
+        {
+          "name": "FORM",
+          "height": 329.8000183105469,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-options",
+          "height": 224.1999969482422,
+          "margin": "0px",
+          "grid": "455.5px 455.5px"
+        },
+        {
+          "name": "single-race-option",
+          "height": 107.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 107.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 107.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 107.5999984741211,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-footer",
+          "height": 57.400001525878906,
+          "margin": "12px 0px 0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-status",
+          "height": 17,
+          "margin": "5px 0px 0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-saved-note",
+          "height": 11.199999809265137,
+          "margin": "3px 0px 0px",
+          "grid": "none"
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "scrollHeight": 1091,
+      "clientHeight": 844,
+      "overflowX": false,
+      "panel": {
+        "x": 37.400001525878906,
+        "y": 104.4000015258789,
+        "width": 300.3999938964844,
+        "height": 578.7000122070312,
+        "top": 104.4000015258789,
+        "right": 337.7999954223633,
+        "bottom": 683.1000137329102,
+        "left": 37.400001525878906
+      },
+      "guide": {
+        "x": 17,
+        "y": 701.5,
+        "width": 341.20001220703125,
+        "height": 371.6000061035156,
+        "top": 701.5,
+        "right": 358.20001220703125,
+        "bottom": 1073.1000061035156,
+        "left": 17
+      },
+      "parts": [
+        {
+          "name": "entry-heading single-heading",
+          "height": 71.70000457763672,
+          "margin": "0px 0px 16px",
+          "grid": "none"
+        },
+        {
+          "name": "FORM",
+          "height": 491,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-options",
+          "height": 311.20001220703125,
+          "margin": "0px",
+          "grid": "144.2px 144.2px"
+        },
+        {
+          "name": "single-race-option",
+          "height": 149.60000610351562,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 149.60000610351562,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 149.60000610351562,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-option",
+          "height": 149.60000610351562,
+          "margin": "0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-race-footer",
+          "height": 123.20000457763672,
+          "margin": "18px 0px 0px",
+          "grid": "300.4px"
+        },
+        {
+          "name": "single-status",
+          "height": 17,
+          "margin": "9px 0px 0px",
+          "grid": "none"
+        },
+        {
+          "name": "single-saved-note",
+          "height": 9.600000381469727,
+          "margin": "3px 0px 0px",
+          "grid": "none"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### menu-navigation
+
+SHA-256 del informe original: `5b890e13235bfa364e40df5231621b42e788cdc1aa05694efaa3190c74ac34ec`.
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Real standalone session: reopening Multiplayer entry and returning from Settings never exposes Resume or mode selection; Back/Escape restores the selector without resuming",
+    "Room UI fixtures: lobby, preparing, playing, reconnecting and error retain room-only actions, including immediately after running() and reopening the menu"
+  ],
+  "errors": []
+}
+```
+
+<!-- EXPERIMENTAL DISPLAY 37 -->
+## Revisión 37: selección de API y ventana de rendimiento
+
+2026-10-17. Al final de Settings → Experimental, después de volantes: selector Automatic / WebGPU / WebGL2, API activa y ventana de rendimiento. La API se guarda localmente y requiere recargar. El selector actualiza el parámetro renderer de la URL conservando la invitación y otros parámetros; enlaces explícitos siguen teniendo prioridad al arrancar. Reload to apply guarda NVRAM; se bloquea mientras se pertenece a una sala para no cortar una partida compartida. Reabrir exige elegir la ROM de nuevo.
+
+La casilla de rendimiento reutiliza Diagnostics; se sincroniza con Connections y respeta la política de grabación del host. No se cambia la simulación, el transporte, el WASM ni los algoritmos de dibujo. Los benchmarks anteriores pertenecen a la revisión 36 y no se vuelven a atribuir a esta modificación de UI.
+
+Verificación: 139 pruebas unitarias; arranque real de ambas APIs, preferencia persistida, parámetro URL, recarga con hash, bloqueo en sala, fallback sin WebGPU, sincronización de casillas y política del host, partida single player real y diseño de 1280×900 / 390×844. Los estados de sala usados para comprobar los controles son fixtures de UI; esta revisión no añade otra prueba de carrera multiplayer.
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Controls follow wheel setup in requested order; performance overlay and Connections synchronize in both directions and obey room recording policy",
+    "Real WebGPU ↔ WebGL2 startup, persisted choice, explicit URL precedence, Automatic recovery, preserved invitation hash and room reload guard",
+    "Real ROM single-player session shows measured performance during play",
+    "Desktop and mobile layout: no horizontal overflow, API select has 44px touch target, settings panel scrolls to both controls",
+    "Automatic still falls back to WebGL2 without WebGPU"
+  ],
+  "errors": []
+}
+```
+
+<!-- GRAPHICS STRESS 2026-10-18 -->
+## WebGPU frente a WebGL2: resolución, ultraancho y límite de carga
+
+2026-10-18. Revisión 37; Chrome 155 / Windows / GTX 1660 Ti, monitor de 75 Hz. No se modificaron archivos publicados ni el WASM; MANIFEST.sha256 de dist permanece válido. La instrumentación reside únicamente en tests y en rutas temporales de Playwright. Los ZIP 36/37 conservan su contenido.
+
+Se ejecutaron 28 ventanas controladas: siete tamaños, dos APIs y dos rondas, invirtiendo el orden de APIs y tamaños. Se cargó la ROM del usuario en el WASM de producción y se llegó con entradas deterministas a la salida de Expert (cuenta atrás en 1). Después se congeló la simulación en el mismo frame nativo 2230. Cada tamaño conserva el mismo hash de geometría entre las dos APIs y las repeticiones; no se afirma que un display list detenido reproduzca toda la generación dinámica de un circuito ultraancho. Se verificaron las dimensiones efectivas de los canvas para evitar comparar renderizados con distinta escala.
+
+Cada ventana incluye seis segundos de cadencia y CPU sin consultas de GPU y, por separado, dos segundos con temporizadores de GPU. WebGPU usa timestamp-query y suma los pases de render/compute presentes. WebGL2 usa EXT_disjoint_timer_query_webgl2 alrededor del dibujo, incluyendo su copia final de framebuffer. Las lecturas son asíncronas y ninguna muestra registró disjoint. Se mide el coste de cada renderizador actual, no una propiedad intrínseca universal de las APIs. No se incluye el compositor del navegador ni el barrido de pantalla. CPU es TaskDuration del hilo principal de Chrome dividido por tiempo de pared, no CPU global ni utilización de GPU.
+
+El límite común actual es 8192 por lado (dispositivo WebGPU creado con límites predeterminados; WebGL2 informa 16384). No se cambió ese límite ni se rebajó silenciosamente la resolución de una API. 8192×8192 es una carga extrema de laboratorio, no una configuración habitual de tres pantallas.
+
+Promedio de las medianas de tiempo GPU de las dos rondas:
+
+| Tamaño | WebGPU ms/dibujo | WebGL2 ms/dibujo | Dibujo/s WebGPU | Dibujo/s WebGL2 |
+|---|---:|---:|---:|---:|
+| 1920×1080 | 1.94 | 2.62 | 75.0 | 74.7 |
+| 5760×1080 | 2.12 | 3.54 | 75.1 | 75.0 |
+| 8192×1080 | 2.45 | 3.23 | 75.0 | 75.0 |
+| 3840×2160 | 2.85 | 3.37 | 75.0 | 75.0 |
+| 7680×2160 | 3.35 | 4.20 | 75.0 | 75.0 |
+| 7680×4320 | 4.84 | 7.56 | 75.1 | 75.0 |
+| 8192×8192 | 7.28 | 12.47 | 74.6 | 47.3 |
+
+Se añadieron doce ventanas en la aplicación real con audio y reloj de simulación normales: triple 1080p, 8K y 8192×8192, dos APIs y dos rondas invirtiendo su orden. Endurance/Easy sólo se configura en los contextos temporales de prueba para disponer de tiempo. Después de preparar la misma secuencia de Expert se aplican 1,5 segundos de calentamiento y seis segundos de medición, sin consultas GPU. La evolución en tiempo real puede diferir bajo carga; no se usa esta parte como comparación de píxeles o geometría idéntica.
+
+| Tamaño | SIM WebGPU | SIM WebGL2 | Dibujo/s WebGPU | Dibujo/s WebGL2 | Hilo principal WebGPU | Hilo principal WebGL2 |
+|---|---:|---:|---:|---:|---:|---:|
+| 5760×1080 | 57.61 | 57.63 | 75.1 | 75.0 | 28.7% | 27.5% |
+| 7680×4320 | 57.50 | 57.58 | 74.3 | 72.6 | 30.1% | 27.5% |
+| 8192×8192 | 57.60 | 57.64 | 72.4 | 56.9 | 27.6% | 26.0% |
+
+Conclusión: en este equipo el renderizador WebGPU dispone de más margen de GPU, visible especialmente en 8K y 8192×8192. WebGL2 conserva menor coste de hilo principal, pero eso no prueba que sea más rápido cuando limita la GPU. Conservar Automatic → WebGPU preferido y WebGL2 como alternativa resulta respaldado por estas mediciones. No se extrapolan cifras a integradas, móviles o partidas completas prolongadas. Dibujo/s cuenta submissions aceptadas por el renderizador, no fotogramas únicos del juego ni presentaciones físicas verificadas. La simulación original continúa alrededor de 57,52 Hz.
+
+Fuentes de instrumentación: https://registry.khronos.org/webgl/extensions/EXT_disjoint_timer_query_webgl2/ y https://gpuweb.github.io/types/interfaces/GPURenderPassTimestampWrites.html . Scripts reproducibles: tests/graphics-stress.cjs, tests/graphics-stress-profiler.js y tests/graphics-stress-live.cjs. Datos fuente: build/graphics-stress.json y build/graphics-stress-live.json. Agregados:
+
+```json
+{
+  "status": "PASS",
+  "publishedBuildUnchanged": true,
+  "fixedRuns": 28,
+  "liveRuns": 12,
+  "gpuSamples": 4113,
+  "fixed": [
+    {
+      "profile": {
+        "name": "1080p",
+        "w": 1920,
+        "h": 1080
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 1.944288,
+        "drawHzMean": 74.96525845247413,
+        "cpuMainMeanPercent": 2.768081117881474,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 2.619024,
+        "drawHzMean": 74.71315593709826,
+        "cpuMainMeanPercent": 1.9939371787191655,
+        "gpuSamples": 301
+      },
+      "webgpuGpuTimeReductionPercent": 25.76287960705973
+    },
+    {
+      "profile": {
+        "name": "triple-1080p",
+        "w": 5760,
+        "h": 1080
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 2.115648,
+        "drawHzMean": 75.05783449295205,
+        "cpuMainMeanPercent": 2.8580760679359836,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 3.535184,
+        "drawHzMean": 75.04097304200513,
+        "cpuMainMeanPercent": 1.9892352382635217,
+        "gpuSamples": 302
+      },
+      "webgpuGpuTimeReductionPercent": 40.154515295384904
+    },
+    {
+      "profile": {
+        "name": "extreme-wide",
+        "w": 8192,
+        "h": 1080
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 2.454848,
+        "drawHzMean": 75.03972451277863,
+        "cpuMainMeanPercent": 2.81454656361542,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 3.2263200000000003,
+        "drawHzMean": 75.03722745447236,
+        "cpuMainMeanPercent": 1.96957730147227,
+        "gpuSamples": 302
+      },
+      "webgpuGpuTimeReductionPercent": 23.911825237422203
+    },
+    {
+      "profile": {
+        "name": "4k",
+        "w": 3840,
+        "h": 2160
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 2.854208,
+        "drawHzMean": 75.04034876707028,
+        "cpuMainMeanPercent": 2.707691372532029,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 3.372064,
+        "drawHzMean": 75.04784193676588,
+        "cpuMainMeanPercent": 1.9756885200244514,
+        "gpuSamples": 302
+      },
+      "webgpuGpuTimeReductionPercent": 15.357241143703092
+    },
+    {
+      "profile": {
+        "name": "dual-4k",
+        "w": 7680,
+        "h": 2160
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 3.350096,
+        "drawHzMean": 75.04534354857367,
+        "cpuMainMeanPercent": 2.7882121318309583,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 4.1988,
+        "drawHzMean": 75.04222165431122,
+        "cpuMainMeanPercent": 2.041380816218345,
+        "gpuSamples": 302
+      },
+      "webgpuGpuTimeReductionPercent": 20.21301324187863
+    },
+    {
+      "profile": {
+        "name": "8k",
+        "w": 7680,
+        "h": 4320
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 4.8397120000000005,
+        "drawHzMean": 75.05221391909241,
+        "cpuMainMeanPercent": 2.7009499851098226,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 7.561135999999999,
+        "drawHzMean": 75.04909077772254,
+        "cpuMainMeanPercent": 1.9944214382497236,
+        "gpuSamples": 302
+      },
+      "webgpuGpuTimeReductionPercent": 35.99226359636963
+    },
+    {
+      "profile": {
+        "name": "8192-square",
+        "w": 8192,
+        "h": 8192
+      },
+      "webgpu": {
+        "gpuMedianMeanMs": 7.27816,
+        "drawHzMean": 74.63057729242055,
+        "cpuMainMeanPercent": 2.7547110201804164,
+        "gpuSamples": 302
+      },
+      "webgl2": {
+        "gpuMedianMeanMs": 12.473984,
+        "drawHzMean": 47.255017453909,
+        "cpuMainMeanPercent": 1.7155990023810286,
+        "gpuSamples": 188
+      },
+      "webgpuGpuTimeReductionPercent": 41.653284147229954
+    }
+  ],
+  "live": [
+    {
+      "profile": {
+        "name": "triple-1080p",
+        "width": 5760,
+        "height": 1080,
+        "distance": 2
+      },
+      "webgpu": {
+        "simulationHzMean": 57.61241501183774,
+        "drawHzMean": 75.09595135936075,
+        "cpuMainMeanPercent": 28.709898052397207,
+        "maxBacklogMs": 14.311999988078924,
+        "drawCpuP95MeanMs": 0.8000000044703484
+      },
+      "webgl2": {
+        "simulationHzMean": 57.62634076901457,
+        "drawHzMean": 75.03086691670963,
+        "cpuMainMeanPercent": 27.51380370019445,
+        "maxBacklogMs": 10.412000011920782,
+        "drawCpuP95MeanMs": 0.5
+      }
+    },
+    {
+      "profile": {
+        "name": "8k",
+        "width": 7680,
+        "height": 4320,
+        "distance": 2
+      },
+      "webgpu": {
+        "simulationHzMean": 57.496103658170696,
+        "drawHzMean": 74.30411545020604,
+        "cpuMainMeanPercent": 30.054737449191947,
+        "maxBacklogMs": 17.41199999701962,
+        "drawCpuP95MeanMs": 0.8999999985098839
+      },
+      "webgl2": {
+        "simulationHzMean": 57.58031154708296,
+        "drawHzMean": 72.55784923274038,
+        "cpuMainMeanPercent": 27.46966413968998,
+        "maxBacklogMs": 17.812000002980085,
+        "drawCpuP95MeanMs": 0.5
+      }
+    },
+    {
+      "profile": {
+        "name": "8192-square",
+        "width": 8192,
+        "height": 8192,
+        "distance": 2
+      },
+      "webgpu": {
+        "simulationHzMean": 57.601388225855146,
+        "drawHzMean": 72.41793028395082,
+        "cpuMainMeanPercent": 27.60128657001839,
+        "maxBacklogMs": 16.211999994039388,
+        "drawCpuP95MeanMs": 0.8500000014901161
+      },
+      "webgl2": {
+        "simulationHzMean": 57.63834174171741,
+        "drawHzMean": 56.88875106144208,
+        "cpuMainMeanPercent": 26.013180857289452,
+        "maxBacklogMs": 15.41199999701962,
+        "drawCpuP95MeanMs": 0.5
+      }
+    }
+  ]
+}
+```
+
+<!-- CABINET LABEL 38 -->
+## Revisión 38: número público de cabina coherente con el lobby
+
+2026-10-18. El indicador superior y la etiqueta del menú usaban daytona_link_id, que conserva la numeración inversa de descubrimiento de los invitados. Ejemplo de tres cabinas: asientos 1/2/3 corresponden a IDs internos 1/3/2. La configuración CAR NUMBER ya utiliza el asiento de la sala.
+
+Se modifica únicamente createRoomUI.link para resolver el número público desde room.members y room.id. Si todavía no hay identidad de sala, se muestra sólo el total; durante la inicialización se conserva Linking arcade cabinets. Se mantienen los IDs internos, el distribuidor, los paquetes, la configuración nativa y el WASM. Sólo se añade invalidación de caché de recursos para la revisión 38.
+
+Verificación: 35 combinaciones de tamaño/asiento entre dos y ocho jugadores, una renumeración tras salir un invitado, estado de inicialización e identidad todavía ausente. Una sala PeerJS real con tres cabinas y relay local estable alcanza enlace 2, avanza y vuelve al lobby: banners públicos 1/2/3, IDs internos 1/3/2. La captura de la tercera cabina muestra Cabinet 3 / 3 y CAR NUMBER 3 en la pantalla original. 139 pruebas unitarias pasan. No se afirma haber ejecutado ocho juegos reales simultáneos en esta corrección de UI.
+
+```json
+{
+  "status": "PASS",
+  "fixtures": [
+    {
+      "count": 2,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 2",
+      "menu": "Central link · Cabinet 1 / 2"
+    },
+    {
+      "count": 2,
+      "seat": 2,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 2 / 2",
+      "menu": "Central link · Cabinet 2 / 2"
+    },
+    {
+      "count": 3,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 3",
+      "menu": "Central link · Cabinet 1 / 3"
+    },
+    {
+      "count": 3,
+      "seat": 2,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 2 / 3",
+      "menu": "Central link · Cabinet 2 / 3"
+    },
+    {
+      "count": 3,
+      "seat": 3,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 3 / 3",
+      "menu": "Central link · Cabinet 3 / 3"
+    },
+    {
+      "count": 4,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 4",
+      "menu": "Central link · Cabinet 1 / 4"
+    },
+    {
+      "count": 4,
+      "seat": 2,
+      "nativeId": 4,
+      "banner": "Central link · Cabinet 2 / 4",
+      "menu": "Central link · Cabinet 2 / 4"
+    },
+    {
+      "count": 4,
+      "seat": 3,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 3 / 4",
+      "menu": "Central link · Cabinet 3 / 4"
+    },
+    {
+      "count": 4,
+      "seat": 4,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 4 / 4",
+      "menu": "Central link · Cabinet 4 / 4"
+    },
+    {
+      "count": 5,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 5",
+      "menu": "Central link · Cabinet 1 / 5"
+    },
+    {
+      "count": 5,
+      "seat": 2,
+      "nativeId": 5,
+      "banner": "Central link · Cabinet 2 / 5",
+      "menu": "Central link · Cabinet 2 / 5"
+    },
+    {
+      "count": 5,
+      "seat": 3,
+      "nativeId": 4,
+      "banner": "Central link · Cabinet 3 / 5",
+      "menu": "Central link · Cabinet 3 / 5"
+    },
+    {
+      "count": 5,
+      "seat": 4,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 4 / 5",
+      "menu": "Central link · Cabinet 4 / 5"
+    },
+    {
+      "count": 5,
+      "seat": 5,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 5 / 5",
+      "menu": "Central link · Cabinet 5 / 5"
+    },
+    {
+      "count": 6,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 6",
+      "menu": "Central link · Cabinet 1 / 6"
+    },
+    {
+      "count": 6,
+      "seat": 2,
+      "nativeId": 6,
+      "banner": "Central link · Cabinet 2 / 6",
+      "menu": "Central link · Cabinet 2 / 6"
+    },
+    {
+      "count": 6,
+      "seat": 3,
+      "nativeId": 5,
+      "banner": "Central link · Cabinet 3 / 6",
+      "menu": "Central link · Cabinet 3 / 6"
+    },
+    {
+      "count": 6,
+      "seat": 4,
+      "nativeId": 4,
+      "banner": "Central link · Cabinet 4 / 6",
+      "menu": "Central link · Cabinet 4 / 6"
+    },
+    {
+      "count": 6,
+      "seat": 5,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 5 / 6",
+      "menu": "Central link · Cabinet 5 / 6"
+    },
+    {
+      "count": 6,
+      "seat": 6,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 6 / 6",
+      "menu": "Central link · Cabinet 6 / 6"
+    },
+    {
+      "count": 7,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 7",
+      "menu": "Central link · Cabinet 1 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 2,
+      "nativeId": 7,
+      "banner": "Central link · Cabinet 2 / 7",
+      "menu": "Central link · Cabinet 2 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 3,
+      "nativeId": 6,
+      "banner": "Central link · Cabinet 3 / 7",
+      "menu": "Central link · Cabinet 3 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 4,
+      "nativeId": 5,
+      "banner": "Central link · Cabinet 4 / 7",
+      "menu": "Central link · Cabinet 4 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 5,
+      "nativeId": 4,
+      "banner": "Central link · Cabinet 5 / 7",
+      "menu": "Central link · Cabinet 5 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 6,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 6 / 7",
+      "menu": "Central link · Cabinet 6 / 7"
+    },
+    {
+      "count": 7,
+      "seat": 7,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 7 / 7",
+      "menu": "Central link · Cabinet 7 / 7"
+    },
+    {
+      "count": 8,
+      "seat": 1,
+      "nativeId": 1,
+      "banner": "Central link · Cabinet 1 / 8",
+      "menu": "Central link · Cabinet 1 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 2,
+      "nativeId": 8,
+      "banner": "Central link · Cabinet 2 / 8",
+      "menu": "Central link · Cabinet 2 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 3,
+      "nativeId": 7,
+      "banner": "Central link · Cabinet 3 / 8",
+      "menu": "Central link · Cabinet 3 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 4,
+      "nativeId": 6,
+      "banner": "Central link · Cabinet 4 / 8",
+      "menu": "Central link · Cabinet 4 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 5,
+      "nativeId": 5,
+      "banner": "Central link · Cabinet 5 / 8",
+      "menu": "Central link · Cabinet 5 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 6,
+      "nativeId": 4,
+      "banner": "Central link · Cabinet 6 / 8",
+      "menu": "Central link · Cabinet 6 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 7,
+      "nativeId": 3,
+      "banner": "Central link · Cabinet 7 / 8",
+      "menu": "Central link · Cabinet 7 / 8"
+    },
+    {
+      "count": 8,
+      "seat": 8,
+      "nativeId": 2,
+      "banner": "Central link · Cabinet 8 / 8",
+      "menu": "Central link · Cabinet 8 / 8"
+    },
+    {
+      "count": 2,
+      "seat": 2,
+      "nativeId": 2,
+      "renumbered": true,
+      "banner": "Central link · Cabinet 2 / 2",
+      "menu": "Central link · Cabinet 2 / 2"
+    }
+  ],
+  "live": [
+    {
+      "seat": 1,
+      "nativeId": 1,
+      "linkCount": 3,
+      "banner": "Central link · Cabinet 1 / 3",
+      "menu": "Central link · Cabinet 1 / 3",
+      "frame": 415
+    },
+    {
+      "seat": 2,
+      "nativeId": 3,
+      "linkCount": 3,
+      "banner": "Central link · Cabinet 2 / 3",
+      "menu": "Central link · Cabinet 2 / 3",
+      "frame": 415
+    },
+    {
+      "seat": 3,
+      "nativeId": 2,
+      "linkCount": 3,
+      "banner": "Central link · Cabinet 3 / 3",
+      "menu": "Central link · Cabinet 3 / 3",
+      "frame": 416
+    }
+  ],
+  "errors": []
+}
+```
+
+<!-- GAMEPAD MENU 39 -->
+## Revisión 39: navegación de menús con mando y versión visible
+
+2026-10-18. El mando seleccionado puede recorrer la UI mediante cruceta o stick izquierdo; A activa/acepta y B retrocede un nivel. LB/RB cambian las categorías o el grupo de pestañas enfocado. El foco espacial sigue la geometría visible y desplaza los paneles al control enfocado; se excluyen nodos ocultos, inertes y deshabilitados. Sliders se ajustan con izquierda/derecha. Los selectores usan edición temporal con A/confirmar y B/cancelar: no despachan cambios hasta confirmar, conservando Ready al cancelar un ajuste del host. El stick incorpora umbral e histéresis y la cruceta repite con retraso.
+
+Ayudas contextuales aparecen en la esquina inferior derecha sólo al navegar con mando. Ratón/teclado recuperan el control; se reserva espacio mientras hay un mando para evitar que el modal cambie de tamaño al aparecer/desaparecer las ayudas. En la esquina inferior izquierda se muestra la versión de publicación v39 · 18.10.26 (fecha estática 2026-10-18).
+
+La navegación usa posiciones físicas estándar independientes de los perfiles del juego. Se suspende durante captura de mando, volante y teclado; A, B y LB/RB siguen pudiéndose asignar al juego. La tarjeta Live input tiene un modo de prueba (A entra, B sale) para mover sticks y botones sin navegar. Se exige neutral al conectar/cambiar dispositivo y se ignoran botones mantenidos al reanudar hasta que se suelten. Abrir el menú habilita navegación inmediata cuando el mando ya está neutral. Con el menú abierto la entrada al juego es neutral; en multiplayer el reloj sigue funcionando. Con la UI cerrada y los botones liberados no se hace escaneo DOM ni sondeo extra de mando desde el navegador de menús. No se reserva Start durante la conducción. La selección de archivos del navegador requiere ratón/teclado y el texto requiere entrada de texto; no se añade un teclado virtual.
+
+No cambian el WASM, los valores por defecto o formato de perfiles de conducción, los shaders, el reloj de simulación ni el transporte. Se añade navegación, consulta de estado de captura, ayuda contextual y una barrera de liberación al pasar de UI a conducción. Se conservan las correcciones de número de cabina y selección de API de versiones previas.
+
+Verificación: 139 pruebas unitarias. Chrome con Gamepad API virtual (no certificación de hardware físico): navegación y selectores, pestañas principales/secundarias, sliders/casillas, asignación de B/LB/A, captura de teclado y eje de un volante virtual separado, prueba de mando sin desplazar foco, desconexión/reconexión, persistencia y diseño sin solapamientos en 1366×900, 1280×720 y 390×844. La aplicación y ROM reales se usan para verificar que A remapeado a acelerador no se transmite al arrancar hasta soltarlo. Una sala PeerJS real, host WebGPU e invitado WebGL2, mantiene ambos juegos avanzando al navegar por Settings: entradas neutras, Ready/Start con A y retorno B sin alterar la marcha mantenida. Se vuelve al lobby normalmente. Los casos de roster adicionales del primer script son fixtures UI, no otra carrera de ocho jugadores.
+
+Evidencias:
+
+### menu-gamepad-browser
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "A activates modes; B goes back one level; spatial D-pad navigation; select A/edit/change/confirm and B/cancel restore the prior value",
+    "LB/RB switch outer and focused nested tab lists; sliders and checkboxes work; fixed physical menu buttons do not alter race bindings",
+    "Real controller assignment UI accepts B, LB and A as race bindings without Back, tab switching or accidental activation",
+    "Live controller test retains focus while moving sticks/pressing buttons; keyboard capture also suspends menu navigation",
+    "Wheel capture also suspends Back while capturing a real axis sample from a separate virtual device",
+    "Hot-plug release guard; contextual legend and version fit desktop, shorter desktop and mobile without overlap or horizontal overflow",
+    "Real single-player launch with held A remapped to accelerate: no gameplay input until release; subsequent A accelerates normally; menu settings retain custom bindings",
+    "Lobby fixture: A toggles Ready, B returns Settings → room → room selection → modes; game inputs are neutral while a menu is open",
+    "Pointer/keyboard take over cleanly; custom race mappings persist across reload"
+  ],
+  "errors": [],
+  "layouts": [
+    {
+      "width": 1366,
+      "height": 900,
+      "dialog": {
+        "x": 133.1999969482422,
+        "y": 43,
+        "width": 1100,
+        "height": 760,
+        "top": 43,
+        "right": 1233.1999969482422,
+        "bottom": 803,
+        "left": 133.1999969482422
+      },
+      "hints": {
+        "x": 1006.9000244140625,
+        "y": 848.4000244140625,
+        "width": 345.5,
+        "height": 41.60000228881836,
+        "top": 848.4000244140625,
+        "right": 1352.4000244140625,
+        "bottom": 890.0000267028809,
+        "left": 1006.9000244140625
+      },
+      "version": {
+        "x": 12,
+        "y": 872,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 872,
+        "right": 103.7874984741211,
+        "bottom": 892,
+        "left": 12
+      },
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "dialog": {
+        "x": 90,
+        "y": 20,
+        "width": 1100,
+        "height": 626,
+        "top": 20,
+        "right": 1190,
+        "bottom": 646,
+        "left": 90
+      },
+      "hints": {
+        "x": 920.5,
+        "y": 668.4000244140625,
+        "width": 345.5,
+        "height": 41.60000228881836,
+        "top": 668.4000244140625,
+        "right": 1266,
+        "bottom": 710.0000267028809,
+        "left": 920.5
+      },
+      "version": {
+        "x": 12,
+        "y": 692,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 692,
+        "right": 103.7874984741211,
+        "bottom": 712,
+        "left": 12
+      },
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "dialog": {
+        "x": 12,
+        "y": 16,
+        "width": 366.3999938964844,
+        "height": 724,
+        "top": 16,
+        "right": 378.3999938964844,
+        "bottom": 740,
+        "left": 12
+      },
+      "hints": {
+        "x": 10,
+        "y": 774.4000244140625,
+        "width": 370.3999938964844,
+        "height": 37.60000228881836,
+        "top": 774.4000244140625,
+        "right": 380.3999938964844,
+        "bottom": 812.0000267028809,
+        "left": 10
+      },
+      "version": {
+        "x": 12,
+        "y": 816,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 816,
+        "right": 103.7874984741211,
+        "bottom": 836,
+        "left": 12
+      },
+      "overflow": false
+    }
+  ]
+}
+```
+
+### menu-gamepad-linked
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Real PeerJS host WebGPU / guest WebGL2: A Ready and Start work with A remapped to accelerate; held A is suppressed after launch, released/repressed A accelerates normally",
+    "While the host navigates Settings with LB/RB, both native cabinets continue and host game inputs remain neutral",
+    "B returns Settings → room → game; held B does not change gear 3, subsequent B still selects race gear 1",
+    "Both cabinets return to lobby normally"
+  ],
+  "errors": []
+}
+```
+
+<!-- LOBBY SEATS 40 -->
+## Revisión 40: asientos elegibles y ajustes de indicadores
+
+2026-10-18. La versión v40 · 18.10.26 sólo se muestra mientras el menú está abierto. La etiqueta del enlace dice Cabinet N, sin Central link ni denominador de participantes, para no confundir números dispersos con el tamaño de la sala. La cruceta contextual es un SVG simétrico de 16×16 centrado en un botón de 22×22, independiente de la línea base de la fuente.
+
+Las admisiones ocupan el primer asiento libre de 1 a 8. El lobby se dibuja en orden numérico, con huecos reales, y cada usuario puede elegir otro asiento libre con clic, toque o A del mando. Pasar el ratón/foco sólo muestra Move here. No se roba ni intercambia un asiento ocupado, incluidos los reservados durante reconexión; una sala llena necesita liberar uno antes de cambiar. El host también puede mover su propio coche, conservando su función. Las bajas no renumeran a quienes siguen dentro. Al cambiar se reinicia Ready para que todos confirmen la nueva parrilla. La elección se bloquea durante preparación/carrera.
+
+La confirmación del host es automática, sin intervención humana: move-seat usa el canal de órdenes existente, command/ack, deduplicación y reintentos. El emisor es la conexión admitida, nunca un ID suministrado en el mensaje. El host valida fase, revisión de sala, entero 1–8, ocupación y reserva. Resuelve las solicitudes concurrentes en su orden de recepción; quien pierde recibe el motivo. Se deshabilitan más cambios y Ready hasta recibir respuesta. Una confirmación repetida no reasigna ni vuelve a resetear Ready. El foco con mando vuelve a Ready al confirmar la nueva posición, incluso si el roster llega antes que el ack.
+
+Separación indispensable: members conserva el orden de admisión, host primero. member.cabinet es el número público elegido y escribe CAR NUMBER mediante el menú original (EEPROM byte 12 = número − 1). El ID central se calcula desde el índice en members, no desde cabinet. HostDistributor valida números únicos, pero autentica muestras y construye slots nativos con el orden interno original. Las pruebas comparan byte por byte estados con numeración normal y permutada para 2–8 participantes. No cambian el WASM, shaders, preparación gráfica, reloj, formato binario de muestras/estados, política de colas ni cadencia de envíos. Sí se amplía el protocolo del lobby; usar revisión 40 en todos los dispositivos. Consola y exportación identifican al host con su número elegido, no siempre 01.
+
+Verificación: 147 pruebas unitarias, incluida sala completa de ocho con host en 8 y último invitado en 1, solicitudes simultáneas, ocupación, identidad autenticada, revisión caducada, exclusión fuera del lobby, pérdida de ack y reconexión. Navegador Chrome visible: tres instancias de producción con ROM del usuario y PeerJS/WebRTC mediante relay TURN local, host WebGPU/invitados WebGL2. Llegan 1/2/3 y eligen 8/6/2; mantienen IDs internos 1/3/2, la EEPROM guarda esos coches y entran al arranque de carrera Beginner. Vuelven al lobby conservando números. Un cuarto contexto con touch habilitado entra a la primera vacante (1) y cambia a 4 con un toque. Mando virtual estándar, no certificación de hardware físico. Inspección visual desktop 1366×900 y 1280×720, viewport móvil 390×844 y contexto táctil. No se ejecutó una carrera física de ocho dispositivos ni una prueba específica de circuitos inversos en esta revisión.
+
+Evidencia del navegador (sin credenciales):
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Real PeerJS: arrivals 1/2/3, hover does not move; mouse and simulated standard A select free cars 8/6/2 automatically, with host role preserved",
+    "Eight seats stay in numeric order; centred SVG D-pad and version fit desktop / short desktop / mobile",
+    "Three production WASM engines link with sparse car numbers 8/6/2 and unchanged internal IDs 1/3/2; gameplay hides version and shows only Cabinet N",
+    "All three cabinets enter the original Beginner race with their configured numbers; menus show the version again and seats cannot move during gameplay",
+    "Return to lobby retains the selected car numbers",
+    "Touch-enabled mobile browser joins the first vacancy (1) and changes to free car 4 with one tap"
+  ],
+  "layouts": [
+    {
+      "width": 1366,
+      "height": 900,
+      "overflow": false,
+      "dialog": {
+        "x": 93.20000457763672,
+        "y": 105.4000015258789,
+        "width": 1180,
+        "height": 652.2000122070312,
+        "top": 105.4000015258789,
+        "right": 1273.2000045776367,
+        "bottom": 757.6000137329102,
+        "left": 93.20000457763672
+      },
+      "hints": {
+        "x": 1057.5125732421875,
+        "y": 848.4000244140625,
+        "width": 294.88751220703125,
+        "height": 41.60000228881836,
+        "top": 848.4000244140625,
+        "right": 1352.4000854492188,
+        "bottom": 890.0000267028809,
+        "left": 1057.5125732421875
+      },
+      "iconOffsetX": 0,
+      "iconOffsetY": 0,
+      "seats": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "overflow": false,
+      "dialog": {
+        "x": 50,
+        "y": 39.900001525878906,
+        "width": 1180,
+        "height": 586.2000122070312,
+        "top": 39.900001525878906,
+        "right": 1230,
+        "bottom": 626.1000137329102,
+        "left": 50
+      },
+      "hints": {
+        "x": 971.1124877929688,
+        "y": 668.4000244140625,
+        "width": 294.88751220703125,
+        "height": 41.60000228881836,
+        "top": 668.4000244140625,
+        "right": 1266,
+        "bottom": 710.0000267028809,
+        "left": 971.1124877929688
+      },
+      "iconOffsetX": 0,
+      "iconOffsetY": 0,
+      "seats": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "dialog": {
+        "x": 17,
+        "y": 18,
+        "width": 341.20001220703125,
+        "height": 1086.2000732421875,
+        "top": 18,
+        "right": 358.20001220703125,
+        "bottom": 1104.2000732421875,
+        "left": 17
+      },
+      "hints": {
+        "x": 10,
+        "y": 774.4000244140625,
+        "width": 370.3999938964844,
+        "height": 37.60000228881836,
+        "top": 774.4000244140625,
+        "right": 380.3999938964844,
+        "bottom": 812.0000267028809,
+        "left": 10
+      },
+      "iconOffsetX": 0,
+      "iconOffsetY": 0,
+      "seats": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ]
+    }
+  ],
+  "live": [
+    {
+      "seat": 8,
+      "nativeId": 1,
+      "count": 3,
+      "frame": 415,
+      "eeprom": [
+        83,
+        69,
+        71,
+        65,
+        64,
+        130,
+        2,
+        0,
+        14,
+        142,
+        0,
+        1,
+        7,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,
+        20,
+        28,
+        0,
+        1,
+        0,
+        1,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "seat": 6,
+      "nativeId": 3,
+      "count": 3,
+      "frame": 416,
+      "eeprom": [
+        83,
+        69,
+        71,
+        65,
+        64,
+        130,
+        2,
+        0,
+        228,
+        136,
+        0,
+        2,
+        5,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,
+        20,
+        28,
+        0,
+        1,
+        0,
+        1,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "seat": 2,
+      "nativeId": 2,
+      "count": 3,
+      "frame": 416,
+      "eeprom": [
+        83,
+        69,
+        71,
+        65,
+        64,
+        130,
+        2,
+        0,
+        31,
+        250,
+        0,
+        2,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        2,
+        2,
+        20,
+        28,
+        0,
+        1,
+        0,
+        1,
+        4,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "errors": [],
+  "race": [
+    {
+      "packet": {
+        "scene": 22,
+        "course": 0,
+        "head": [
+          1,
+          2,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          133,
+          3,
+          1,
+          2,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          129,
+          22,
+          0,
+          1,
+          1,
+          0,
+          22,
+          0,
+          22,
+          0,
+          128,
+          1,
+          5
+        ]
+      },
+      "state": {
+        "frames": 2197,
+        "linkId": 1,
+        "linkCount": 3,
+        "linkState": 2
+      }
+    },
+    {
+      "packet": {
+        "scene": 22,
+        "course": 0,
+        "head": [
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          133,
+          1,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          129,
+          18,
+          0,
+          1,
+          1,
+          0,
+          22,
+          0,
+          22,
+          0,
+          128,
+          0,
+          0
+        ]
+      },
+      "state": {
+        "frames": 2197,
+        "linkId": 3,
+        "linkCount": 3,
+        "linkState": 2
+      }
+    },
+    {
+      "packet": {
+        "scene": 22,
+        "course": 0,
+        "head": [
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          133,
+          1,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          129,
+          18,
+          0,
+          1,
+          1,
+          0,
+          22,
+          0,
+          22,
+          0,
+          128,
+          0,
+          0
+        ]
+      },
+      "state": {
+        "frames": 2197,
+        "linkId": 2,
+        "linkCount": 3,
+        "linkState": 2
+      }
+    }
+  ]
+}
+```
+
+<!-- MENU NAVIGATION 41 -->
+## Revisión 41: navegación ordenada y selectores estables con mando
+
+2026-10-18. Causa identificada del retorno de opciones: la edición anterior modificaba select.value como borrador, sin confirmar todavía en el modelo; roomUI.render reescribía ese valor desde settings cada vez que llegaba un roster o se ejecutaba el heartbeat (un segundo). Al confirmar después de ese refresco se leía otra vez el valor anterior. El nuevo editor mantiene draft fuera del select y del modelo. A abre una lista visual con la elección temporal; cruceta/stick la cambia, A la aplica despachando input/change una sola vez y B descarta sin escribir. Los refrescos de sala pueden actualizar el formulario sin borrar el borrador. Se cancela si el control desaparece, se deshabilita, cambia de foco o deja de existir la opción. Ratón/teclado toman el control y recuperan el selector nativo; no se altera el uso táctil normal de los selectores. La lista se ajusta al viewport y ofrece scroll cuando hay muchas opciones.
+
+El cálculo espacial anterior usaba diferencias entre centros de controles de alturas distintas incluso para arriba/abajo. Esto podía escoger una y otra vez controles de otra fila/columna y dificultar alcanzar algunos. Arriba/abajo ahora sigue el orden del formulario para recorrer todos los controles visibles, habilitados y enfocables, incluidos los que requieren desplazar un panel. Izquierda/derecha mueve entre controles que solapan verticalmente; sigue ajustando sliders o cambiando la opción en edición. LB/RB conserva el cambio de pestañas. Los radios/casillas usan el rectángulo de su etiqueta para movimientos laterales. Si desaparece el control enfocado, se conserva una posición cercana en la lista. La navegación y asignaciones de carrera siguen independientes; captura y barrera al reanudar se conservan.
+
+Se elimina la fila Graphics backend de Graphics y su destino en el callback de estado del renderizador. El backend activo permanece en Experimental, junto al selector de API. No cambia la preferencia guardada ni la API usada.
+
+Verificación: 147 pruebas unitarias; 11 comprobaciones de navegador con Gamepad API virtual, incluyendo recorrer de ida y vuelta todos los controles de las cinco categorías, sliders, tabs, dispositivos, remapeo de A/B/LB, captura de teclado/volante, prueba del mando, persistencia y reanudación de single player sin filtrar la A mantenida al acelerador. Un fixture de lobby actualiza el roster cada 200 ms mientras se elige Grand Prix, confirma correctamente y cancela Endurance sin cambiar el modelo. Una sala PeerJS/WebRTC real de dos cabinas (host WebGPU e invitado WebGL2, relay TURN local) confirma el mismo caso durante 2.4 s de heartbeats reales, aplica Grand Prix en ambas y vuelve a Normal. Navegar Settings no detiene el avance nativo ni transmite botones al juego; Ready, Start, B y marcha remapeada siguen funcionando. Dos comprobaciones adicionales de layout de lista en desktop 1280×720, móvil 390×844 y Experimental; inspección visual de PNGs. Los mandos son virtuales para la prueba, no certificación de hardware físico.
+
+Se conservan bit a bit el WASM y JS del motor. Tras normalizar las etiquetas de caché, sólo cambian main.js, index.html, menu-gamepad.js y menu-gamepad.css. No cambian simulación, gráficos, enlace, política de red ni selección de asientos de la revisión 40. ZIPs previos preservados.
+
+### menu-navigation-browser
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "A activates modes; B goes back one level; spatial D-pad navigation; select A/edit/change/confirm and B/cancel restore the prior value",
+    "D-pad Up/Down reaches every enabled control in all five settings categories and returns without traps, including long scroll panels; backend is only shown in Experimental",
+    "LB/RB switch outer and focused nested tab lists; sliders and checkboxes work; fixed physical menu buttons do not alter race bindings",
+    "Real controller assignment UI accepts B, LB and A as race bindings without Back, tab switching or accidental activation",
+    "Live controller test retains focus while moving sticks/pressing buttons; keyboard capture also suspends menu navigation",
+    "Wheel capture also suspends Back while capturing a real axis sample from a separate virtual device",
+    "Hot-plug release guard; contextual legend and version fit desktop, shorter desktop and mobile without overlap or horizontal overflow",
+    "Real single-player launch with held A remapped to accelerate: no gameplay input until release; subsequent A accelerates normally; menu settings retain custom bindings",
+    "A lobby draft survives repeated roster refreshes for 2.3 seconds; A applies exactly the chosen value and B cancels without mutating the room",
+    "Lobby fixture: A toggles Ready, B returns Settings → room → room selection → modes; game inputs are neutral while a menu is open",
+    "Pointer/keyboard take over cleanly; custom race mappings persist across reload"
+  ],
+  "errors": [],
+  "layouts": [
+    {
+      "width": 1366,
+      "height": 900,
+      "dialog": {
+        "x": 133.1999969482422,
+        "y": 43,
+        "width": 1100,
+        "height": 760,
+        "top": 43,
+        "right": 1233.1999969482422,
+        "bottom": 803,
+        "left": 133.1999969482422
+      },
+      "hints": {
+        "x": 1011.2125244140625,
+        "y": 848.4000244140625,
+        "width": 341.1875,
+        "height": 41.60000228881836,
+        "top": 848.4000244140625,
+        "right": 1352.4000244140625,
+        "bottom": 890.0000267028809,
+        "left": 1011.2125244140625
+      },
+      "version": {
+        "x": 12,
+        "y": 872,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 872,
+        "right": 103.7874984741211,
+        "bottom": 892,
+        "left": 12
+      },
+      "overflow": false
+    },
+    {
+      "width": 1280,
+      "height": 720,
+      "dialog": {
+        "x": 90,
+        "y": 20,
+        "width": 1100,
+        "height": 626,
+        "top": 20,
+        "right": 1190,
+        "bottom": 646,
+        "left": 90
+      },
+      "hints": {
+        "x": 924.8125,
+        "y": 668.4000244140625,
+        "width": 341.1875,
+        "height": 41.60000228881836,
+        "top": 668.4000244140625,
+        "right": 1266,
+        "bottom": 710.0000267028809,
+        "left": 924.8125
+      },
+      "version": {
+        "x": 12,
+        "y": 692,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 692,
+        "right": 103.7874984741211,
+        "bottom": 712,
+        "left": 12
+      },
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "dialog": {
+        "x": 12,
+        "y": 16,
+        "width": 366.3999938964844,
+        "height": 724,
+        "top": 16,
+        "right": 378.3999938964844,
+        "bottom": 740,
+        "left": 12
+      },
+      "hints": {
+        "x": 10,
+        "y": 774.4000244140625,
+        "width": 370.3999938964844,
+        "height": 37.60000228881836,
+        "top": 774.4000244140625,
+        "right": 380.3999938964844,
+        "bottom": 812.0000267028809,
+        "left": 10
+      },
+      "version": {
+        "x": 12,
+        "y": 816,
+        "width": 91.7874984741211,
+        "height": 20,
+        "top": 816,
+        "right": 103.7874984741211,
+        "bottom": 836,
+        "left": 12
+      },
+      "overflow": false
+    }
+  ]
+}
+```
+
+### menu-navigation-linked
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Live PeerJS heartbeats cannot erase a pending gamepad selector; A confirms Grand Prix across both cabinets, then returns both to Normal",
+    "Real PeerJS host WebGPU / guest WebGL2: A Ready and Start work with A remapped to accelerate; held A is suppressed after launch, released/repressed A accelerates normally",
+    "While the host navigates Settings with LB/RB, both native cabinets continue and host game inputs remain neutral",
+    "B returns Settings → room → game; held B does not change gear 3, subsequent B still selects race gear 1",
+    "Both cabinets return to lobby normally"
+  ],
+  "errors": []
+}
+```
+
+### menu-picker-layout
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Picker stays within desktop and mobile viewports, draft survives real host heartbeats, B keeps Normal unchanged",
+    "Experimental API picker stays visible near a lower control and B preserves WebGL2"
+  ],
+  "layouts": [
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "picker": {
+        "x": 521.4750366210938,
+        "y": 252,
+        "width": 240,
+        "height": 156
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "picker": {
+        "x": 50.20000076293945,
+        "y": 325.5,
+        "width": 240.0000114440918,
+        "height": 156
+      }
+    }
+  ],
+  "errors": []
+}
+```
+
+<!-- SEAT SWAP HOME 42 -->
+## Revisión 42: color de coche, Home y solicitudes de intercambio
+
+2026-10-18. La tarjeta propia reemplaza la franja izquierda por un contorno completo interior de 2 px y borde del color de su coche, sin alterar dimensiones. El número y la marca You conservan identidad sin depender sólo del color. Colores: 1 rojo, 2 azul, 3 amarillo, 4 verde, 5 negro, 6 rosa, 7 celeste, 8 naranja. Los tonos HTML se adaptan al fondo claro para distinguirse. Orden contrastado con el manual original de SEGA, DAYTONA USA SPECIAL, tabla de conjuntos de cabinas/colores 01–08 (reproducción: https://manualzz.com/doc/8816802/sega-daytona-usa-special-arcade-game-owner-s-manual). La prueba recorre los ocho números y compara el color de los cuatro bordes; se inspecciona la cabina 6 rosa.
+
+Home usa el índice 16 únicamente si Gamepad.mapping es standard, tal como identifica el botón central la tabla W3C (https://www.w3.org/TR/gamepad/#remapping). Se sondea el mando seleccionado mientras corre el juego; una pulsación nueva abre el mismo menú que Esc. No repite al mantenerlo, no se dispara por conectar un dispositivo con Home mantenido ni al recuperar foco manteniéndolo, y no se adivina un botón para HID/volantes sin mapeo estándar. No cierra el menú ni interrumpe capturas. En single player pausa; en multiplayer conserva el reloj como el menú existente. Home se incluye en la barrera de liberación al reanudar para no filtrar una asignación guardada al juego. No se reescriben los perfiles. Es una función condicionada a que navegador/SO entreguen Home: el sistema puede reservar Guide/PS/Home, cosa que una web no puede forzar. Se documenta también dentro del panel de mando.
+
+Seleccionar otra tarjeta ocupada solicita un intercambio, mientras los huecos siguen permitiendo cambiar directamente. Las tarjetas no se cambian hasta que el destinatario pulse Accept swap. Puede Decline; el solicitante puede Cancel request. B/Esc dentro de ese aviso rechaza/cancela sin abandonar la sala; las ayudas muestran la acción contextual. Fuera del aviso B conserva la navegación normal. El host no puede aceptar en nombre del destinatario. El cambio afecta al número público/CAR NUMBER de los dos participantes de forma atómica y conserva members en orden de admisión y el rol de host. Al aceptar se incrementa revisión y se reinicia Ready de todos; rechazo/cancelación/caducidad no cambian los coches ni borran Ready. Mientras se espera se bloquea iniciar carrera y cambiar los asientos implicados. El resto puede seguir chateando y confirmando Ready.
+
+El host mantiene hasta cuatro solicitudes disjuntas (cada jugador en una como máximo). Ofertas con ID aleatorio, emisor/destinatario, ambos números y vencimiento de 30 segundos; el servidor usa tiempo monotónico para decidir expiración. La UI no determina el vencimiento por su reloj. Creación/respuesta/cancelación usan el canal de órdenes, ack, deduplicación y reintentos existentes. Sólo la conexión admitida actual puede actuar con su identidad. Se validan revisión al pedir, destinatario al responder, tipo booleano de consentimiento, fase, conexión y que ambos coches sigan siendo los ofertados al aceptar. Una solicitud repetida no crea otra oferta y una aceptación repetida no intercambia de vuelta ni vuelve a resetear Ready. Los rosters y sincronizaciones incluyen las ofertas vigentes; una desconexión, salida o expulsión cancela las solicitudes implicadas antes de permitir recuperación. Solicitudes antiguas no reviven tras reconectar. El aviso de resultado es acotado y la oferta nueva limpia el anterior. Se utiliza el sonido de aviso de la UI respetando su volumen.
+
+Presentación: aviso inline bajo los asientos con aceptar/rechazar o cancelar, anunciable por lector de pantalla, controles táctiles de 44 px en móvil y foco accesible con mando. No roba foco al chat/selectores/Settings; se puede llegar con arriba/abajo. Al resolverse devuelve foco a Ready cuando corresponde. Se compactan las tarjetas durante el aviso en desktop, con un nivel adicional en ventanas bajas. El refinamiento final conserva 720 px de contenido en un viewport 1280×720, sin scroll añadido. Los resultados de la prueba funcional incluyen la medición previa al último ajuste de altura; seat-swap-layout valida la altura final y el ocultamiento de mensajes anteriores. Se inspeccionaron los PNG de ambos diseños y el layout móvil.
+
+Verificación: 156 unitarias (incluyen siete casos de consentimiento y dos de Home). Solicitudes entre invitados, al host y desde el host; rechazo y cancelación; permisos falsificados; ack perdido y repetido; competencia por un jugador; expiración; desconexión/reconexión y expulsión; cuatro intercambios simultáneos en sala completa de ocho. Home: pulsación, mantenido, conexión/cambio de dispositivo, foco, dispositivo crudo y ausencia del botón. La sala de ocho es simulación de protocolo, no ocho dispositivos físicos.
+
+Chrome visible con tres cabinas de producción, host WebGPU/invitados WebGL2 y PeerJS real mediante TURN/UDP local: elección de colores, rechazo entre invitados, aceptación con A, cancelación y rechazo con B sin salir. La parrilla 6/3/1 queda escrita en EEPROM y las tres cabinas enlazan. Home abre el menú multiplayer con los tres juegos avanzando; incluso con acelerador guardado en 16 no se filtra al juego, ni manteniendo Home al reanudar con B. El mismo Home abre y pausa single player. El mando es virtual para probar Gamepad API; no se afirma certificación de hardware físico ni de Windows Game Bar. No se probó una carrera remota de ocho ni nuevos perfiles de pérdida/RTT: no cambia el formato/cadencia de estados ni la red del juego.
+
+Motor WASM/JS, shaders, reloj y distribución central nativa sin cambios. Se amplía el protocolo del lobby y se recomienda usar revisión 42 en todas las cabinas. Archivo ZIP 41 preservado. Evidencias:
+
+### seat-swap-home-browser
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Own-seat border surrounds all four sides and updates with car number; Driver two in car 6 uses pink",
+    "Guest-to-guest request shows Accept/Decline only to recipient; decline preserves both car numbers and blocks launch only while pending",
+    "A accepts a host/guest swap atomically (6/1/3), keeps host ownership and resets Ready",
+    "Requester can cancel without moving either car",
+    "B declines from the consent section without leaving the room",
+    "Consent fits the mobile viewport; declining preserves the 6/3/1 grid",
+    "All three production engines link with the swapped EEPROM car numbers 6/3/1",
+    "Standard Home opens the multiplayer menu without leaking its remapped accelerator; all three simulations continue and B resumes",
+    "Home also opens the single-player menu and pauses native simulation"
+  ],
+  "borders": [
+    {
+      "seat": 6,
+      "color": "rgb(210, 84, 159)",
+      "sides": [
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)"
+      ],
+      "shadow": "rgb(210, 84, 159) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 8,
+      "color": "rgb(224, 119, 20)",
+      "sides": [
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)"
+      ],
+      "shadow": "rgb(224, 119, 20) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 2,
+      "color": "rgb(8, 116, 219)",
+      "sides": [
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)"
+      ],
+      "shadow": "rgb(8, 116, 219) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 3,
+      "color": "rgb(199, 166, 0)",
+      "sides": [
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)"
+      ],
+      "shadow": "rgb(199, 166, 0) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 4,
+      "color": "rgb(23, 134, 74)",
+      "sides": [
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)"
+      ],
+      "shadow": "rgb(23, 134, 74) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 5,
+      "color": "rgb(52, 51, 60)",
+      "sides": [
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)"
+      ],
+      "shadow": "rgb(52, 51, 60) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 7,
+      "color": "rgb(39, 159, 190)",
+      "sides": [
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)"
+      ],
+      "shadow": "rgb(39, 159, 190) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 1,
+      "color": "rgb(213, 34, 71)",
+      "sides": [
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)"
+      ],
+      "shadow": "rgb(213, 34, 71) 0px 0px 0px 2px inset"
+    }
+  ],
+  "errors": [],
+  "consentLayout": {
+    "scrollHeight": 741,
+    "height": 720
+  }
+}
+```
+
+### seat-swap-layout
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Own-seat border surrounds all four sides and updates with car number; Driver two in car 6 uses pink",
+    "Guest-to-guest request shows Accept/Decline only to recipient; decline preserves both car numbers and blocks launch only while pending",
+    "Final consent does not grow the 1280×720 lobby or show a previous request notice"
+  ],
+  "borders": [
+    {
+      "seat": 6,
+      "color": "rgb(210, 84, 159)",
+      "sides": [
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)",
+        "rgb(210, 84, 159)"
+      ],
+      "shadow": "rgb(210, 84, 159) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 8,
+      "color": "rgb(224, 119, 20)",
+      "sides": [
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)",
+        "rgb(224, 119, 20)"
+      ],
+      "shadow": "rgb(224, 119, 20) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 2,
+      "color": "rgb(8, 116, 219)",
+      "sides": [
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)",
+        "rgb(8, 116, 219)"
+      ],
+      "shadow": "rgb(8, 116, 219) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 3,
+      "color": "rgb(199, 166, 0)",
+      "sides": [
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)",
+        "rgb(199, 166, 0)"
+      ],
+      "shadow": "rgb(199, 166, 0) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 4,
+      "color": "rgb(23, 134, 74)",
+      "sides": [
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)",
+        "rgb(23, 134, 74)"
+      ],
+      "shadow": "rgb(23, 134, 74) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 5,
+      "color": "rgb(52, 51, 60)",
+      "sides": [
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)",
+        "rgb(52, 51, 60)"
+      ],
+      "shadow": "rgb(52, 51, 60) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 7,
+      "color": "rgb(39, 159, 190)",
+      "sides": [
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)",
+        "rgb(39, 159, 190)"
+      ],
+      "shadow": "rgb(39, 159, 190) 0px 0px 0px 2px inset"
+    },
+    {
+      "seat": 1,
+      "color": "rgb(213, 34, 71)",
+      "sides": [
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)",
+        "rgb(213, 34, 71)"
+      ],
+      "shadow": "rgb(213, 34, 71) 0px 0px 0px 2px inset"
+    }
+  ],
+  "errors": [],
+  "baselineLayout": {
+    "scrollHeight": 720,
+    "height": 720
+  },
+  "consentLayout": {
+    "scrollHeight": 720,
+    "height": 720
+  }
+}
+```
+
+
+
+<!-- REVERSE CHECKPOINTS 43 -->
+## Revisión 43 candidata: checkpoints y progreso de Advanced / Expert inversos
+
+2026-10-18. Caso comunicado: Normal con CPU cars On; un supuesto último podía ganar y el líder a veces seguía después de meta. No se reproduce íntegramente la partida remota original. Se demuestra un mecanismo que permite progreso físico y clasificación sin la correspondiente vuelta validada: un salto corto en la búsqueda de carretera omite un checkpoint, dejando incompleta su máscara. El arcade rechaza después la vuelta aunque la clasificación por sector continúe avanzando. No es sólo un texto del HUD.
+
+Código original contrastado localmente en generated chunk_010.cpp: 1386c–1398c sólo visita la tabla de checkpoints cuando el cambio de sector es +1 o −1, y reconoce meta por diferencia exacta ±N. Saltos como tres sectores que cruzan un checkpoint o 1→N en meta quedan fuera. 13a10 exige máscara completa y raw lap nuevo; 13990 decide la llegada a partir de las vueltas aceptadas. La comparación inicial con filtros propios y con ellos desactivados (políticas 0/3) no cambió el recorrido ordinario de los pilotos: no bastaba con retirar filtros.
+
+Cambios en producción:
+
+- Advanced/Expert mantienen los checkpoints intermedios bidireccionales originales. Una vuelta completa en sentido original sigue sin poder terminar una carrera inversa; Beginner conserva su política de checkpoints y rolling start.
+- Al restaurar ese comportamiento original se reproduce otra vuelta falsa mediante controles ordinarios, sin inyección: el host recoge checkpoints hacia delante, gira y regresa a meta sin completar un circuito inverso; la primera candidata le concede una vuelta aunque su progreso sigue detrás. Se corrige usando la referencia de raw lap aceptada del propio arcade: se inicializa en −1 para distinguir la aproximación inicial y sólo admite un raw lap menor al último aceptado. El código original sigue escribiendo la referencia y validando sus máscaras. El mismo recorrido pasa de una vuelta falsa a cero, sin bloquear los checkpoints intermedios. No se añade un contador paralelo de vueltas ni se fuerza un ganador.
+- Para el coche humano local en su callback de conducción dc64, se reconoce el intervalo real de sectores cuando es corto, hasta 16, sin modificar sus posiciones físicas ni sectores almacenados. La referencia previa vista por la rama ordinaria se normaliza; las entradas de tabla realmente cruzadas se presentan al comparador original. Ese código original sigue otorgando bits, tiempo y vueltas. No se escriben directamente premios ni ganadores.
+- Los cruces cortos de la costura normalizan sólo el registro que compara su delta. Se conserva el N real para no relajar la referencia de media vuelta. Los saltos largos, posiciones remotas y callbacks ajenos no obtienen este tratamiento.
+- La antigua corrección de media vuelta se integra en ese mismo intervalo acotado. Incluye los saltos reales ya registrados de ocho sectores en Advanced y diez en Expert; deja de aplicarse a relocalizaciones de casi media pista.
+- La referencia del líder emitida por 1b038 ya estaba invertida, pero el consumidor de recuperación multiplayer en 1a550 restaba progreso local sin invertir. Se corrige ese único consumidor: la distancia al líder usa el mismo sentido a ambos lados. En las observaciones, el líder deja de mantener el nivel máximo de ayuda por una distancia ficticia; el rezagado puede conservar la recuperación original. No se sustituye la tabla de ayuda.
+
+Verificación: dos motores reales, Normal/Easy y CPUs On, controles ordinarios, distribución central de producción. Para reproducir el fallo de checkpoint se cambia una vez sólo la referencia anterior de sector en un motor privado de auditoría, al cruzar físicamente un checkpoint. No se inyectan bits, tiempo, vueltas ni resultados en esa prueba. La 42 pierde el checkpoint en ambas cabinas de ambos mapas (cuatro pérdidas); Advanced rechaza después ambas vueltas. La candidata registra el checkpoint y ambas cabinas validan una vuelta en cada mapa. Una segunda prueba inyecta una referencia previa de 1 al cruzar 0→N: ambas cabinas validan meta y vuelta en Advanced/Expert, sin pérdidas.
+
+Prueba dirigida de llegada final: se conduce físicamente por todos los checkpoints; únicamente al siguiente cruce completo se inicializa el contador de vueltas previas como última vuelta y se introduce el salto corto en meta. La rutina original concede la última vuelta y activa la llegada; el primer finisher observado está clasificado primero. Este setup privado comprueba la rama de llegada, NO constituye una carrera completa de cuatro vueltas de Advanced o dos de Expert. El motor de producción no incluye esa función ni las lecturas/inyecciones de auditoría.
+
+El intento automático de completar las cuatro vueltas de Advanced Normal/Easy se quedó sin tiempo después de dos vueltas aceptadas, sin checkpoints ni vueltas perdidos. Su informe final-normal-finish queda FAIL por el objetivo de llegada no alcanzado, no se oculta ni se cuenta como carrera superada. No se amplió el tiempo para hacer pasar esa prueba. Pendiente validar una partida humana completa, especialmente con varios dispositivos y choques al final.
+
+Regresión de dirección: el host completa una vuelta inversa y gira mediante controles; recorre sectores y checkpoints en sentido original. Sus bits intermedios cambian como en el arcade, pero conserva una sola vuelta y queda detrás del invitado que sigue inverso. Beginner/CPU On completa rolling start y una vuelta sin pérdidas. 156 unitarias de frontend/protocolo pasan. Smoke con el motor limpio: sala PeerJS real con TURN/UDP local, host WebGPU e invitado WebGL2, Normal/Easy Advanced/CPU On, ambas simulaciones avanzan; single player normal arranca y avanza. Se inspeccionan capturas de ambos renderizadores. No hay una nueva prueba remota de cuatro/ocho jugadores ni de RTT 500 ms en esta revisión.
+
+El frontend sólo cambia versión/caché e identificación de compatibilidad a 43; se conservan los asientos, consentimiento, Home y menús de 42. No cambian paquetes, predicción visual, cadencia, red, ROM ni renderizadores. El arreglo del consumidor de recuperación también se aplica a Beginner inverso; el intervalo nuevo de checkpoints se limita a Advanced/Expert. La dirección normal no entra en estos cambios. Mantener todas las cabinas en 43. ZIP 42 preservado. Enlace local: http://localhost:8118.
+
+Evidencia resumida (COMPLETE indica observación terminada; los checks explícitos se detallan arriba):
+
+```json
+{
+  "baseline-skipped-checkpoint": {
+    "status": "COMPLETE",
+    "fixture": null,
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 2,
+        "missedLaps": 2,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 0,
+            "total": 4,
+            "rank": 1,
+            "time": -32
+          },
+          {
+            "id": 1,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 0,
+            "total": 4,
+            "rank": 0,
+            "time": -31
+          }
+        ],
+        "arrivals": []
+      },
+      {
+        "course": 1,
+        "missedCheckpoints": 2,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 0,
+            "total": 2,
+            "rank": 0,
+            "time": -32
+          },
+          {
+            "id": 1,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 0,
+            "total": 2,
+            "rank": 1,
+            "time": -31
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "candidate-skipped-checkpoint": {
+    "status": "COMPLETE",
+    "fixture": null,
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 1,
+            "time": 2181
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 0,
+            "time": 2185
+          }
+        ],
+        "arrivals": []
+      },
+      {
+        "course": 1,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 2,
+            "rank": 0,
+            "time": 1103
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 2,
+            "rank": 1,
+            "time": 1107
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "final-skipped-finish": {
+    "status": "COMPLETE",
+    "fixture": null,
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 1,
+            "time": 2181
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 0,
+            "time": 2185
+          }
+        ],
+        "arrivals": []
+      },
+      {
+        "course": 1,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 2,
+            "rank": 0,
+            "time": 1103
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 2,
+            "rank": 1,
+            "time": 1107
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "final-beginner-regression": {
+    "status": "COMPLETE",
+    "fixture": null,
+    "races": [
+      {
+        "course": 0,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 8,
+            "rank": 0,
+            "time": 2839
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 8,
+            "rank": 1,
+            "time": 2843
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "final-forward-native-checkpoints": {
+    "status": "COMPLETE",
+    "fixture": null,
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 1,
+            "total": 4,
+            "rank": 1,
+            "time": -32
+          },
+          {
+            "id": 1,
+            "scene": 26,
+            "callback": 53688,
+            "lap": 2,
+            "total": 4,
+            "rank": 0,
+            "time": -31
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "pre-guard-turnaround": {
+    "status": "COMPLETE",
+    "fixture": "Ordinary controls; fault 1/2 injects a short previous-sector skip only",
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 1,
+            "time": 1701
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 0,
+            "time": 1705
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "final-guard-turnaround": {
+    "status": "COMPLETE",
+    "fixture": "Ordinary controls; fault 1/2 injects a short previous-sector skip only",
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 0,
+            "total": 4,
+            "rank": 1,
+            "time": 1701
+          },
+          {
+            "id": 1,
+            "scene": 22,
+            "callback": 56420,
+            "lap": 1,
+            "total": 4,
+            "rank": 0,
+            "time": 1705
+          }
+        ],
+        "arrivals": []
+      }
+    ]
+  },
+  "final-last-finish": {
+    "status": "COMPLETE",
+    "fixture": "Last-lap integration setup after genuinely driving all checkpoints; prior lap counter initialized in test only; fault 6 also skips one seam sector",
+    "races": [
+      {
+        "course": 2,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 25,
+            "callback": 56420,
+            "lap": 0,
+            "total": 4,
+            "rank": 1,
+            "time": 2078
+          },
+          {
+            "id": 1,
+            "scene": 24,
+            "callback": 57588,
+            "lap": 4,
+            "total": 4,
+            "rank": 0,
+            "time": 2117
+          }
+        ],
+        "arrivals": [
+          {
+            "id": 1,
+            "frame": 6668,
+            "clock": 4064,
+            "rank": 0
+          }
+        ]
+      },
+      {
+        "course": 1,
+        "missedCheckpoints": 0,
+        "missedLaps": 0,
+        "missedWraps": 0,
+        "finished": [
+          {
+            "id": 0,
+            "scene": 24,
+            "callback": 57588,
+            "lap": 2,
+            "total": 2,
+            "rank": 0,
+            "time": 236
+          },
+          {
+            "id": 1,
+            "scene": 24,
+            "callback": 57588,
+            "lap": 2,
+            "total": 2,
+            "rank": 1,
+            "time": 236
+          }
+        ],
+        "arrivals": [
+          {
+            "id": 0,
+            "frame": 11618,
+            "clock": 9013,
+            "rank": 0
+          },
+          {
+            "id": 1,
+            "frame": 11624,
+            "clock": 9020,
+            "rank": 1
+          }
+        ]
+      }
+    ]
+  }
+}
+```

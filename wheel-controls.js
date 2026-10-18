@@ -1,5 +1,5 @@
 import {WHEEL_ACTIONS,newWheelProfile,loadWheelProfiles,saveWheelProfiles,sanitizeBinding,bindingDevice,rawInput,
-  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=35-uix-review';
+  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=43-reverse-checkpoints';
 
 export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const saved=loadWheelProfiles(storage),rows=new Map();
@@ -198,6 +198,7 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     update,read:()=>readWheel(profile(),getPads(),edges),
     preview:()=>readWheel(profile(),getPads()),
     resetEdges(){edges={armed:false,previous:new Set()};},
+    isListening:()=>!!pending,
     cancel(){const wasPending=!!pending;cancelAssignment();if(wasPending)announce('Assignment cancelled. Existing mapping retained.');},
     reservedIds(){const config=profile();return new Set(config?[config.deviceId,...(config.enabled?[config.steering.binding,config.accel.binding,config.brake.binding,...Object.values(config.buttons)].filter(Boolean).map(binding=>binding.deviceId):[])]:[]);},
     feedbackPad(){const config=profile(),pads=getPads();return readWheel(config,pads).active?bindingDevice(config.steering.binding,pads):null;}

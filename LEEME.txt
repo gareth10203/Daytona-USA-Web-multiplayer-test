@@ -1,8 +1,8 @@
-REVISION 35 - CONFIGURACION DE SINGLE PLAYER
-SINGLE PLAYER abre un modal de modo, dificultad, direccion y CPU.
-Sin CPU se utiliza Time Attack. Cabina SINGLE, DELUXE, Export.
-Incluye correcciones de cabecera y navegacion de Multiplayer.
-Reanudar conserva la partida; aplicar cambios reinicia y conserva puntuaciones.
-Preferencias guardadas en este dispositivo. Las entregas anteriores se conservan aparte.
+REVISION 36 - FALLBACK WEBGL2
+Se prefiere WebGPU y se utiliza WebGL2 si falla durante el arranque.
+Para probar WebGL2: agregar ?renderer=webgl2 a la URL.
+El backend activo aparece en Settings / Graphics.
+Conserva las funciones y el motor nativo de la revision 35.
 Subir el CONTENIDO del ZIP a GitHub Pages. No contiene ROM.
-Investigaciones, documentacion y resultados completos: INVESTIGACIONES.md.
+Documentacion, limites y resultados completos: INVESTIGACIONES.md.
+La revision 35 permanece separada.

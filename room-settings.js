@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=35-uix-review';
-export const BUILD_ID='daytona-rev-a-central-experimental-35-uix-review';
+import {DEFAULT_EEPROM} from './nvram.js?v=43-reverse-checkpoints';
+export const BUILD_ID='daytona-rev-a-central-experimental-43-reverse-checkpoints';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

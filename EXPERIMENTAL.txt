@@ -1,8 +1,8 @@
-DAYTONA USA WEB - REVISION 35 UIX - SINGLE PLAYER SETUP
-Build: daytona-rev-a-central-experimental-35-uix-review
-Shared menu buttons, accessible navigation, mobile controls and consistent layout.
-Standalone race settings: mode, difficulty, direction and CPU cars.
-Includes revision 34 multiplayer and checkpoint protections.
-All players need the same revision. Upload ZIP CONTENTS to GitHub Pages.
-Research, implementation notes and original results: INVESTIGACIONES.md.
-No ROM or test observers included.
+DAYTONA USA WEB - CANDIDATE 43 - REVERSE CHECKPOINTS
+2026-10-18. Use revision 43 on all cabinets.
+Advanced/Expert: native intermediate checkpoints, bounded short-sector crossing recovery.
+Reverse progression is consistent in multiplayer catch-up.
+Beginner checkpoint/rolling policy and forward direction retained.
+Directed finish fixture is not a complete default-length race. Human full-race validation remains recommended.
+No ROM or audit/test hooks. Upload ZIP CONTENTS to GitHub Pages.
+Research and exact test limitations: INVESTIGACIONES.md.

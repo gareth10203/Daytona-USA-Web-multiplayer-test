@@ -1,5 +1,5 @@
-import {BUILD_ID} from './room-settings.js?v=35-uix-review';
-import {performanceBatch} from './performance-history.js?v=35-uix-review';
+import {BUILD_ID} from './room-settings.js?v=43-reverse-checkpoints';
+import {performanceBatch} from './performance-history.js?v=43-reverse-checkpoints';
 // Local, bounded measurements. Linked game samples can be shared with the room host.
 export class Diagnostics {
   constructor({clock=()=>performance.now(),read=()=>({}),network=()=>({}),render=()=>{}}={}) {
@@ -38,16 +38,18 @@ export class Diagnostics {
     userAgent:globalThis.navigator?.userAgent||'',note:'Local measurements. LIST counts CPU display-list publications, not GPU presentations or unique visible frames. DRAW can repeat a scene. TX/RX count arcade payloads, excluding protocol overhead, and TX does not prove delivery. Centralized DATA counts local shared-RAM applications with real control data and buffered/interpolated remote poses. poseBufferTicks is the additional playout distance in source game ticks, excluding network transit; poseHeldPercent counts applications that reached the newest available sample, not necessarily a visually stationary car. Packet intervals cover the last 256 gaps and include cabinet samples and host states. Central agesMs measures time since receipt by the host, excluding network transit. Peer frame deltas are observations with transit age, not synchronized clock measurements. WASM heap is capacity. GPU time is not measured.',samples:this.history};}
 }
 
-export function mountDiagnostics({element,toggle,download,read,room}) {
+export function mountDiagnostics({element,toggle,extraToggles=[],download,read,room}) {
   let lastPoll=0,polling=false;
+  const toggles=[toggle,...extraToggles];
   const diag=new Diagnostics({read,network:()=>room.diagnostics(),render:(s,on)=>{
+    for(const control of toggles){control.checked=on;control.disabled=!diag.captureEnabled;}
     element.hidden=!on;
     if(!s){element.textContent='Diagnostics · collecting…';return;}
     const n=s.network,rtt=n.rttMs==null?'—':`${Math.round(n.rttMs)} ms`,flows=n.snapshotFlow||[];
     const lists=s.nativeLink?.listWritesHz,format=value=>Number.isFinite(value)?value.toFixed(1):'—';
     element.textContent=`${s.role||'SINGLE'} · SIM ${s.simulationHz.toFixed(1)} · DRAW ${s.drawHz.toFixed(0)} · LIST ${format(lists)} /s\nCPU ${s.cpuMeanMs.toFixed(1)} ms · p95 ${s.cpuP95Ms.toFixed(1)} · gap ${s.maxStepGapMs.toFixed(0)} ms\nTX ${(n.sentBytesPerSecond/1024).toFixed(0)} KiB/s · RX ${(n.receivedBytesPerSecond/1024).toFixed(0)} KiB/s · RTT ${rtt}\nQUEUE TX ${(n.bufferedBytes/1024).toFixed(1)} KiB · RX ${(s.receiveBytes/1024).toFixed(1)} KiB\nSNAPSHOTS flight ${flows.reduce((a,f)=>a+f.inFlight,0)} · pending ${flows.reduce((a,f)=>a+f.pending,0)} · superseded ${flows.reduce((a,f)=>a+f.coalesced,0)}\nDATA ${format(s.nativeLink?.dataBlocksHz)} · FG ${format(s.nativeLink?.fgEdgesHz)} /s · backlog ${format(s.backlogMs)} ms`;
   }});
-  toggle.addEventListener('change',()=>diag.enable(toggle.checked));
+  for(const control of toggles)control.addEventListener('change',()=>diag.enable(control.checked));
   download.addEventListener('click',()=>{
     const url=URL.createObjectURL(new Blob([JSON.stringify(diag.report(),null,2)],{type:'application/json'}));
     const a=document.createElement('a');a.href=url;a.download='daytona-diagnostics.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);

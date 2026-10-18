@@ -98,3 +98,12 @@
  #keyboardControls .keyboard-mappings{overflow:visible}
 }
 @media(prefers-reduced-motion:reduce){#menuDialog .ui-button{transition:none}}
+
+/* Experimental controls follow the wheel setup in the existing scroll panel. */
+.experimental-display-settings{margin-top:24px;padding-top:20px;border-top:1px solid #c8c8bf;}
+.experimental-display-settings .device-status{margin:0 0 16px;}
+.graphics-api-label{display:block;margin-bottom:8px;font-size:13px;font-weight:700;}
+#graphicsAPI{display:block;width:100%;min-height:44px;padding:10px 12px;border:1px solid #bdbdb4;border-radius:4px;background:#fff;color:#222;font:inherit;font-size:13px;}
+#graphicsAPIHelp{margin:10px 0 12px;}
+#applyGraphicsAPI{margin-bottom:14px;}
+.performance-overlay-toggle{margin-top:10px;}

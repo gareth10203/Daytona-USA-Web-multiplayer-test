@@ -1,4 +1,4 @@
-import {KEYBOARD_ID,KEYBOARD_ACTIONS,DEFAULT_KEYS,loadKeys,assignKey,keyName,validKey,KeyboardInput} from './keyboard-input.js?v=35-uix-review';
+import {KEYBOARD_ID,KEYBOARD_ACTIONS,DEFAULT_KEYS,loadKeys,assignKey,keyName,validKey,KeyboardInput} from './keyboard-input.js?v=43-reverse-checkpoints';
 export function createKeyboardControls(root,{held,storage,settings,mobile,onSetting}){
  const bindings=loadKeys(storage),input=new KeyboardInput(held,bindings),previewHeld=new Set(),preview=new KeyboardInput(previewHeld,bindings),rows=new Map();
  let pending=null,last=0,wasVisible=false,deadline=0;
@@ -46,5 +46,5 @@ export function createKeyboardControls(root,{held,storage,settings,mobile,onSett
   if(pending&&now>deadline)cancel();const dt=wasVisible?(now-last)/1000:0;wasVisible=true;last=now;
   if(!mobile){const steer=preview.read(dt,settings.keyboardSensitivity).steer;$('keyboardWheel').setAttribute('transform',`rotate(${steer*1.1} 100 70)`);$('keyboardSteerMarker').style.left=`${50+steer*.47}%`;$('keyboardSteerValue').textContent=steer===0?'Centred · 0%':`${steer<0?'Left':'Right'} · ${Math.abs(steer)}%`;}
  }
- sync();render();return {bindings,cancel,reset,update,sync,read:seconds=>input.read(seconds,settings.keyboardSensitivity),action:code=>Object.keys(bindings).find(a=>bindings[a]===code),uses:code=>Object.values(bindings).includes(code)||code==='F2'||code==='F3'};
+ sync();render();return {bindings,cancel,reset,update,sync,isListening:()=>!!pending,read:seconds=>input.read(seconds,settings.keyboardSensitivity),action:code=>Object.keys(bindings).find(a=>bindings[a]===code),uses:code=>Object.values(bindings).includes(code)||code==='F2'||code==='F3'};
 }

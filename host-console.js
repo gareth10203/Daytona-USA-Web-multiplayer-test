@@ -1,4 +1,4 @@
-import {classifyConnection,describeEvent} from './connection-health.js?v=35-uix-review';
+import {classifyConnection,describeEvent} from './connection-health.js?v=43-reverse-checkpoints';
 const $=id=>document.getElementById(id);
 const node=(tag,text,className)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;};
 const ms=v=>Number.isFinite(v)?v<1000?`${Math.round(v)} ms`:`${(v/1000).toFixed(1)} s`:'—';
@@ -26,7 +26,7 @@ export function mountHostConsole(room){
   const ids=new Set();
   for(const row of report.rows){const id=row.serial;ids.add(id);let view=rows.get(id);if(!view){view=rowElement(row);rows.set(id,view);$('connectionRows').append(view.tr,view.detail);}
    const state=classifyConnection(row,report.phase==='playing'),fresh=!row.archived&&row.reportAgeMs!=null&&row.reportAgeMs<=Math.max(3000,(row.rttMs||0)*3+1000);
-   view.name.textContent=row.name;view.seat.textContent=row.self?'01 · You / host':`${row.cabinet==null?'Pending request':String(row.cabinet).padStart(2,'0')+' · Cabinet'}${row.archived?' · Previous participant':''}`;
+   view.name.textContent=row.name;view.seat.textContent=row.self?`${String(row.cabinet??1).padStart(2,'0')} · You / host`:`${row.cabinet==null?'Pending request':String(row.cabinet).padStart(2,'0')+' · Cabinet'}${row.archived?' · Previous participant':''}`;
    view.button.setAttribute('aria-label',`Connection details for ${row.name}`);view.tr.dataset.level=state.level;view.status.dataset.level=state.level;view.status.textContent=state.label;view.status.title=state.detail;
    view.values[1].textContent=row.self?'Local':ms(row.rttMs);view.values[1].title=row.rttSource==='browser'?'Browser candidate-pair RTT':'Round-trip room ping measured by the host';
    const sim=row.health?.phase==='playing'?row.health.simulationHz:null;

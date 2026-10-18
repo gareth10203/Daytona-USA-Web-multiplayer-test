@@ -267,3 +267,33 @@
 }
 
 @media(max-width:760px){.room-settings .cpu-cars-setting,.room-settings .direction-setting{grid-column:1/-1}.room-settings .room-hint:not(:empty){display:block}}
+/* A seat changes only on activation; hover and focus preview the action. */
+#menuDialog .driver-card.empty-slot{padding:0;}
+#menuDialog .seat-move{display:grid;grid-template-columns:25px minmax(0,1fr);gap:2px 8px;align-content:center;align-items:center;width:100%;height:100%;min-height:inherit;padding:9px 8px;text-align:left;border:0;border-radius:inherit;background:transparent;color:#77776c;font:inherit;cursor:pointer;}
+#menuDialog .seat-move .cabinet-number{grid-row:1/3;}
+#menuDialog .seat-move .seat-label{font-size:12px;}
+#menuDialog .seat-move .seat-action{grid-column:2;font-size:10px;color:#a60000;visibility:hidden;}
+#menuDialog .empty-slot:has(.seat-move:enabled:hover),#menuDialog .empty-slot:has(.seat-move:focus-visible),#menuDialog .empty-slot:has(.seat-move.gamepad-focus){border-color:#aa1313;background:#fff8db;}
+#menuDialog .seat-move:enabled:hover .seat-action,#menuDialog .seat-move:focus-visible .seat-action,#menuDialog .seat-move.gamepad-focus .seat-action{visibility:visible;}
+#menuDialog .seat-move:disabled{cursor:default;opacity:.65;}
+#menuDialog .driver-card.own-seat{border-color:var(--car-color);box-shadow:inset 0 0 0 2px var(--car-color);}
+.seat-status{margin:8px 2px 0;color:#66665c;font-size:11px;line-height:1.5;min-height:1.5em;}
+@media(hover:none){#menuDialog .seat-move:enabled .seat-action{visibility:visible;}}
+
+#menuDialog .seat-swap{position:absolute;inset:0;z-index:1;padding:0;border:0;border-radius:inherit;background:transparent;box-shadow:none;}
+#menuDialog .seat-swap:disabled{filter:none;opacity:1;}
+#menuDialog .seat-swap:not(:disabled):is(:hover,:focus-visible,.gamepad-focus){background:#fff0a522;}
+#menuDialog .seat-card-action{position:absolute;left:38px;bottom:10px;font-size:10px;color:#a20d0d;background:#fffdf0;visibility:hidden;}
+#menuDialog .driver-card:has(.seat-swap:enabled:is(:hover,:focus-visible,.gamepad-focus)) .driver-info small{visibility:hidden;}
+#menuDialog .seat-swap:enabled:is(:hover,:focus-visible,.gamepad-focus) .seat-card-action{visibility:visible;}
+#menuDialog .room-panel .remove-driver{position:relative;z-index:2;}
+.seat-swap-notice{margin:10px 0 0;padding:12px;border:1px solid #c9ad38;border-radius:4px;background:#fff9dc;text-align:left;}
+.seat-swap-notice h4{font-size:12px;margin:0 0 5px;}.seat-swap-notice p{font-size:11px;line-height:1.5;margin:0 0 9px;}
+.seat-swap-actions{display:flex;gap:8px;flex-wrap:wrap;}#menuDialog .seat-swap-notice .seat-swap-actions .ui-button{min-height:36px;padding:7px 10px;font-size:11px;}
+@media(max-width:600px){#menuDialog .seat-swap-notice .seat-swap-actions .ui-button{min-height:44px;flex:1;}}
+
+@media(min-width:900px){#menuDialog .room-panel.has-seat-swap .driver-card{min-height:48px;padding-top:6px;padding-bottom:6px;}#menuDialog .room-panel.has-seat-swap .driver-card.empty-slot{padding:0;}#menuDialog .room-panel.has-seat-swap .seat-move{padding-top:6px;padding-bottom:6px;}}
+
+@media(min-width:900px) and (max-height:780px){#menuDialog .room-panel.has-seat-swap .driver-card{min-height:44px;padding-top:4px;padding-bottom:4px;}#menuDialog .room-panel.has-seat-swap .driver-card.empty-slot{padding:0;}#menuDialog .room-panel.has-seat-swap .seat-move{padding-top:4px;padding-bottom:4px;}}
+
+#menuDialog .room-panel.has-seat-swap #readyRoom:disabled{background:#e9e9e3;border-color:#d1d1c8;color:#89897e;}

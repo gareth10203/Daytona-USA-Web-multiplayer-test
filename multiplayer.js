@@ -1,9 +1,9 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=35-uix-review';
-import {SnapshotFlow} from './snapshot-flow.js?v=35-uix-review';
-import {LinkClock,receivedTiming} from './link-timing.js?v=35-uix-review';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=35-uix-review';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=35-uix-review';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=35-uix-review';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=43-reverse-checkpoints';
+import {SnapshotFlow} from './snapshot-flow.js?v=43-reverse-checkpoints';
+import {LinkClock,receivedTiming} from './link-timing.js?v=43-reverse-checkpoints';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=43-reverse-checkpoints';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=43-reverse-checkpoints';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=43-reverse-checkpoints';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -23,8 +23,8 @@ export class Multiplayer {
  constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},isVisible=()=>true,readHealth=()=>({}),readPerformance=()=>null}={}){
   Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,isVisible,readHealth,readPerformance});this.performanceCaptureEnabled=true;this.hostDiagnosticsEnabled=true;this.reset();
  }
- reset(){this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.settings={mode:0,difficulty:0,region:'Export',cpuCars:true,reverse:false};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
- snapshot(){return {diagnosticsEnabled:this.performanceCaptureEnabled,phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),lastAck:this.lastAck};}
+ reset(){this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.swaps=new Map();this.swapNotice='';this.settings={mode:0,difficulty:0,region:'Export',cpuCars:true,reverse:false};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
+ snapshot(){return {diagnosticsEnabled:this.performanceCaptureEnabled,phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),seatPending:[...this.commands.values()].find(c=>c.data.type==='move-seat')?.data.cabinet??null,seatActionPending:[...this.commands.values()].some(c=>['move-seat','swap-request','swap-answer','swap-cancel'].includes(c.data.type)),swaps:this.swapState(),swapNotice:this.swapNotice,lastAck:this.lastAck};}
  changed(){this.onChange(this.snapshot());}
  recordConnectionEvent(kind,conn=null,detail={}){
   const now=performance.now(),pc=conn?.peerConnection;
@@ -62,7 +62,7 @@ export class Multiplayer {
   try{return this.performanceHistory.accept(member,data.performance,[this.epoch||this.endedEpoch],{activeIDs:this.members.map(m=>m.id)}).ack;}catch{return this.performanceHistory.records.get(conn.peer)?.lastSequence||0;}
  }
  performanceIdentities(){
-  const identities=[{id:this.id,serial:0,name:this.name,cabinet:1,self:true}];
+  const identities=[{id:this.id,serial:0,name:this.name,cabinet:this.members.find(m=>m.id===this.id)?.cabinet??null,self:true}];
   for(const member of this.members){if(member.id===this.id)continue;if(!this.consoleRecords.has(member.id))this.connectionRow(member,this.connections.get(member.id),performance.now());}
   for(const [id,record] of this.consoleRecords)if(record.row)identities.push({id,serial:record.serial,name:record.row.name,cabinet:record.row.cabinet,self:false});
   return identities;
@@ -104,7 +104,7 @@ export class Multiplayer {
  consoleSnapshot({includePerformance=false}={}){
   if(!this.isHost){if(!this.lastHostReport)return null;return {...structuredClone(this.lastHostReport),...(includePerformance?{performance:structuredClone(this.lastHostPerformance)}:{})};}
   this.makePerformance();
-  const now=performance.now(),health=this.makeHealth(now),activeIDs=new Set([this.id]),rows=[{serial:0,self:true,name:cleanName(this.name),cabinet:1,visible:health.visible,health,reportAgeMs:0,connection:'connected',archived:false,rttMs:null,lastMessageAgeMs:0,lastStateAgeMs:null,progressAgeMs:this.active?Math.max(0,now-this.progressAt):null,bufferedBytes:this.diagnostics().bufferedBytes,performance:this.performanceHistory.summary(this.id)}];
+  const now=performance.now(),health=this.makeHealth(now),activeIDs=new Set([this.id]),rows=[{serial:0,self:true,name:cleanName(this.name),cabinet:this.members.find(m=>m.id===this.id)?.cabinet??null,visible:health.visible,health,reportAgeMs:0,connection:'connected',archived:false,rttMs:null,lastMessageAgeMs:0,lastStateAgeMs:null,progressAgeMs:this.active?Math.max(0,now-this.progressAt):null,bufferedBytes:this.diagnostics().bufferedBytes,performance:this.performanceHistory.summary(this.id)}];
   for(const member of [...this.members,...this.pending.values()]){
    if(member.id===this.id)continue;activeIDs.add(member.id);const conn=this.connections.get(member.id),previous=this.consoleRecords.get(member.id)?.row;
    rows.push(conn?this.connectionRow(member,conn,now):previous?{...previous,archived:false,connection:member.connection||'reconnecting'}:this.connectionRow(member,null,now));
@@ -135,10 +135,10 @@ export class Multiplayer {
   try{const conn=this.peer.connect(this.host,{reliable:true,serialization:'binary',metadata:{build:BUILD_ID,token:this.secret,name:this.name,session:this.sessionKey}});this.server=conn;this.attach(conn,false);}
   catch(e){if(this.phase==='connecting')throw e;this.retryAt=performance.now()+retryDelay(this.retryAttempt++);}
  }
- failRoom(reason){this.reconnectUntil=0;this.commands.clear();this.phase='error';this.error=reason;this.members=[];this.changed();}
+ failRoom(reason){this.reconnectUntil=0;this.commands.clear();this.phase='error';this.error=reason;this.members=[];this.swaps.clear();this.changed();}
  syncConnection(conn){
   const admitted=this.members.some(m=>m.id===conn.peer);
-  this.send(conn,{type:'room-sync',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,revision:this.revision,admitted,members:admitted?this.members:[],settings:this.settings,chat:admitted?this.chat:[],reason:this.error});
+  this.send(conn,{type:'room-sync',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,revision:this.revision,admitted,members:admitted?this.members:[],settings:this.settings,chat:admitted?this.chat:[],swaps:admitted?this.swapState():[],reason:this.error});
  }
  command(type,fields){if(this.commands.size>=32)throw Error('Waiting for the host to confirm pending actions.');const data={type,...fields,command:++this.commandSequence};this.commands.set(data.command,{data,at:performance.now()});try{this.send(this.server,data);}catch{if(this.server)this.detach(this.server,false);}this.changed();}
  acknowledge(conn,data,accepted,reason=''){
@@ -207,7 +207,8 @@ export class Multiplayer {
   conn.on('close',()=>pc.removeEventListener?.('connectionstatechange',observe));
  }
  forget(id,reason,cause='transport-interruption',source='observed'){
-  const member=this.members.find(m=>m.id===id);this.sessions.delete(id);this.pending.delete(id);this.chatRate.delete(id);this.members=this.members.filter(m=>m.id!==id);this.renumber();this.trimConsoleRecords();
+  const member=this.members.find(m=>m.id===id);this.sessions.delete(id);this.pending.delete(id);this.chatRate.delete(id);this.members=this.members.filter(m=>m.id!==id);this.trimConsoleRecords();
+  this.cancelSwapsFor(id);
   if(member){this.revision++;for(const m of this.members)m.ready=false;if(this.active||this.phase==='preparing')this.end(reason+' The arcade link must restart.',member,cause,source);else this.error=`${member.name} left the room. ${reason}`;}
   this.publish();
  }
@@ -216,7 +217,7 @@ export class Multiplayer {
    if(this.connections.get(conn.peer)!==conn)return;this.retainConnection(conn);this.connections.delete(conn.peer);
    const member=this.members.find(m=>m.id===conn.peer),pending=this.pending.get(conn.peer),session=this.sessions.get(conn.peer);
    if(recover&&session&&(member||pending)){
-    session.until=performance.now()+RECONNECT_GRACE_MS;
+    this.cancelSwapsFor(conn.peer);session.until=performance.now()+RECONNECT_GRACE_MS;
     if(member){if(this.active||this.phase==='preparing')this.end(reason+' Reconnect in the lobby to start again.',member,cause,source);member.connection='reconnecting';this.revision++;for(const m of this.members)m.ready=false;this.error=`${member.name} is reconnecting. ${reason} Their seat is reserved for 30 seconds.`;}
     if(pending)pending.connection='reconnecting';this.publish();
    }else this.forget(conn.peer,reason,cause,source);
@@ -225,19 +226,93 @@ export class Multiplayer {
    const host=this.members.find(m=>m.id===this.host),message=host?`Session interrupted by ${host.name} (cabinet ${host.cabinet}). ${reason}`:reason;
    if(!recover||this.phase==='error'){this.reconnectUntil=0;this.commands.clear();this.awaitingStop=false;this.failRoom(message);return;}
    if(this.active||this.phase==='preparing')this.stopLocal(message+' Reconnecting in the lobby.');
-   this.awaitingStop=false;if(!this.reconnectUntil){this.reconnectUntil=performance.now()+RECONNECT_GRACE_MS;this.retryAttempt=0;}
+   this.swaps.clear();this.awaitingStop=false;if(!this.reconnectUntil){this.reconnectUntil=performance.now()+RECONNECT_GRACE_MS;this.retryAttempt=0;}
    this.retryAt=performance.now()+retryDelay(this.retryAttempt++);this.phase='reconnecting';this.error=`Connection interrupted. ${reason} Reconnecting automatically…`;for(const m of this.members){m.ready=false;if(m.id===this.id)m.connection='reconnecting';}this.changed();
   }
  }
- renumber(){this.members.forEach((x,i)=>x.cabinet=i+1);}
- publish(){if(this.isHost&&this.phase!=='idle'){this.broadcast({type:'roster',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,members:this.members,settings:this.settings,revision:this.revision,phase:this.phase});}this.changed();}
- approve(id){if(!this.isHost||this.phase!=='lobby'||!this.pending.has(id)||!this.connections.get(id)?.open||this.members.length>=8)return;const member=this.pending.get(id);this.pending.delete(id);this.members.push({...member,ready:false,cabinet:this.members.length+1,rtt:null});this.recordConnectionEvent('player-admitted',this.connections.get(id),{source:'action'});this.revision++;for(const m of this.members)m.ready=false;const conn=this.connections.get(id);this.syncConnection(conn);this.publish();}
+ // Car numbers are stable across departures; new admissions fill the first vacancy.
+ firstOpenSeat(){return Array.from({length:8},(_,i)=>i+1).find(seat=>!this.members.some(m=>m.cabinet===seat));}
+ moveSeat(cabinet){
+  if(this.phase!=='lobby'||this.awaitingStop||this.snapshot().seatActionPending||!!this.swapFor(this.id))return false;
+  const member=this.members.find(m=>m.id===this.id);
+  if(!member||member.connection==='reconnecting'||member.cabinet===cabinet)return false;
+  this.swapNotice='';if(this.isHost){const reason=this.seatChangeError(this.id,cabinet,this.revision);if(reason){this.error=reason;this.changed();return false;}this.assignSeat(member,cabinet);}
+  else this.command('move-seat',{cabinet,revision:this.revision});
+  return true;
+ }
+ seatChangeError(id,cabinet,revision){
+  if(this.phase!=='lobby')return 'Seats can only change in the lobby.';
+  const member=this.members.find(m=>m.id===id);
+  if(!member||member.connection==='reconnecting')return 'Reconnect before choosing a seat.';
+  if(this.swapFor(id))return 'Finish or cancel your swap request before changing seats.';
+  if(!Number.isInteger(cabinet)||cabinet<1||cabinet>8)return 'Choose a seat from 1 to 8.';
+  if(this.members.some(m=>m.id!==id&&m.cabinet===cabinet))return 'That seat is already occupied. Choose another open seat.';
+  if(revision!==this.revision)return 'The grid changed. Choose your seat again.';
+  return '';
+ }
+ assignSeat(member,cabinet){
+  if(member.cabinet===cabinet)return;
+  member.cabinet=cabinet;this.revision++;this.error='';for(const m of this.members)m.ready=false;
+  this.recordConnectionEvent('seat-changed',this.connections.get(member.id),{member,source:'action',reason:`Car number changed to ${cabinet}.`});this.publish();
+ }
+ swapState(){return [...this.swaps.values()].map(({until,...offer})=>({...offer}));}
+ swapFor(id){return [...this.swaps.values()].find(s=>s.from===id||s.to===id);}
+ applySwaps(value){
+  const offers=Array.isArray(value)?value:[],seen=new Set();if(offers.length>4)throw Error('Invalid seat requests.');
+  const next=new Map();for(const o of offers){
+   if(!o||typeof o.id!=='string'||!/^[a-f0-9]{32}$/.test(o.id)||next.has(o.id)||o.from===o.to||seen.has(o.from)||seen.has(o.to)||!Number.isFinite(o.expiresAt)||!this.members.some(m=>m.id===o.from&&m.cabinet===o.fromCabinet)||!this.members.some(m=>m.id===o.to&&m.cabinet===o.toCabinet))throw Error('Invalid seat request.');
+   seen.add(o.from);seen.add(o.to);next.set(o.id,{id:o.id,from:o.from,to:o.to,fromCabinet:o.fromCabinet,toCabinet:o.toCabinet,expiresAt:o.expiresAt});
+  }const previous=this.swapFor(this.id)?.id;this.swaps=next;if(this.swapFor(this.id)&&this.swapFor(this.id).id!==previous)this.swapNotice='';
+ }
+ requestSwap(target){
+  if(this.phase!=='lobby'||this.awaitingStop||this.snapshot().seatActionPending)return false;
+  this.swapNotice='';if(this.isHost){const reason=this.createSwap(this.id,target,this.revision);if(reason){this.swapNotice=reason;this.changed();return false;}}
+  else this.command('swap-request',{target,revision:this.revision});return true;
+ }
+ answerSwap(id,accept){
+  if(this.phase!=='lobby'||this.snapshot().seatActionPending)return false;
+  if(this.isHost){const reason=this.acceptSwapAnswer(this.id,id,accept);if(reason){this.swapNotice=reason;this.changed();return false;}}
+  else this.command('swap-answer',{id,accept});return true;
+ }
+ cancelSwap(id){
+  if(this.phase!=='lobby'||this.snapshot().seatActionPending)return false;
+  if(this.isHost){const reason=this.acceptSwapCancel(this.id,id);if(reason){this.swapNotice=reason;this.changed();return false;}}
+  else this.command('swap-cancel',{id});return true;
+ }
+ createSwap(from,to,revision){
+  this.expireSwaps();const a=this.members.find(m=>m.id===from),b=this.members.find(m=>m.id===to);
+  if(this.phase!=='lobby'||!a||!b||from===to)return 'Choose another driver in the lobby.';
+  if(a.connection==='reconnecting'||b.connection==='reconnecting')return 'Both drivers must be connected to swap.';
+  if(this.swapFor(from)||this.swapFor(to))return 'A driver already has a pending swap. Try again after it finishes.';
+  if(revision!==this.revision)return 'The grid changed. Choose the driver again.';
+  const offer={id:token(),from,to,fromCabinet:a.cabinet,toCabinet:b.cabinet,expiresAt:Date.now()+30000,until:performance.now()+30000};this.swaps.set(offer.id,offer);this.swapNotice='';this.publish();return '';
+ }
+ acceptSwapAnswer(actor,id,accept){
+  const offer=this.swaps.get(id);if(this.phase!=='lobby'||!offer||offer.to!==actor||typeof accept!=='boolean')return 'This swap request is no longer available.';
+  if(performance.now()>=offer.until){this.finishSwap(offer,'The seat swap request expired.');return 'This swap request expired.';}
+  const a=this.members.find(m=>m.id===offer.from),b=this.members.find(m=>m.id===offer.to);
+  if(!a||!b||a.connection==='reconnecting'||b.connection==='reconnecting'||a.cabinet!==offer.fromCabinet||b.cabinet!==offer.toCabinet){this.finishSwap(offer,'The seat swap was cancelled because a driver or seat changed.');return 'The grid changed. Request another swap.';}
+  if(!accept){this.finishSwap(offer,`${b.name} declined the seat swap.`);return '';}
+  [a.cabinet,b.cabinet]=[b.cabinet,a.cabinet];this.revision++;for(const m of this.members)m.ready=false;
+  this.recordConnectionEvent('seats-swapped',this.connections.get(actor),{member:b,source:'action',reason:`Cars ${offer.fromCabinet} and ${offer.toCabinet} exchanged by mutual agreement.`});
+  this.finishSwap(offer,'Seat swap accepted. Confirm Ready again.');return '';
+ }
+ acceptSwapCancel(actor,id){const offer=this.swaps.get(id);if(this.phase!=='lobby'||!offer||offer.from!==actor)return 'This swap request is no longer available.';this.finishSwap(offer,'The seat swap request was cancelled.');return '';}
+ finishSwap(offer,message,publish=true){
+  if(!this.swaps.delete(offer.id))return;
+  for(const id of [offer.from,offer.to]){if(id===this.id)this.swapNotice=message;else{const conn=this.connections.get(id);if(conn?.open)try{this.send(conn,{type:'swap-result',message});}catch{}}}
+  if(publish)this.publish();
+ }
+ cancelSwapsFor(id){for(const offer of [...this.swaps.values()])if(offer.from===id||offer.to===id)this.finishSwap(offer,'The seat swap was cancelled because a driver disconnected.',false);}
+ expireSwaps(now=performance.now()){if(!this.isHost)return;for(const offer of [...this.swaps.values()])if(now>=offer.until)this.finishSwap(offer,'The seat swap request expired.');}
+ publish(){if(this.isHost&&this.phase!=='idle'){this.broadcast({type:'roster',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,members:this.members,swaps:this.swapState(),settings:this.settings,revision:this.revision,phase:this.phase});}this.changed();}
+ approve(id){if(!this.isHost||this.phase!=='lobby'||!this.pending.has(id)||!this.connections.get(id)?.open||this.members.length>=8)return;const member=this.pending.get(id);this.pending.delete(id);this.members.push({...member,ready:false,cabinet:this.firstOpenSeat(),rtt:null});this.recordConnectionEvent('player-admitted',this.connections.get(id),{source:'action'});this.revision++;for(const m of this.members)m.ready=false;const conn=this.connections.get(id);this.syncConnection(conn);this.publish();}
  kick(id){
   if(!this.isHost||this.phase!=='lobby'||id===this.id||!this.members.some(m=>m.id===id))return false;
-  const conn=this.connections.get(id);this.recordConnectionEvent('host-removed-player',conn,{source:'action'});if(conn)this.retainConnection(conn);
+  this.cancelSwapsFor(id);const conn=this.connections.get(id);this.recordConnectionEvent('host-removed-player',conn,{source:'action'});if(conn)this.retainConnection(conn);
   if(conn?.open)this.send(conn,{type:'removed',reason:'The host removed you from this room.'});
   this.connections.delete(id);this.sessions.delete(id);this.pending.delete(id);this.members=this.members.filter(m=>m.id!==id);
-  this.renumber();this.trimConsoleRecords();this.revision++;for(const m of this.members)m.ready=false;this.publish();
+  this.trimConsoleRecords();this.revision++;for(const m of this.members)m.ready=false;this.publish();
   if(conn)setTimeout(()=>conn.close(),200);
   return true;
  }
@@ -264,9 +339,9 @@ export class Multiplayer {
  }
  reject(id,reason='The host declined this request.'){const conn=this.connections.get(id);if(conn){this.recordConnectionEvent('request-declined',conn,{source:'action'});this.retainConnection(conn);}if(conn?.open){this.send(conn,{type:'reject',reason});setTimeout(()=>conn.close(),200);}this.connections.delete(id);this.sessions.delete(id);this.pending.delete(id);this.trimConsoleRecords();this.changed();}
  setSettings(value){if(!this.isHost||this.phase!=='lobby')return;this.settings=validateSettings(value);this.revision++;for(const x of this.members)x.ready=false;this.publish();}
- ready(value){if(this.phase!=='lobby'||this.awaitingStop||(value&&!this.isVisible())||this.snapshot().readyPending)return;if(this.isHost){this.members[0].ready=!!value;this.publish();}else this.command('ready',{value:!!value,revision:this.revision});}
+ ready(value){if(this.phase!=='lobby'||this.awaitingStop||(value&&!this.isVisible())||this.snapshot().readyPending||this.snapshot().seatActionPending||this.swapFor(this.id))return;if(this.isHost){this.members[0].ready=!!value;this.publish();}else this.command('ready',{value:!!value,revision:this.revision});}
  async start(){
-  if(!this.isVisible()||!this.isHost||this.phase!=='lobby'||this.members.length<2||this.pending.size||this.members.some(x=>!x.ready||x.connection==='reconnecting'))return;
+  this.expireSwaps();if(!this.isVisible()||!this.isHost||this.phase!=='lobby'||this.members.length<2||this.pending.size||this.swaps.size||this.members.some(x=>!x.ready||x.connection==='reconnecting'))return;
   this.phase='preparing';this.progressFrames=0;this.epoch=token();this.prepared.clear();this.prepareDeadline=performance.now()+60000;this.error='';
   const data={type:'prepare',diagnostics:this.diagnosticsPolicy(),epoch:this.epoch,members:this.members,settings:this.settings,revision:this.revision};this.broadcast(data);this.changed();await this.prepare(data);
  }
@@ -301,7 +376,7 @@ export class Multiplayer {
   }
  }
 
- validateMembers(members){if(!Array.isArray(members)||members.length<1||members.length>8||new Set(members.map(x=>x.id)).size!==members.length||members[0].id!==this.host||members.some((x,i)=>typeof x.id!=='string'||x.cabinet!==i+1))throw Error('Invalid cabinet roster.');return members.map(x=>({id:x.id,name:cleanName(x.name),cabinet:x.cabinet,ready:!!x.ready,rtt:!this.isHost&&x.id===this.host&&this.server?.open&&Number.isFinite(this.server.measuredRttMs)?Math.round(this.server.measuredRttMs):Number.isFinite(x.rtt)?x.rtt:null,connection:x.connection==='reconnecting'?'reconnecting':'connected'}));}
+ validateMembers(members){if(!Array.isArray(members)||members.length<1||members.length>8||members.some(x=>!x)||new Set(members.map(x=>x.id)).size!==members.length||members[0].id!==this.host||members.some(x=>!x||typeof x.id!=='string'||!Number.isInteger(x.cabinet)||x.cabinet<1||x.cabinet>8)||new Set(members.map(x=>x.cabinet)).size!==members.length)throw Error('Invalid cabinet roster.');return members.map(x=>({id:x.id,name:cleanName(x.name),cabinet:x.cabinet,ready:!!x.ready,rtt:!this.isHost&&x.id===this.host&&this.server?.open&&Number.isFinite(this.server.measuredRttMs)?Math.round(this.server.measuredRttMs):Number.isFinite(x.rtt)?x.rtt:null,connection:x.connection==='reconnecting'?'reconnecting':'connected'}));}
  handle(conn,data,incoming){
   if(!data||typeof data.type!=='string')throw Error('Invalid room message.');
   if(this.active&&data.epoch===this.epoch&&Number.isSafeInteger(data.frames)&&data.frames>=0){
@@ -320,11 +395,13 @@ export class Multiplayer {
    if(this.connections.get(conn.peer)!==conn)return;
    if(data.type==='leave'){this.receivePerformance(conn,data);this.recordConnectionEvent('player-left',conn,{source:'action'});this.detach(conn,true,'The player left the room.',false,'player-left','action');conn.close();return;}
    const member=this.members.find(x=>x.id===conn.peer);if(!member)return;
-   if(['ready','chat-submit'].includes(data.type)){
+   if(['ready','chat-submit','move-seat','swap-request','swap-answer','swap-cancel'].includes(data.type)){
     const session=this.sessions.get(conn.peer),saved=session?.commands.get(data.command);if(saved){this.send(conn,saved);return;}
-    if(data.command!==undefined&&(!Number.isSafeInteger(data.command)||data.command<1))throw Error('Invalid lobby action.');
+    if((data.command!==undefined||data.type.startsWith('swap-'))&&(!Number.isSafeInteger(data.command)||data.command<1))throw Error('Invalid lobby action.');
     if(data.command!==undefined&&data.command<=(session?.lastCommand||0)){this.acknowledge(conn,data,false,'This action has expired.');return;}
-    if(data.type==='ready'){const valid=this.phase==='lobby'&&data.revision===this.revision; if(valid){member.ready=!!data.value;this.publish();}this.acknowledge(conn,data,valid,valid?'':'Room settings changed. Please confirm Ready again.');if(!valid&&this.phase==='lobby')this.syncConnection(conn);}
+    if(data.type==='ready'){const valid=this.phase==='lobby'&&data.revision===this.revision&&!this.swapFor(conn.peer); if(valid){member.ready=!!data.value;this.publish();}this.acknowledge(conn,data,valid,valid?'':'Room settings changed. Please confirm Ready again.');if(!valid&&this.phase==='lobby')this.syncConnection(conn);}
+    else if(data.type==='move-seat'){const reason=this.seatChangeError(conn.peer,data.cabinet,data.revision);if(!reason)this.assignSeat(member,data.cabinet);this.acknowledge(conn,data,!reason,reason);if(reason&&this.phase==='lobby')this.syncConnection(conn);}
+    else if(data.type.startsWith('swap-')){const reason=data.type==='swap-request'?this.createSwap(conn.peer,data.target,data.revision):data.type==='swap-answer'?this.acceptSwapAnswer(conn.peer,data.id,data.accept):this.acceptSwapCancel(conn.peer,data.id);this.acknowledge(conn,data,!reason,reason);if(reason&&this.phase==='lobby')this.syncConnection(conn);}
     else{const valid=this.acceptChat(conn.peer,data.text);this.acknowledge(conn,data,valid,valid?'':'Message could not be sent. Try again in the lobby.');}
    }
    else if(data.type==='prepared'&&this.phase==='preparing'&&data.epoch===this.epoch&&data.revision===this.revision){this.prepared.add(conn.peer);this.tryGo();}
@@ -340,12 +417,13 @@ export class Multiplayer {
    if(data.type==='command-ack'){
     if(this.commands.delete(data.command)){this.lastAck={...data};this.changed();}return;
    }
+   if(data.type==='swap-result'){this.swapNotice=String(data.message||'').slice(0,200);this.changed();return;}
    if(data.type==='room-sync'){
     if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;
     const settings=validateSettings(data.settings),members=data.admitted?this.validateMembers(data.members):[];
     if(data.admitted&&!members.some(m=>m.id===this.id))throw Error('Missing session identity.');
     const chat=Array.isArray(data.chat)?data.chat.slice(-CHAT_HISTORY_LIMIT).map(m=>this.validateChatMessage(m)).filter(Boolean):[];
-    this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;this.revision=data.revision;this.settings=settings;this.members=members;this.chat=data.admitted?chat:[];
+    this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;this.revision=data.revision;this.settings=settings;this.members=members;this.applySwaps(data.admitted?data.swaps:[]);this.chat=data.admitted?chat:[];
     this.reconnectUntil=0;this.retryAt=0;this.retryAttempt=0;this.awaitingStop=false;this.phase=data.admitted?'lobby':'pending';this.error=String(data.reason||'').slice(0,280);
     for(const [id,command] of this.commands){if(command.data.type==='ready')this.commands.delete(id);else command.at=-Infinity;}this.changed();return;
    }
@@ -362,7 +440,7 @@ export class Multiplayer {
     const message=this.validateChatMessage(data.message);
     if(message&&message.seq>(this.chat.at(-1)?.seq??0)){this.chat.push(message);if(this.chat.length>CHAT_HISTORY_LIMIT)this.chat.shift();this.changed();}
    }
-   else if(data.type==='roster'){if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;if(this.awaitingStop&&data.phase==='lobby')this.awaitingStop=false;this.members=this.validateMembers(data.members);this.settings=validateSettings(data.settings);this.revision=data.revision;this.changed();}
+   else if(data.type==='roster'){if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;if(this.awaitingStop&&data.phase==='lobby')this.awaitingStop=false;this.members=this.validateMembers(data.members);this.applySwaps(data.swaps);this.settings=validateSettings(data.settings);this.revision=data.revision;this.changed();}
    else if(data.type==='prepare'&&this.phase==='lobby'){this.revision=data.revision;void this.prepare(data).catch(e=>this.end(e.message,this.id,'prepare-failed'));}
    else if(data.type==='go'&&this.phase==='preparing'&&data.epoch===this.epoch)this.go();
    else if(data.type==='stop'&&(data.epoch===this.epoch||(this.awaitingStop&&data.epoch===this.endedEpoch)))this.stopLocal(String(data.reason||'The arcade link stopped.').slice(0,280));
@@ -399,6 +477,7 @@ export class Multiplayer {
   else{const hadSession=!!this.epoch;try{if(hadSession)this.send(this.server,{type:'stop',epoch:this.epoch,reason:detail,cause,health:this.makeHealth(),performance:this.makePerformance()});}catch{}this.stopLocal(message);this.awaitingStop=hadSession;this.changed();}
  }
  heartbeat(now=performance.now()){
+  this.expireSwaps(now);
   const health=this.makeHealth(now),performanceData=this.makePerformance();
   if(!this.signaling&&this.peer&&!this.peer.destroyed&&now>=this.signalRetryAt){this.signalRetryAt=now+retryDelay(this.signalAttempt++);if(this.peer.disconnected)try{this.peer.reconnect();}catch{}}
   if(this.phase==='reconnecting'){
