@@ -1,8 +1,9 @@
-REVISION 36 - FALLBACK WEBGL2
-Se prefiere WebGPU y se utiliza WebGL2 si falla durante el arranque.
-Para probar WebGL2: agregar ?renderer=webgl2 a la URL.
-El backend activo aparece en Settings / Graphics.
-Conserva las funciones y el motor nativo de la revision 35.
-Subir el CONTENIDO del ZIP a GitHub Pages. No contiene ROM.
-Documentacion, limites y resultados completos: INVESTIGACIONES.md.
-La revision 35 permanece separada.
+REVISION 46.1 - NOMBRES EN CARRERA
+Nombres, colores y puestos del arcade debajo de Cabinet.
+Permanecen durante resultados hasta volver a attract.
+WebGPU principal, WebGL2 de respaldo; API en Settings / Experimental.
+Subir el CONTENIDO del ZIP a GitHub Pages. No incluye ROM.
+Documentacion y limites: INVESTIGACIONES.md.
+Licencia de la fuente: fonts/VT323-OFL.txt.
+
+Only position and name are displayed; car colours and attract lifecycle retained.

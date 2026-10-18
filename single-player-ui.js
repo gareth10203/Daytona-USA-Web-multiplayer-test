@@ -1,4 +1,4 @@
-import {loadSingleSettings,sameSingleSettings,SINGLE_SETTINGS_ID} from './single-player-settings.js?v=43-reverse-checkpoints';
+import {loadSingleSettings,sameSingleSettings,SINGLE_SETTINGS_ID} from './single-player-settings.js?v=46-race-names';
 
 export function createSinglePlayerUI({storage,onOpen,onBack,onStart,getSession,unlockAudio}){
  const $=id=>document.getElementById(id),panel=$('singlePlayerPanel'),form=$('singleRaceForm');

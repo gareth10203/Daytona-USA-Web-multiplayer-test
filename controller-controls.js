@@ -1,5 +1,5 @@
-import {CONTROLLER_ACTIONS,ControllerInput,loadControllers,saveControllers,defaultControllerProfile,assignControllerButton,buttonPressed,buttonValue,controllerButtonName} from './controller-profile.js?v=43-reverse-checkpoints';
-import {gamepadSteering} from './steering.js?v=43-reverse-checkpoints';
+import {CONTROLLER_ACTIONS,ControllerInput,loadControllers,saveControllers,defaultControllerProfile,assignControllerButton,buttonPressed,buttonValue,controllerButtonName} from './controller-profile.js?v=46-race-names';
+import {gamepadSteering} from './steering.js?v=46-race-names';
 const $=(root,id)=>root.querySelector('#'+id);
 const clamp=v=>Math.max(-1,Math.min(1,Number.isFinite(v)?v:0));
 const svgButton=(i,x,y,label,r=12)=>`<g data-pad-button="${i}"><circle cx="${x}" cy="${y}" r="${r}"/><text x="${x}" y="${y+4}">${label}</text></g>`;

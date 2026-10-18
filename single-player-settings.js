@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=43-reverse-checkpoints';
-import {validateSettings} from './room-settings.js?v=43-reverse-checkpoints';
+import {DEFAULT_EEPROM} from './nvram.js?v=46-race-names';
+import {validateSettings} from './room-settings.js?v=46-race-names';
 
 export const SINGLE_SETTINGS_ID='daytona-single-player-race-v1';
 export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,region:'Export'});

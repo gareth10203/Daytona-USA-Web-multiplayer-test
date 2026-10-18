@@ -1,6 +1,6 @@
-import {createWebGPURenderer} from './webgpu-renderer.js?v=43-reverse-checkpoints';
-import {createWebGL2Renderer} from './webgl2-renderer.js?v=43-reverse-checkpoints';
-import {requestedGraphicsAPI} from './graphics-api-settings.js?v=43-reverse-checkpoints';
+import {createWebGPURenderer} from './webgpu-renderer.js?v=46-race-names';
+import {createWebGL2Renderer} from './webgl2-renderer.js?v=46-race-names';
+import {requestedGraphicsAPI} from './graphics-api-settings.js?v=46-race-names';
 
 export async function createRenderer(canvas,onFailure,options={}){
  const requested=options.backend??requestedGraphicsAPI({getItem:key=>globalThis.localStorage?.getItem(key)},globalThis.location?.search||'');

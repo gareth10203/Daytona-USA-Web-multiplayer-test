@@ -87883,3 +87883,513 @@ Evidencia resumida (COMPLETE indica observación terminada; los checks explícit
   }
 }
 ```
+
+
+<!-- CABINET RECOVERY 44 -->
+## Revisión 44: Unsupported cabinet settings al cargar ROM
+
+2026-10-18. Captura del usuario: el cargador muestra Unsupported cabinet settings y vuelve a Choose ROM ZIP. El mensaje se origina en ensureDeluxeCabinet, antes de arrancar la simulación, si el byte 26 de la EEPROM no es DELUXE=0, TWIN=1 o UPRIGHT=2. La restauración aceptaba cualquier array de 128 bytes y backup del tamaño adecuado, aunque el tipo de cabina no tuviera significado. La conversión a DELUXE intentaba validar ese byte antes de dar al juego tiempo a inicializar sus ajustes. No se dispone del guardado del usuario: no se afirma qué byte concreto tenía. Sí se reproduce el texto exacto de la captura con la 43 y un guardado de estructura válida cuyo byte de cabina es 255.
+
+Se valida tamaño, bytes, firma SEGA y enum de cabina antes de restaurar EEPROM. Los checksums completos siguen a cargo del arcade original; esta validación no pretende certificar toda la memoria. EEPROM y backup se tratan de forma independiente: una EEPROM inutilizable se reemplaza por el preset DELUXE/Single/Export existente, conservando byte por byte el backup si su estructura es válida. Un backup incompleto vuelve al estado vacío sin borrar ajustes EEPROM utilizables. Se conservan controles, nombre, volumen y otras preferencias en sus claves separadas.
+
+Antes de reparar se intenta conservar una copia del primer texto original en daytona-web-rev-a-nvram-recovery-v1. Esa copia no se sobreescribe en reparaciones posteriores. Si localStorage está bloqueado o lleno, la falta de persistencia no bloquea la carga en memoria; no se promete copia durable en ese caso. Tras una restauración exitosa se guarda el perfil reparado también cuando daytona-deluxe-default-v1 ya estaba marcado: de lo contrario el mismo dato dañado reaparecería en la siguiente visita. Al cerrar/guardar se rechaza una EEPROM sin firma/tipo válido para que un arranque incompleto no sustituya otro guardado utilizable. No hay borrado global de localStorage.
+
+El cargador informa la recuperación y sólo anuncia Scores were preserved si el backup se restauró. Los perfiles compatibles TWIN/UPRIGHT no se catalogan como corruptos: se mantienen y siguen el menú original de migración a DELUXE. Si el marcador de migración ya estaba aplicado, se siguen respetando las elecciones compatibles posteriores del usuario. La página queda en ROM ready con Single Player y Multiplayer disponibles.
+
+Ocho pruebas nuevas de NVRAM, 164 unitarias en total. Chrome visible con motor real sin modificar y ROM local: backup inicializado por el juego original; reproducción del error en main/nvram de la 43; recuperación con marcador DELUXE ausente y presente; comparación íntegra del backup y la copia original; persistencia del perfil corregido; recarga sin volver a reparar; intento de guardar EEPROM inválida sin dañar el guardado; single player avanza después de ambas recuperaciones. Un preset TWIN auténtico anterior sigue convirtiéndose mediante el menú del arcade y conserva el backup, sin aviso de corrupción. Se inspecciona la captura recuperada. Estas pruebas verifican preservación de bytes de la memoria de puntuaciones; no se cuenta con la memoria concreta del usuario afectado.
+
+Motor JS/WASM, reglas de la 43, shaders y red sin cambios. Sólo cambia lógica funcional en main.js y nvram.js; el resto de diferencias web son versión/caché/compatibilidad 44. ZIP 43 preservado. No se volvió a ejecutar una carrera multiplayer: no cambian la preparación nativa, el enlace ni la simulación. Servidor local http://localhost:8118.
+
+```json
+{
+  "status": "PASS",
+  "checks": [
+    "Revision 43 reproduces the exact screenshot with a structurally valid save whose cabinet byte is 255",
+    "Recovered invalid cabinet with DELUXE marker false; score bytes and original copy preserved, repaired save persisted, reload stable and single player advances",
+    "Recovered invalid cabinet with DELUXE marker true; score bytes and original copy preserved, repaired save persisted, reload stable and single player advances",
+    "Valid legacy TWIN profile still migrates through the original arcade menu without being mistaken for corruption"
+  ],
+  "errors": [],
+  "engineSha256": "6b7451e0cf461960eaf79a6342d090786acfe531d8a4e585067b4a4d9a54023f"
+}
+```
+
+
+<!-- SESSION EXIT 45 -->
+## Revisión 45: cabinas que siguen jugando tras cerrar/recargar una pestaña
+
+2026-10-18. Reproducción antes de modificar el frontend: tres motores reales, PeerJS y WebRTC vía TURN/UDP local. Al ejecutar la salida normal del host durante una sesión enlazada, ambos invitados recibían room-closed y quedaban en phase=error, pero main.js conservaba running=true: avanzaron de 492 a 532 frames durante los 700 ms siguientes y nunca se llamó a onStop. No era únicamente un timeout lento: failRoom cambiaba de fase sin detener el motor nativo ni vaciar el epoch. Los casos de recarga/cierre tenían además una salida dependiente de setTimeout(peer.destroy, 200), que pagehide no garantiza ejecutar. No se afirma haber reproducido por separado todos esos síntomas previos en todos los navegadores.
+
+failRoom ahora detiene la sesión o preparación antes de cambiar a error; se limpia el epoch, se deshabilita el enlace y se ejecuta una sola vez el callback existente que detiene reloj, audio e inputs. Los invitados dejan de simular al cerrar la sala. main.js llama primero a leave({unloading:true}) en pagehide: se intenta enviar un aviso pequeño y se destruye PeerJS en ese mismo turno. Se omiten la exportación del histórico del host y el último lote detallado del invitado durante esa salida. La salida normal mediante menú conserva los 200 ms para dar oportunidad al aviso. El cierre RTC sigue siendo la segunda vía si el aviso no alcanza a enviarse; el envío al cerrar una página no se puede garantizar en todos los casos.
+
+El observador existente de WebRTC ahora procesa failed/closed en el momento del evento, sin esperar al close de PeerJS o al heartbeat. Se conserva disconnected como transitorio: no se interrumpe una carrera sólo por ese estado. Se mantienen los guards de generación y de conexión actual, evitando que un evento tardío de otra conexión detenga una sesión nueva. Un cierre definitivo termina la carrera: el lobby puede reservar temporalmente un asiento para reconectar, pero la cabina queda marcada reconnecting y no continúa simulando. No existe migración del host; si recarga/cierra y la sala se destruye, hará falta una nueva sala.
+
+No se acortan los límites de tolerancia a red: 10 segundos sin progreso real de simulación o ACK de snapshots en carrera, 20 segundos sin mensajes y reserva/reconexión de 30 segundos. Un cierre abrupto del proceso, pérdida de energía o red que impida tanto aviso como cierre observable seguirá dependiendo de esos watchdogs y del navegador; no se promete detección instantánea. El servicio gratuito de señalización desconectado por sí solo sigue sin detener el enlace WebRTC existente.
+
+Validación: 167 pruebas unitarias, incluyendo el caso que antes dejaba a los dos invitados con cero callbacks de parada, cancelación de preparación, destrucción síncrona pese a fallo de envío y RTC failed/closed sin evento close de PeerJS. Se conservan las pruebas de 1000 ms estables, señalización interrumpida, disconnected transitorio y eventos de conexiones sustituidas. Chrome visible con tres motores de producción, WebGL2, ROM local y canal fiable real; pruebas de salir el host, recargar host/invitado, cerrar host/invitado. Se mide running, epoch, callback y frames nativos: exactamente una parada por superviviente y frames congelados 700 ms después. Las medidas locales no representan tiempos de Internet. Otras dos pruebas aplican 250 ms en cada dirección y 1 % de pérdida a datagramas UDP cifrados, verifican la sesión activa y el RTT observado antes de recargar el host o cerrar un invitado. No se confunde el cierre solicitado con un corte de tráfico silencioso. Son tres instancias locales, no tres dispositivos remotos ni una carrera completa con entradas humanas.
+
+Cambios funcionales sólo en main.js, multiplayer.js y la descripción rtc-closed de Connections. Motor JS/WASM, shaders, reglas inversas y NVRAM idénticos a la 44. Resto de diferencias web: caché/compatibilidad/versión 45. Se conserva ZIP 44. El fixture de observación y el relay están sólo en tests y no se distribuyen. No se incluye ROM.
+
+Resultados observados, en milisegundos desde solicitar la salida hasta onStop de cada superviviente:
+
+```json
+{
+  "timings": {
+    "browser": [
+      {
+        "scenario": "host-leave",
+        "reactionMs": [
+          3,
+          3
+        ]
+      },
+      {
+        "scenario": "host-reload",
+        "reactionMs": [
+          15,
+          15
+        ]
+      },
+      {
+        "scenario": "guest-reload",
+        "reactionMs": [
+          17,
+          17
+        ]
+      },
+      {
+        "scenario": "host-close",
+        "reactionMs": [
+          2,
+          2
+        ]
+      },
+      {
+        "scenario": "guest-close",
+        "reactionMs": [
+          2,
+          2
+        ]
+      }
+    ],
+    "impaired": [
+      {
+        "scenario": "host-reload",
+        "reactionMs": [
+          264,
+          264
+        ]
+      },
+      {
+        "scenario": "guest-close",
+        "reactionMs": [
+          264,
+          532
+        ]
+      }
+    ]
+  },
+  "impairedNetwork": {
+    "delayPerDirectionMs": 250,
+    "udpLoss": 0.01,
+    "rttMs": [
+      517.0999999940395,
+      1226.7999999821186
+    ]
+  }
+}
+```
+
+
+<!-- HOT DEPARTURE FEASIBILITY -->
+## Estudio aislado: salida de invitados sin interrumpir una carrera
+
+Solicitud posterior a la revisión 45. Se conserva íntegra esa versión; no se cambia web/, native/, dist/ ni los ZIP 44/45. Herramientas y resultados sólo en scripts/, tests/ y build/hot-departure/. build-hot-departure-audit.py reutiliza exactamente el link.rsp del motor limpio de la 43 que sigue en la 45 y añade exclusivamente un export nativo de lectura RAM. El fixture experimental sí modifica intencionadamente, a través de una vista de RAM verificada por firma y lecturas de control, el bit 31 de flags del coche ausente y su bit en 540030. No son pruebas enteramente de sólo lectura. No se escriben coordenadas, progreso, vueltas, checkpoints, temporizadores ni resultados. Se verifican los hashes de 141 archivos de producción/ZIP al terminar.
+
+Razón de conservar los huecos: HostDistributor asigna ID y orden de slots una vez al arrancar; linkIdForSeat depende del total y compactState/expandState usan el número de miembros. Reducir members durante la carrera sin cambiar todo ese contrato cambiaría identidades, disposición y tamaño de paquete. Los prototipos mantienen los tres slots originales y los últimos datos auténticos del ausente; dejan de enviar/esperar su transporte. No se prueba ni autoriza reincorporación a mitad de carrera. Si sale el host sigue siendo necesaria la salida de sala: no se investiga migración de autoridad.
+
+Tres motores acelerados sin render ni WebRTC: Beginner normal con CPU, Advanced inverso con CPU, Expert inverso con CPU y Beginner inverso sin CPU. Se entra usando moneda/Start/acelerador y se conduce con inputs normales mediante piloto de laboratorio que lee la carretera del ROM privado. Se detiene el motor del invitado intermedio. Conservando su sample fijo, los dos supervivientes siguen con enlace 2 y los mismos IDs, pero queda un coche activo congelado. Tras desactivar su bit de actividad una sola vez, permanece inactivo en ambas réplicas. Beginner inverso sin CPU completa ocho vueltas reales y ambos llegan a escena 24. En los otros tres casos se observa transición a escena 26 por tiempo agotado; no se presentan como victorias ni como certificación de llegadas. En Expert el piloto del host apenas progresa, por lo que tampoco se usa esa prueba como validación del recorrido completo.
+
+Una escritura aislada de 540030 no persiste: vuelve a máscara 7. Código original en chunk_014.cpp, 1ae4c–1aef8, recarga la máscara desde el encabezado de la cabina que coordina la carrera; 1afd8–1affc genera todos los bits a partir de 540027. El ranking humano, en chunk_009.cpp 12854–12864, compara IDs con el número de humanos sin descartar automáticamente el bit de actividad borrado. En el ensayo Expert inverso, el ausente termina con rank=1 (segundo), mientras el host conserva rank=2. No se puede afirmar que un jugador congelado siempre terminará último. Si todos sobrepasan su último progreso, naturalmente irá detrás; el usuario acepta conservar esa clasificación provisional como opción más sencilla. Queda por definir el caso de abandono con ventaja, especialmente cerca del final, y cómo comunicarlo en resultados. No se añade DNF ni un ganador artificial en este estudio.
+
+Chrome visible, tres contextos, ROM/motores reales, PeerJS y TURN/UDP local: control con política 45 al salir un invitado en escena 22 devuelve a los otros dos al lobby. Prototipo de continuidad con salida por menú y cierre real de pestaña: conserva slots, omite el destino desaparecido y envía orden de laboratorio para desactivar ese coche en las réplicas. Ambas continúan durante 12 segundos y mantienen frames/enlace/IDs, sin callbacks de parada. Después sale también el segundo invitado; el host continúa con el total lógico de tres slots. La orden especial, el acceso a RAM y las excepciones a la política de desconexión existen sólo en el fixture servido por Playwright. No se prueban aquí latencia/pérdida WAN, salas de ocho, reconexión a mitad de carrera ni reinicio de una nueva carrera sin regresar al lobby.
+
+Se mide aparte contacto físico en Beginner normal sin CPU (sólo tres coches): 281 es un código de dirección del contacto, no el ID del rival. Se registra posición real del coche ausente y del otro coche vivo para restringir las observaciones a pasos a menos de 10 unidades del ausente, con el otro coche a más de 15. Se compara el mismo arranque determinista, ausente congelado y desactivado antes de que el host lo alcance. Los resultados de proximidad no se extrapolan a contactos universales, todos los circuitos o todas las velocidades. Desactivar dibujo/actividad, dejar de colisionar y resolver clasificación son comprobaciones diferentes.
+
+Conclusión: continuidad de transporte y simulación viable en un prototipo aislado. Todavía no se distribuye como solución completa de retirada en caliente. La primera versión puede conservar la clasificación basada en el progreso congelado que acepta el usuario, pero debe garantizar de manera independiente invisibilidad/ausencia de colisiones y una política para el abandono cerca de meta. La candidatura publicada continúa siendo la 45 con regreso al lobby; no se modifica su tolerancia a latencia/pérdida.
+
+Resumen comprobable:
+
+```json
+{
+  "status": "FEASIBILITY_STUDY_COMPLETE",
+  "productionModified": false,
+  "preservedFiles": 141,
+  "nativeCases": [
+    {
+      "course": 0,
+      "reverse": false,
+      "cpu": true,
+      "linkSurvives": true,
+      "departedCar": 2,
+      "carInactiveOnSurvivors": true,
+      "participationMaskRestored": [
+        7,
+        7
+      ],
+      "end": [
+        {
+          "scene": 26,
+          "lap": 7,
+          "rank": 1,
+          "retiredRank": 2
+        },
+        {
+          "scene": 26,
+          "lap": 7,
+          "rank": 0,
+          "retiredRank": 2
+        }
+      ]
+    },
+    {
+      "course": 2,
+      "reverse": true,
+      "cpu": true,
+      "linkSurvives": true,
+      "departedCar": 2,
+      "carInactiveOnSurvivors": true,
+      "participationMaskRestored": [
+        7,
+        7
+      ],
+      "end": [
+        {
+          "scene": 26,
+          "lap": 2,
+          "rank": 1,
+          "retiredRank": 2
+        },
+        {
+          "scene": 26,
+          "lap": 2,
+          "rank": 0,
+          "retiredRank": 2
+        }
+      ]
+    },
+    {
+      "course": 1,
+      "reverse": true,
+      "cpu": true,
+      "linkSurvives": true,
+      "departedCar": 2,
+      "carInactiveOnSurvivors": true,
+      "participationMaskRestored": [
+        7,
+        7
+      ],
+      "end": [
+        {
+          "scene": 26,
+          "lap": 0,
+          "rank": 2,
+          "retiredRank": 1
+        },
+        {
+          "scene": 26,
+          "lap": 0,
+          "rank": 0,
+          "retiredRank": 1
+        }
+      ]
+    },
+    {
+      "course": 0,
+      "reverse": true,
+      "cpu": false,
+      "linkSurvives": true,
+      "departedCar": 2,
+      "carInactiveOnSurvivors": true,
+      "participationMaskRestored": [
+        7,
+        7
+      ],
+      "end": [
+        {
+          "scene": 24,
+          "lap": 8,
+          "rank": 0,
+          "retiredRank": 2
+        },
+        {
+          "scene": 24,
+          "lap": 8,
+          "rank": 1,
+          "retiredRank": 2
+        }
+      ]
+    }
+  ],
+  "webRTC": [
+    {
+      "prototype": false,
+      "action": "leave",
+      "continues": null,
+      "retirementComplete": null,
+      "hostContinuesAlone": null
+    },
+    {
+      "prototype": true,
+      "action": "close",
+      "continues": true,
+      "retirementComplete": false,
+      "hostContinuesAlone": true
+    },
+    {
+      "prototype": true,
+      "action": "leave",
+      "continues": true,
+      "retirementComplete": false,
+      "hostContinuesAlone": true
+    }
+  ],
+  "collisionProximity": {
+    "frozen": {
+      "nearFrames": 14,
+      "contactFrames": 6,
+      "minimumDistance": 1.8277161021332555
+    },
+    "disabledBeforeApproach": {
+      "nearFrames": 28,
+      "contactFrames": 0,
+      "minimumDistance": 0.6114629230653217
+    }
+  },
+  "limits": [
+    "Local instances, not remote devices or WAN.",
+    "Prototype is not a release candidate.",
+    "No dynamic renumbering or mid-race join tested.",
+    "Car active flag and participant/rank bookkeeping are separate.",
+    "No universal collision or winner guarantee.",
+    "Original native lap/checkpoint/time/result rules; only retirement flags/mask changed in laboratory RAM."
+  ]
+}
+```
+
+
+<!-- HOT DEPARTURE STRICT EVIDENCE -->
+## Retirada sólo con evidencia de pérdida del canal; retraso no significa abandono
+
+2026-10-18. Aclaración del usuario: mucha latencia, pérdida de paquetes o un motor lento no deben convertir por sí solos al usuario en desconectado. El primer prototipo interceptaba detach de forma demasiado amplia y convertía visibility-interruption en retirada. Un detach por 20 segundos de silencio también podía terminar retirando al usuario. El ensayo previo sólo probaba salidas reales con red limpia; no certificaba ausencia de falsos positivos. Se reconoce y corrige ese alcance en el fixture, sin modificar la versión 45.
+
+Política de laboratorio separada en tests/hot-departure-policy.js: evidencia aceptada es leave autenticado por el canal actual o que el navegador observe WebRTC failed/closed o el DataChannel closed. RTT, falta de progreso, señalización caída, pestaña oculta, disconnected transitorio y silencio no bastan. Un cierre fabricado localmente por un watchdog tampoco acredita una salida remota. No se puede demostrar instantáneamente una caída física silenciosa: hasta que el navegador confirme fallo/cierre se mantiene la conexión como sospechosa. Esto acepta un tiempo indefinido de sospecha con canal todavía abierto en el prototipo; no promete identificar la causa remota exacta.
+
+El fixture ahora guarda las sospechas por separado. Durante ese experimento se evita cerrar localmente un canal abierto por silencio, falta de ACK o progreso, y no se propaga una pausa/ocultación como retirada. Se conserva la ventana acotada de snapshots y los últimos estados genuinos; cuando llega tráfico continúa el mismo jugador. No se eliminan límites de recepción ni se crean datos de movimiento. Esta política modifica sólo el fixture servido a las pruebas: la 45 distribuida mantiene sus watchdogs de 10/20 segundos y el retorno al lobby. No se afirma que la 45 ya cumpla la nueva política completa.
+
+Pruebas: 170 unitarias, de ellas tres nuevas para no inferir desconexión de RTT 10/500/1000/10000, progreso viejo, visibilidad, señalización y estados transitorios; evidencia de salida/cierre; y cierre creado por watchdog. Las combinaciones sintéticas no son mediciones de latencia de Internet.
+
+Chrome visible con tres motores y RTC real: carrera Beginner Normal, 1000 ms de RTT base mediante 500 ms por trayecto, 2 % de pérdida UDP y jitter de ±50 ms, durante 12 segundos. Nadie se retira. Después, red limpia y retención de mensajes de aplicación durante 23 segundos en la conexión del invitado intermedio: no se bloquea UDP/ICE, el canal sigue genuinely connected/open. Se supera expresamente el timeout anterior de silencio y el de progreso. No se retira ningún coche y todos siguen en playing, con el invitado marcado sólo como sospechoso. Se conservan los mensajes fiables retenidos y se entregan al liberar el bloqueo, sin dejar créditos de snapshot perdidos artificialmente. Cuatro segundos después sigue jugando el mismo usuario. Finalmente se cierra realmente su pestaña: se desactiva ese coche en las réplicas y las otras dos continúan sin callback de parada. Este hold de aplicación no se presenta como un corte UDP de 23 segundos: se utiliza para comprobar específicamente canal vivo sin progreso/mensajes.
+
+El usuario también acepta conservar la clasificación nativa basada en el último progreso congelado; no se impone DNF. La máscara interna de tres participantes puede seguir siendo 7 al conservar el hueco lógico del ausente. Que vuelva a 7 no invalida por sí solo el objetivo de esa política: la retirada física y la conexión se tratan por separado. Se mantiene documentado que el ausente puede conservar ventaja hasta ser superado. Las garantías observadas de contacto siguen limitadas al ensayo de proximidad anterior.
+
+Native/, web/, dist/ y ZIP 44/45 comprobados sin cambios por hash. No se distribuye una nueva versión ni se promete estabilidad en todas las redes, ocho dispositivos o reincorporación a mitad de carrera. Resultados locales verificables:
+
+```json
+{
+  "status": "PASS",
+  "productionModified": false,
+  "unitTests": 170,
+  "stages": [
+    {
+      "label": "1000 ms base RTT, 2 percent UDP loss, jitter",
+      "phase": [
+        "playing",
+        "playing",
+        "playing"
+      ],
+      "frames": [
+        3434,
+        3434,
+        3434
+      ],
+      "gone": [
+        0,
+        0,
+        0
+      ],
+      "suspected": [
+        0,
+        0,
+        0
+      ],
+      "transport": [
+        {
+          "pc": [
+            "connected",
+            "connected"
+          ],
+          "channel": [
+            "open",
+            "open"
+          ],
+          "rtt": [
+            2100.300000011921,
+            1110.9000000059605
+          ]
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 3005.699999988079
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 1339.300000011921
+        }
+      ]
+    },
+    {
+      "label": "23 seconds without game messages, RTC still open",
+      "phase": [
+        "playing",
+        "playing",
+        "playing"
+      ],
+      "frames": [
+        4988,
+        4988,
+        4988
+      ],
+      "gone": [
+        0,
+        0,
+        0
+      ],
+      "suspected": [
+        1,
+        1,
+        0
+      ],
+      "transport": [
+        {
+          "pc": [
+            "connected",
+            "connected"
+          ],
+          "channel": [
+            "open",
+            "open"
+          ],
+          "rtt": [
+            2.9000000059604645,
+            1.300000011920929
+          ]
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 1.9000000059604645
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 1.300000011920929
+        }
+      ]
+    },
+    {
+      "label": "Reliable message delivery resumed",
+      "phase": [
+        "playing",
+        "playing",
+        "playing"
+      ],
+      "frames": [
+        5221,
+        5221,
+        5221
+      ],
+      "gone": [
+        0,
+        0,
+        0
+      ],
+      "suspected": [
+        1,
+        1,
+        0
+      ],
+      "transport": [
+        {
+          "pc": [
+            "connected",
+            "connected"
+          ],
+          "channel": [
+            "open",
+            "open"
+          ],
+          "rtt": [
+            4.9000000059604645,
+            5.0999999940395355
+          ]
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 3.5
+        },
+        {
+          "pc": "connected",
+          "channel": "open",
+          "rtt": 16
+        }
+      ]
+    }
+  ],
+  "afterConfirmedClose": [
+    {
+      "phase": "playing",
+      "running": true,
+      "frame": 5336,
+      "stops": []
+    },
+    {
+      "phase": "playing",
+      "running": true,
+      "frame": 5336,
+      "stops": []
+    }
+  ]
+}
+```
+
+
+<!-- RACE NAMES 46 -->
+## Revisión 46: nombres y puestos debajo de Cabinet
+
+2026-10-18. Se añade una lista HTML superpuesta debajo del indicador Cabinet, ordenada por puesto humano del arcade. Cada fila muestra puesto, número de coche elegido y nombre de la sala. Los colores siguen el coche público 1–8, incluidos asientos cambiados o no consecutivos. No se calcula una clasificación alternativa con distancia ni posición interpolada. Cuando el arcade todavía no ofrece una tabla válida se muestra un guion, sin inventar puestos. Los participantes de la sala que no están en esa carrera conservan nombre y color, sin puesto asignado.
+
+Fuente: bloque nativo que ya viaja por el enlace. Sus bytes 00..07 contienen puestos humanos por ID de carrera; 0b, cantidad de participantes; 0c..13, los IDs internos del enlace por ID de carrera; 18, coordinador de esa carrera; 1b, fase local. El ID de carrera, el ID del enlace y el número de coche público no son equivalentes. La conversión usa el orden de miembros de la sesión y linkIdForSeat, y después recupera nombre/número público por identidad de sala. Se valida que la tabla tenga enlaces únicos conocidos y puestos únicos dentro del rango; se comprueba además el ID de coche del coordinador. No se leen puestos CPU como si fueran personas.
+
+Hallazgo durante la prueba real: el coordinador de carrera publica la tabla de puestos compartida; los headers de salida de los invitados no mantienen necesariamente esos puestos actualizados. Leer sólo el paquete local funcionaba en el host, pero no en el invitado. Se conserva una copia pequeña de los prefijos de cada origen recibidos antes de añadir timing al snapshot y se toma la tabla del coordinador indicado por la propia cabina. Puede ser un invitado si el host permanece en attract; este mapeo de subconjunto se verifica en pruebas unitarias, no se presenta como otro ensayo físico. La prueba real usa tres motores que sí participan en la misma carrera.
+
+Visibilidad controlada por fase local: empieza en la secuencia de carrera (20 en adelante); conserva los últimos puestos válidos en llegada, game over, resultados y registro de nombre. Se elimina al volver al estado boot/attract (0..10), al detener la sesión o al cambiar su epoch. El menú oculta la superposición y al volver se recupera. Una nueva carrera limpia los puestos anteriores. No hay un temporizador arbitrario que haga desaparecer nombres durante los resultados.
+
+Presentación: fuente VT323 servida localmente, colores y contorno de contraste, columna de puesto y número de coche, nombres largos recortados con puntos suspensivos. El coche negro usa un contorno claro. Se emplea textContent, evitando interpretar los nombres como HTML. El panel no captura clics/toques ni selección y respeta los márgenes de controles táctiles y safe area. El DOM se actualiza como máximo a 10 Hz, sólo cuando cambian los datos; se reutilizan las filas. El análisis trabaja con los paquetes existentes: sin mensajes adicionales, lecturas extra de RAM, cambios de protocolo, sincronización ni motor.
+
+Fuente de la tipografía: https://github.com/google/fonts/tree/main/ofl/vt323 . VT323-Regular.ttf se distribuye sin modificar junto con fonts/VT323-OFL.txt: Copyright 2011 The VT323 Project Authors, SIL Open Font License 1.1. No requiere contactar Google Fonts al jugar.
+
+Validación: 178 pruebas unitarias de la suite local, incluidas ocho específicas de este panel. Cubren 2–8 identidades de enlace, cambios/asientos discontinuos, coordinador invitado con host fuera de carrera, tablas malformadas, recepción de snapshot, actualización de identidad tardía y permanencia en fases 23–29 hasta attract. La permanencia en registro de nombre se valida con estados unitarios; no se afirma haber completado una inscripción de récord real.
+
+Chrome visible: sala PeerJS/WebRTC real con tres motores de producción, uno WebGPU y dos WebGL2, números de coche 8/6/2. Se compara el puesto del propio coche en múltiples muestras originales con la tabla mostrada y se comprueban los tres nombres. Se abre/cierra el menú, se deja finalizar una carrera Normal por tiempo sin editar RAM ni temporizadores y se comprueba la lista durante game over/resultados y su desaparición posterior en attract en las tres cabinas. Las imágenes resultantes se inspeccionan visualmente. Una escena UI sintética separada (no ocho motores reales) verifica ocho colores/nombres, texto Unicode/HTML literal y tamaños 1920×1080, 390×844 y 812×375. Los ensayos son locales, no una partida de ocho dispositivos remotos ni una medición de red internacional.
+
+Resultado detallado: build/race-names/browser.json; capturas en esa carpeta; build/unit-tests-46.log. Los fixtures sólo se usan en desarrollo. El ZIP no incluye pruebas, ROM ni hooks. Motor JS/WASM, shaders, reglas inversas, NVRAM y lógica de conexión idénticos a la 45. Se conservan su ZIP y hash. Las investigaciones de retirada en caliente anteriores siguen aisladas; esta revisión no las incorpora a producción.
+
+
+<!-- RACE NAMES 46.1 -->
+## Revisión 46.1: lista con puesto y nombre
+
+2026-10-18. A petición del usuario se retira la columna del número de coche (nP:) y su mención en el título accesible. Sólo se muestran puesto y nombre. Se conserva el número internamente para identidad y color, sin modificar el cálculo de puestos, la permanencia hasta attract, el motor ni las conexiones. Se amplía el espacio disponible para el nombre al retirar esa columna. Se actualizan las claves de caché de los recursos afectados y la etiqueta del menú a v46.1; BUILD_ID sigue siendo compatible con 46. Comprobación visual con el fixture UI existente: ocho filas en 1920×1080, 390×844 y 812×375; inspección de la captura móvil. No se repite la carrera de tres motores por este cambio de presentación. Se conserva el ZIP 46 original y se entrega otro ZIP 46.1.

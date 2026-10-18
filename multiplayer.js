@@ -1,9 +1,9 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=43-reverse-checkpoints';
-import {SnapshotFlow} from './snapshot-flow.js?v=43-reverse-checkpoints';
-import {LinkClock,receivedTiming} from './link-timing.js?v=43-reverse-checkpoints';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=43-reverse-checkpoints';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=43-reverse-checkpoints';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=43-reverse-checkpoints';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=46-race-names';
+import {SnapshotFlow} from './snapshot-flow.js?v=46-race-names';
+import {LinkClock,receivedTiming} from './link-timing.js?v=46-race-names';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=46-race-names';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=46-race-names';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=46-race-names';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -135,7 +135,12 @@ export class Multiplayer {
   try{const conn=this.peer.connect(this.host,{reliable:true,serialization:'binary',metadata:{build:BUILD_ID,token:this.secret,name:this.name,session:this.sessionKey}});this.server=conn;this.attach(conn,false);}
   catch(e){if(this.phase==='connecting')throw e;this.retryAt=performance.now()+retryDelay(this.retryAttempt++);}
  }
- failRoom(reason){this.reconnectUntil=0;this.commands.clear();this.phase='error';this.error=reason;this.members=[];this.swaps.clear();this.changed();}
+ failRoom(reason){
+  // A terminal room notice must stop the native game before changing phase;
+  // otherwise it can keep running without the host or its arcade link.
+  if(this.active||this.phase==='preparing'||this.epoch)this.stopLocal(reason);
+  this.reconnectUntil=0;this.commands.clear();this.awaitingStop=false;this.phase='error';this.error=reason;this.members=[];this.swaps.clear();this.changed();
+ }
  syncConnection(conn){
   const admitted=this.members.some(m=>m.id===conn.peer);
   this.send(conn,{type:'room-sync',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,revision:this.revision,admitted,members:admitted?this.members:[],settings:this.settings,chat:admitted?this.chat:[],swaps:admitted?this.swapState():[],reason:this.error});
@@ -202,7 +207,10 @@ export class Multiplayer {
   const pc=conn.peerConnection;if(!pc?.addEventListener)return;
   const observe=()=>{if(generation!==this.generation||(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn))return;
    const state=pc.connectionState;if(state===conn.consoleTransportState)return;conn.consoleTransportState=state;
-   if(['connected','disconnected','failed'].includes(state))this.recordConnectionEvent('rtc-'+state,conn);
+   if(['connected','disconnected','failed','closed'].includes(state))this.recordConnectionEvent('rtc-'+state,conn);
+   // Disconnected can recover after a network hiccup. Failed/closed cannot:
+   // stop the current race now, even if PeerJS has not emitted close yet.
+   if(state==='failed'||state==='closed'){this.detach(conn,incoming,`The WebRTC connection ${state}.`);try{conn.close();}catch{}}
   };pc.addEventListener('connectionstatechange',observe);observe();
   conn.on('close',()=>pc.removeEventListener?.('connectionstatechange',observe));
  }
@@ -222,7 +230,7 @@ export class Multiplayer {
     if(pending)pending.connection='reconnecting';this.publish();
    }else this.forget(conn.peer,reason,cause,source);
   }else{
-   if(this.server!==conn)return;this.server=null;
+   if(this.server!==conn)return;conn.snapshotFlow=null;this.server=null;
    const host=this.members.find(m=>m.id===this.host),message=host?`Session interrupted by ${host.name} (cabinet ${host.cabinet}). ${reason}`:reason;
    if(!recover||this.phase==='error'){this.reconnectUntil=0;this.commands.clear();this.awaitingStop=false;this.failRoom(message);return;}
    if(this.active||this.phase==='preparing')this.stopLocal(message+' Reconnecting in the lobby.');
@@ -522,12 +530,14 @@ export class Multiplayer {
   }));
   if(this.performanceCaptureEnabled&&generation===this.generation)this.networkStats=new Map([...next].filter(([c])=>c.open&&(this.isHost?this.connections.get(c.peer)===c:this.server===c)));
  }
- leave(){
+ leave({unloading=false}={}){
   const hadSession=this.active||this.phase==='preparing';
-  if(this.isHost&&this.members.length){this.recordConnectionEvent('room-closed',null,{source:'action'});this.lastHostReport={...this.consoleSnapshot(),live:false,phase:'closed'};this.lastHostReport.rows=this.lastHostReport.rows.map(r=>({...r,archived:true}));this.lastHostPerformance=this.performanceHistory.report(this.performanceIdentities());}
+  if(this.isHost&&this.members.length&&!unloading){this.recordConnectionEvent('room-closed',null,{source:'action'});this.lastHostReport={...this.consoleSnapshot(),live:false,phase:'closed'};this.lastHostReport.rows=this.lastHostReport.rows.map(r=>({...r,archived:true}));this.lastHostPerformance=this.performanceHistory.report(this.performanceIdentities());}
   // Best effort: peer closure or the presence timeout still cleans up if this message is lost.
   const connections=this.isHost?[...this.connections.values()]:[this.server].filter(Boolean);
-  for(const conn of connections)try{this.send(conn,{type:this.isHost?'room-closed':'leave',...(!this.isHost?{performance:this.makePerformance()}:{})});}catch{}
-  const peer=this.peer;this.generation++;clearInterval(this.timer);if(peer)setTimeout(()=>peer.destroy(),200);if(hadSession)this.onStop('You left the room.');this.reset();this.changed();
+  for(const conn of connections)try{this.send(conn,{type:this.isHost?'room-closed':'leave',...(!this.isHost&&!unloading?{performance:this.makePerformance()}:{})});}catch{}
+  // pagehide does not guarantee another timer turn. Close RTC synchronously
+  // there; ordinary menu exits retain a short chance to deliver the notice.
+  const peer=this.peer;this.generation++;clearInterval(this.timer);if(peer){if(unloading)peer.destroy();else setTimeout(()=>peer.destroy(),200);}if(hadSession)this.onStop('You left the room.');this.reset();this.changed();
  }
 }

@@ -1,6 +1,6 @@
-import {carColor} from './car-colors.js?v=43-reverse-checkpoints';
-import {parseInvitation,invitation} from './room-settings.js?v=43-reverse-checkpoints';
-import {createLobbyNotifications} from './lobby-notifications.js?v=43-reverse-checkpoints';
+import {carColor} from './car-colors.js?v=46-race-names';
+import {parseInvitation,invitation} from './room-settings.js?v=46-race-names';
+import {createLobbyNotifications} from './lobby-notifications.js?v=46-race-names';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
 export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){

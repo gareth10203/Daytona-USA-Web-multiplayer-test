@@ -98,3 +98,8 @@ by scripts/apply_runtime_optimizations.py; no third-party dependency was added.
 ## Experimental centralized communication
 
 The separate native/ sources preserve the MAME-derived board notices. Central sampling, room-provided IDs, local FG delivery and JavaScript distribution are additional experimental adaptations. The original board firmware is not executed, and this mode is not hardware-equivalent. No new linked third-party library is introduced.
+
+
+## VT323 — race name overlay
+
+VT323 Regular, unmodified TrueType font, from https://github.com/google/fonts/tree/main/ofl/vt323 . Copyright 2011 The VT323 Project Authors. Licensed under SIL Open Font License 1.1; font and complete license are shipped in fonts/VT323-Regular.ttf and fonts/VT323-OFL.txt. Used only by the frontend race name overlay.

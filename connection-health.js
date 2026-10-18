@@ -56,6 +56,7 @@ const explanations={
  'invalid-status-report':['Status report ignored','An optional report contained unsupported or invalid fields; gameplay was not stopped.'],
  'rtc-disconnected':['Transport disconnected','The browser reported a disconnected peer connection. It may recover; this is not proof of packet loss.'],
  'rtc-failed':['Transport failed','The browser reported a failed peer connection. The underlying network cause is unavailable.'],
+ 'rtc-closed':['Transport closed','The browser reported a closed peer connection. This alone does not identify why it closed.'],
  'rtc-connected':['Transport connected','The browser reported a connected peer connection.'],
 };
 export function describeEvent(event){
