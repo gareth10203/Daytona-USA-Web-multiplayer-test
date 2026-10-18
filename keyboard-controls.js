@@ -1,4 +1,4 @@
-import {KEYBOARD_ID,KEYBOARD_ACTIONS,DEFAULT_KEYS,loadKeys,assignKey,keyName,validKey,KeyboardInput} from './keyboard-input.js?v=34-checkpoint-guard';
+import {KEYBOARD_ID,KEYBOARD_ACTIONS,DEFAULT_KEYS,loadKeys,assignKey,keyName,validKey,KeyboardInput} from './keyboard-input.js?v=35-uix-review';
 export function createKeyboardControls(root,{held,storage,settings,mobile,onSetting}){
  const bindings=loadKeys(storage),input=new KeyboardInput(held,bindings),previewHeld=new Set(),preview=new KeyboardInput(previewHeld,bindings),rows=new Map();
  let pending=null,last=0,wasVisible=false,deadline=0;

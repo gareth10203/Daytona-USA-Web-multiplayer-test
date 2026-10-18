@@ -1,5 +1,5 @@
 import {WHEEL_ACTIONS,newWheelProfile,loadWheelProfiles,saveWheelProfiles,sanitizeBinding,bindingDevice,rawInput,
-  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=34-checkpoint-guard';
+  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=35-uix-review';
 
 export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const saved=loadWheelProfiles(storage),rows=new Map();

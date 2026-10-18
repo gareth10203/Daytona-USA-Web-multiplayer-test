@@ -1,9 +1,9 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=34-checkpoint-guard';
-import {SnapshotFlow} from './snapshot-flow.js?v=34-checkpoint-guard';
-import {LinkClock,receivedTiming} from './link-timing.js?v=34-checkpoint-guard';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=34-checkpoint-guard';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=34-checkpoint-guard';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=34-checkpoint-guard';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=35-uix-review';
+import {SnapshotFlow} from './snapshot-flow.js?v=35-uix-review';
+import {LinkClock,receivedTiming} from './link-timing.js?v=35-uix-review';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=35-uix-review';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=35-uix-review';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=35-uix-review';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;

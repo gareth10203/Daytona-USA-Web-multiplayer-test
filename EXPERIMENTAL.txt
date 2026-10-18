@@ -1,8 +1,8 @@
-DAYTONA USA WEB — REVISION 34 — REVERSE CHECKPOINT GUARD
-Build: daytona-rev-a-central-experimental-34-checkpoint-guard
-Expert and Advanced reverse preserve the halfway validation reference when
-an actual reverse sector interval skips both exact native reference sectors.
-Native checkpoints, finish validation and wrong-direction rejection remain.
-Includes revision 33 complete-geometry protection and all previous settings.
-All players need revision 34. Upload ZIP CONTENTS to GitHub Pages.
-No ROM or test observers included. See docs/EXPERT_CHECKPOINTS.md.
+DAYTONA USA WEB - REVISION 35 UIX - SINGLE PLAYER SETUP
+Build: daytona-rev-a-central-experimental-35-uix-review
+Shared menu buttons, accessible navigation, mobile controls and consistent layout.
+Standalone race settings: mode, difficulty, direction and CPU cars.
+Includes revision 34 multiplayer and checkpoint protections.
+All players need the same revision. Upload ZIP CONTENTS to GitHub Pages.
+Research, implementation notes and original results: INVESTIGACIONES.md.
+No ROM or test observers included.

@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=34-checkpoint-guard';
-export const BUILD_ID='daytona-rev-a-central-experimental-34-checkpoint-guard';
+import {DEFAULT_EEPROM} from './nvram.js?v=35-uix-review';
+export const BUILD_ID='daytona-rev-a-central-experimental-35-uix-review';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

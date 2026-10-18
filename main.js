@@ -1,22 +1,24 @@
-import {protectTouchSurface} from './touch-guard.js?v=34-checkpoint-guard';
-import {createKeyboardControls} from './keyboard-controls.js?v=34-checkpoint-guard';
-import {SimulationClock} from './simulation-clock.js?v=34-checkpoint-guard';
-import {nativeTimedState} from './link-timing.js?v=34-checkpoint-guard';
-import {linkIdForSeat} from './central-link.js?v=34-checkpoint-guard';
-import {createLobbySound} from './lobby-sound.js?v=34-checkpoint-guard';
-import { mountDiagnostics } from './diagnostics.js?v=34-checkpoint-guard';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=34-checkpoint-guard';
-import {createControllerControls} from './controller-controls.js?v=34-checkpoint-guard';
-import { createRenderer } from './renderer.js?v=34-checkpoint-guard';
-import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=34-checkpoint-guard';
-import { createTouchControls } from './touch.js?v=34-checkpoint-guard';
-import { createGamepadRumble } from './haptics.js?v=34-checkpoint-guard';
-import { loadSettings, saveSettings } from './preferences.js?v=34-checkpoint-guard';
-import { createWheelControls } from './wheel-controls.js?v=34-checkpoint-guard';
-import { Multiplayer } from './multiplayer.js?v=34-checkpoint-guard';
-import { createRoomUI } from './room-ui.js?v=34-checkpoint-guard';
-import { mountHostConsole } from './host-console.js?v=34-checkpoint-guard';
-import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=34-checkpoint-guard';
+import {protectTouchSurface} from './touch-guard.js?v=35-uix-review';
+import {createKeyboardControls} from './keyboard-controls.js?v=35-uix-review';
+import {SimulationClock} from './simulation-clock.js?v=35-uix-review';
+import {nativeTimedState} from './link-timing.js?v=35-uix-review';
+import {linkIdForSeat} from './central-link.js?v=35-uix-review';
+import {createLobbySound} from './lobby-sound.js?v=35-uix-review';
+import { mountDiagnostics } from './diagnostics.js?v=35-uix-review';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=35-uix-review';
+import {createControllerControls} from './controller-controls.js?v=35-uix-review';
+import { createRenderer } from './renderer.js?v=35-uix-review';
+import { restoreNVRAM, STORAGE_ID } from './nvram.js?v=35-uix-review';
+import { createTouchControls } from './touch.js?v=35-uix-review';
+import { createGamepadRumble } from './haptics.js?v=35-uix-review';
+import { loadSettings, saveSettings } from './preferences.js?v=35-uix-review';
+import { createWheelControls } from './wheel-controls.js?v=35-uix-review';
+import { Multiplayer } from './multiplayer.js?v=35-uix-review';
+import { createRoomUI } from './room-ui.js?v=35-menu-navigation-fix';
+import { mountHostConsole } from './host-console.js?v=35-uix-review';
+import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=35-uix-review';
+import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=35-uix-review';
+import {createSinglePlayerUI} from './single-player-ui.js?v=35-uix-review';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -45,13 +47,15 @@ const settings=loadSettings(settingsStorage,{mobile:mobileDevice});
 let enhanced = settings.drawDistance>0;
 let settingsOpen=false;
 let multiplayerProfile=false,linkStartedAt=0;
-let roomUI,hostConsole,diagnostics,roomDiagnostics;
+let roomUI,hostConsole,diagnostics,roomDiagnostics,singleUI;
+let singleApplied=null,preparingSingle=false;
 const room=new Multiplayer({
  isVisible:()=>!document.hidden,
  readHealth:()=>({receiveBytes:wasm?._daytona_link_pending_bytes()||0,backlogMs:Math.max(0,lagMs)}),
  readPerformance:(epoch,after)=>diagnostics?.share(epoch,after),
  onChange:state=>{diagnostics?.setAutomatic(state.phase==='playing');roomDiagnostics?.sync();roomUI?.render(state);hostConsole?.sync();},
  onPrepare:async(config,cancelled)=>{
+  saveNVRAM();singleApplied=null;
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();rumble.stop();multiplayerProfile=true;
   ui.start.disabled=true;ui.close.hidden=true;
   setStatus('Preparing linked cabinet…',true);
@@ -142,7 +146,7 @@ function showMainMenu(focus=true){
   wheelControls.cancel();controllerControls.cancel();keyboardControls.cancel();
   settingsOpen=false;$('mainMenu').hidden=false;$('settingsModal').hidden=true;
   $('menuDialog').setAttribute('aria-labelledby','gameTitle');ui.overlay.scrollTop=0;
-  if($('menuDialog').classList.contains('mp-view'))$('menuDialog').setAttribute('aria-labelledby',!$('roomPanel').hidden?'roomTitle':'entryTitle');
+  if($('menuDialog').classList.contains('mp-view'))$('menuDialog').setAttribute('aria-labelledby',!$('singlePlayerPanel').hidden?'singleTitle':!$('roomPanel').hidden?'roomTitle':'entryTitle');
   if(focus)$('settingsBtn').focus();
 }
 $('settingsBtn').addEventListener('click',()=>{
@@ -168,12 +172,26 @@ function lobbySound(kind='request'){
  // may suspend it when a window loses focus; never create autoplay audio here.
  void ctxAudio.resume().then(()=>joinChime(kind)).catch(()=>{});return false;
 }
-roomUI=createRoomUI(room,{notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:async()=>{if(multiplayerProfile){reloadEngine();restoreNVRAM(wasm);multiplayerProfile=false;await applyDeluxeDefault();}ui.start.disabled=false;roomUI.running();await resumeGame();},unlockAudio:activateAudio});
+roomUI=createRoomUI(room,{canResume:()=>started&&!multiplayerProfile&&!room.occupied,notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:()=>singleUI.open(),unlockAudio:activateAudio});
+singleUI=createSinglePlayerUI({storage:settingsStorage,unlockAudio:activateAudio,getSession:()=>({canResume:started&&!multiplayerProfile&&!room.occupied,settings:singleApplied}),onOpen:()=>roomUI.single(),onBack:()=>roomUI.modes(),onStart:async config=>{
+ if(started&&!multiplayerProfile&&sameSingleSettings(config,singleApplied)){ui.start.disabled=false;roomUI.running();void resumeGame();return;}
+ saveNVRAM();preparingSingle=true;rumble.stop();simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.start.disabled=true;ui.close.hidden=true;
+ for(const source of audioSources){try{source.stop();}catch{}}audioSources.clear();audioNext=0;
+ try{
+  if(multiplayerProfile||!wasm._daytona_ready()){reloadEngine();restoreNVRAM(wasm);}
+  multiplayerProfile=false;
+  singleApplied=await prepareSingleCabinet(wasm,reloadEngine,config);
+  applyGraphics();ui.start.disabled=false;roomUI.running();
+ }catch(error){singleApplied=null;throw error;}finally{preparingSingle=false;}
+ // Audio permission/resume may remain pending after a quick pause. Cabinet
+ // preparation is already complete; it must not keep the setup form locked.
+ saveNVRAM();void resumeGame();
+}});
 hostConsole=mountHostConsole(room);
 $('previewUISound').onclick=async()=>{await activateAudio();joinChime('confirmed');};
 document.documentElement.classList.toggle('touch-device',navigator.maxTouchPoints>0 || matchMedia('(any-pointer:coarse)').matches);
 function saveNVRAM() {
-  if(multiplayerProfile)return;
+  if(multiplayerProfile||preparingSingle)return;
   if(!wasm?._daytona_ready())return;
   try {
     const read=(fnPtr,fnLen)=>Array.from(wasm.HEAPU8.subarray(wasm[fnPtr](),wasm[fnPtr]()+wasm[fnLen]()));
@@ -227,6 +245,8 @@ window.addEventListener('keydown',(event)=>{
   if(event.code==='Escape'){
     if(hostConsole?.isOpen()){event.preventDefault();hostConsole.close();return;}
     if(settingsOpen){event.preventDefault();if(controllerControls.cancel()||keyboardControls.cancel())return;showMainMenu();return;}
+  if(singleUI?.escape()){event.preventDefault();return;}
+    if(roomUI?.escape()){event.preventDefault();return;}
     if(started){event.preventDefault();ui.overlay.hidden?openMenu():resumeGame();return;}
   }
   if(!running || !ui.overlay.hidden || !keyboardControls.uses(event.code)||event.ctrlKey||event.metaKey||event.altKey||['INPUT','SELECT','BUTTON'].includes(event.target?.tagName))return;
@@ -237,6 +257,19 @@ window.addEventListener('keydown',(event)=>{
   held.add(event.code);
 });
 window.addEventListener('keyup',(event)=>held.delete(event.code));
+// Keep keyboard navigation inside the active dialog, including nested settings.
+ui.overlay.addEventListener('keydown',event=>{
+ if(event.key!=='Tab'||ui.overlay.hidden)return;
+ const eligible=[...$('menuDialog').querySelectorAll('button,input,select,a[href],[tabindex]')].filter(el=>!el.disabled&&el.tabIndex>=0&&el.getClientRects().length&&!el.closest('[inert]'));
+ const items=eligible.filter(el=>{
+  if(el.type!=='radio'||!el.name)return true;
+  const group=eligible.filter(other=>other.type==='radio'&&other.name===el.name&&other.form===el.form);
+  return el===(group.find(other=>other.checked)||group[0]);
+ });
+ if(!items.length)return;
+ const first=items[0],last=items.at(-1),active=document.activeElement;
+ if(!items.includes(active)||(event.shiftKey&&active===first)||(!event.shiftKey&&active===last)){event.preventDefault();(event.shiftKey?last:first).focus();}
+});
 window.addEventListener('blur',()=>{held.clear();keyboardControls.reset();rumble.stop();controllerControls.cancel();controllerControls.resetEdges();});
 window.addEventListener('gamepaddisconnected',()=>rumble.disconnect());
 
@@ -369,7 +402,7 @@ async function loadROM(file) {
     failure(message);ui.metadata.textContent=message;return;
   }
   if(!/\.zip$/i.test(file.name)){failure('Choose a Daytona USA Revision A (1994) ROM ZIP.');return;}
-  room.leave();roomUI.loading();multiplayerProfile=false;
+  room.leave();roomUI.loading();multiplayerProfile=false;singleApplied=null;
   rumble.stop();
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.close.hidden=true;ui.start.disabled=true;ui.startLabel.textContent='Enter arcade';
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
@@ -411,13 +444,12 @@ function openMenu() {
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
   running=room.active&&started;if(!running)simulationClock?.stop();held.clear();keyboardControls.reset();touch.clear();ui.overlay.hidden=false;
   showMainMenu(false);gameSurface.inert=true;
-  if(started&&!room.occupied)$('playerModes').hidden=false;
+  roomUI.opened();
   document.documentElement.classList.add('launcher-open');
-  ui.close.hidden=!started;
   ui.startLabel.textContent=started?'Resume arcade':'Enter arcade';
   if(started && ui.status.textContent!=='Error')setStatus(room.active?'Linked arcade running':'Arcade paused',true);
   if(!room.active&&!room.occupied)ctxAudio?.suspend().catch(console.warn);
-  (hostConsole?.isOpen()?$('hostConsoleBack'):started?(room.active?$('returnRoomGame'):ui.start):(!$('playerModes').hidden?$('singlePlayer'):(!$('roomPanel').hidden?$('leaveRoom'):ui.dropzone))).focus();
+  (hostConsole?.isOpen()?$('hostConsoleBack'):!$('roomPanel').hidden?(room.active?$('returnRoomGame'):$('leaveRoom')):!$('multiplayerEntry').hidden?$('modeBack'):singleUI.isOpen()?$('singleBack'):!ui.start.hidden?ui.start:!$('playerModes').hidden?$('singlePlayer'):ui.dropzone).focus();
 }
 async function resumeGame() {
   if(!wasm?._daytona_ready() || ui.start.disabled)return;
@@ -485,7 +517,7 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=34-checkpoint-guard'});
+    wasm=await factory({locateFile:(path)=>path+'?v=35-uix-review'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }

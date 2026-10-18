@@ -1,9 +1,8 @@
-REVISION 34 — VALIDACION DE VUELTAS INVERSAS DE EXPERT Y ADVANCED
-Se corrige una vuelta perdida de Expert tras un salto real del sector 502 al 492.
-La proteccion de referencia intermedia de Advanced ahora cubre Expert tambien.
-No concede checkpoints, vueltas o tiempo directamente ni cambia la fisica.
-Beginner y single player mantienen su comportamiento.
-Conserva la proteccion grafica de la revision 33.
-Todos necesitan esta version. Subir el CONTENIDO del ZIP a GitHub Pages.
-No contiene ROM. La revision 33 y su ZIP permanecen separados.
-Detalles y pruebas: docs/EXPERT_CHECKPOINTS.md.
+REVISION 35 - CONFIGURACION DE SINGLE PLAYER
+SINGLE PLAYER abre un modal de modo, dificultad, direccion y CPU.
+Sin CPU se utiliza Time Attack. Cabina SINGLE, DELUXE, Export.
+Incluye correcciones de cabecera y navegacion de Multiplayer.
+Reanudar conserva la partida; aplicar cambios reinicia y conserva puntuaciones.
+Preferencias guardadas en este dispositivo. Las entregas anteriores se conservan aparte.
+Subir el CONTENIDO del ZIP a GitHub Pages. No contiene ROM.
+Investigaciones, documentacion y resultados completos: INVESTIGACIONES.md.

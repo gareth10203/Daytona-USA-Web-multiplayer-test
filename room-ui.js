@@ -1,15 +1,22 @@
-import {parseInvitation,invitation} from './room-settings.js?v=34-checkpoint-guard';
-import {createLobbyNotifications} from './lobby-notifications.js?v=34-checkpoint-guard';
+import {parseInvitation,invitation} from './room-settings.js?v=35-uix-review';
+import {createLobbyNotifications} from './lobby-notifications.js?v=35-uix-review';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
-export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
- const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry');
- let verified=false,pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0;
+export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
+ const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry'),singlePanel=$('singlePlayerPanel');
+ let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0;
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
  const notifications=createLobbyNotifications({notifyChat,notifyReady,notifyConfirmed});
  const utilities=document.querySelector('.menu-quick-controls'),utilitiesHome=utilities.parentElement;
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
- function layout(active,showGuide=false){$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
+ function layout(active,showGuide=false){$('menuDialog').classList.remove('single-view');singlePanel.hidden=true;$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
+ function navigation(next=view){
+  view=next;
+  choices.hidden=view!=='modes'||!verified;
+  const resume=view==='modes'&&verified&&canResume();
+  $('startBtn').hidden=!resume;$('closeBtn').hidden=!resume;
+  if(resume){$('startBtn').disabled=false;$('startLabel').textContent='Resume arcade';}
+ }
  function hint(){const code=$('joinCode').value.trim();let valid=false;try{parseInvitation(code);valid=true;}catch{}
   $('joinCard').classList.toggle('has-invitation',valid);$('invitationHint').textContent=valid?(code===invitationFromURL(location.href)?'Invitation loaded. Enter your name and join.':'Invitation ready. Your host approves the request.'):code?'Paste a complete invitation link or room code.':'Your host will approve your request.';
  }
@@ -21,8 +28,8 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
   if(changed&&valid&&room.occupied&&!room.active&&room.phase!=='preparing'&&room.snapshot().code!==code)room.leave();
   if(['idle','error'].includes(room.phase))showEntry(false);
  }
- function showEntry(sync=true){if(sync)syncInvitation();layout(true,true);choices.hidden=true;entry.hidden=false;panel.hidden=true;$('entryStatus').textContent='';$('message').textContent='Create a private room or join your friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
- function showModes(){layout(false);entry.hidden=true;panel.hidden=true;choices.hidden=!verified;$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
+ function showEntry(sync=true){if(sync)syncInvitation();layout(true,true);navigation('entry');entry.hidden=false;panel.hidden=true;$('entryStatus').textContent='';$('message').textContent='Create a private room or join your friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
+ function showModes(){layout(false);entry.hidden=true;panel.hidden=true;navigation('modes');$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
  function action(fn){return async()=>{try{$('entryStatus').textContent='';await fn();}catch(e){$('entryStatus').textContent=e.message;$('roomMessage').textContent=e.message;$('message').textContent=e.message;}};}
  function rememberName(){try{localStorage.setItem('daytona-driver-name-v1',$('driverName').value.trim().slice(0,24));}catch{}}
  $('driverName').addEventListener('input',rememberName);
@@ -89,9 +96,13 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
   $('openSeatCount').textContent=state.members.length?`${8-state.members.length} ${state.members.length===7?'seat':'seats'} open · up to 8 drivers`:state.phase==='pending'?'Your host is reviewing the request.':state.phase==='error'?'Return to room selection to try another invitation.':'Preparing your private room…';
  }
  return {
+  single(){layout(true,true);navigation('single');$('menuDialog').classList.add('single-view');singlePanel.hidden=false;entry.hidden=true;panel.hidden=true;$('menuDialog').setAttribute('aria-labelledby','singleTitle');},
+  modes(){showModes();$('singlePlayer').focus();},
+  opened(){navigation();},
+  escape(){if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
   verified(){verified=true;$('startBtn').hidden=true;$('dropzone').hidden=true;syncInvitation();if(invitationFromURL(location.href))showEntry(false);else{showModes();$('singlePlayer').focus();}},
-  loading(){layout(false);verified=false;choices.hidden=true;entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;$('startBtn').hidden=true;},
-  running(){choices.hidden=true;entry.hidden=true;$('startBtn').hidden=false;},
+  loading(){layout(false);verified=false;navigation('loading');entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;},
+  running(){if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
   link(state,id,count){const text=state===2?`Central link · Cabinet ${id} / ${count}`:'Linking arcade cabinets…';for(const name of ['networkStatus','arcadeLinkStatus'])if($(name).textContent!==text)$(name).textContent=text;},
   render(state){
    notifications.update(state);
@@ -100,7 +111,7 @@ export function createRoomUI(room,{single,unlockAudio,notifyRequest=()=>{},notif
    if(state.phase==='idle')return;
    layout(true);panel.classList.toggle('guest-room',!state.isHost);panel.classList.toggle('has-requests',state.isHost&&state.pending.length>0);panel.dataset.phase=state.phase;
    if($('settingsModal').hidden&&$('hostConsole')?.hidden!==false)$('menuDialog').setAttribute('aria-labelledby','roomTitle');
-   $('startBtn').disabled=state.phase!=='playing';$('closeBtn').hidden=state.phase!=='playing';panel.hidden=false;entry.hidden=true;choices.hidden=true;
+   $('startBtn').disabled=state.phase!=='playing';navigation('room');panel.hidden=false;entry.hidden=true;
    $('roomTitle').textContent=state.phase==='pending'?'Request sent':state.phase==='error'?'Room unavailable':state.isHost?'Your starting grid':'Your race room';
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length} / 8 drivers`;
