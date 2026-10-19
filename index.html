@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=46-race-names">
-  <link rel="stylesheet" href="host-console.css?v=46-race-names">
-  <link rel="stylesheet" href="controller-settings.css?v=46-race-names">
-  <link rel="stylesheet" href="input-settings.css?v=46-race-names">
-  <link rel="stylesheet" href="single-player.css?v=46-race-names">
-  <link rel="stylesheet" href="ui-consistency.css?v=46-race-names">
-  <link rel="stylesheet" href="menu-gamepad.css?v=46-race-names">
-  <link rel="stylesheet" href="race-standings.css?v=46.1-race-names">
+  <link rel="stylesheet" href="style.css?v=50.1-public-security">
+  <link rel="stylesheet" href="host-console.css?v=50.1-public-security">
+  <link rel="stylesheet" href="controller-settings.css?v=50.1-public-security">
+  <link rel="stylesheet" href="input-settings.css?v=50.1-public-security">
+  <link rel="stylesheet" href="single-player.css?v=50.1-public-security">
+  <link rel="stylesheet" href="ui-consistency.css?v=50.1-public-security">
+  <link rel="stylesheet" href="menu-gamepad.css?v=50.1-public-security">
+  <link rel="stylesheet" href="race-standings.css?v=50.1-public-security">
+  <link rel="stylesheet" href="public-rooms.css?v=50.1-public-security">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -74,11 +75,21 @@
           </form>
         </section>
         <section id="multiplayerEntry" class="room-entry" hidden aria-labelledby="entryTitle">
-          <div class="entry-heading"><button id="modeBack" type="button" class="quiet-btn ui-button ui-quiet">← Back</button><div><span class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="entryTitle">Your friends. Your grid.</h2><p>Choose a room and race together.</p></div></div>
-          <div class="driver-field"><label for="driverName">Driver name</label><input id="driverName" maxlength="24" value="Driver" autocomplete="nickname"></div>
-          <div class="room-entry-actions">
-            <section class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M19 9v8M15 13h8"/></svg><h3>Create a room</h3><p>Set the race, invite friends and approve your grid.</p><button id="createRoom" class="launch-btn ui-button ui-primary" type="button">CREATE ROOM <span aria-hidden="true">→</span></button></section>
-            <section id="joinCard" class="entry-card"><svg class="entry-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v16h-7M3 12h12M10 7l5 5-5 5"/></svg><h3>Join a room</h3><label for="joinCode" class="sr-only">Invitation link or room code</label><input id="joinCode" autocomplete="off" spellcheck="false" placeholder="Paste invitation link or code" aria-describedby="invitationHint"><p id="invitationHint" class="invitation-hint">Your host will approve your request.</p><button id="joinRoom" class="launch-btn secondary ui-button ui-secondary" type="button">JOIN ROOM <span aria-hidden="true">→</span></button></section>
+          <div class="entry-heading discovery-heading"><button id="modeBack" type="button" class="quiet-btn ui-button ui-quiet">← Back</button><div class="discovery-copy"><span class="room-eyebrow">MULTIPLAYER</span><h2 id="entryTitle">Find your next grid.</h2><p>Meet new drivers or bring your friends.</p></div><div class="driver-field"><label for="driverName">Driver name</label><input id="driverName" maxlength="24" value="Driver" autocomplete="nickname"></div></div>
+          <div class="discovery-layout">
+            <section class="public-board" aria-labelledby="publicRoomsTitle">
+              <header class="public-board-heading"><h3 id="publicRoomsTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>PUBLIC ROOMS <span id="publicRoomCount" class="public-room-count">0</span></h3><span id="directoryConnection" class="directory-connection">Connecting…</span></header>
+              <div class="public-search"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><label class="sr-only" for="publicRoomSearch">Find a room by name</label><input id="publicRoomSearch" type="search" placeholder="Find a room…" autocomplete="off"></div>
+              <div class="public-list-body" id="publicListBody" aria-busy="true"><ul id="publicRoomsList" class="public-rooms-list" aria-label="Public rooms"></ul><div id="directoryEmpty" class="directory-empty"><svg viewBox="0 0 80 54" aria-hidden="true"><path d="M9 44 25 9h30l16 35M40 11v7m0 8v7m0 8v5M16 44h48"/></svg><strong id="directoryEmptyTitle">Looking for your grid…</strong><p id="directoryEmptyText">Connecting to public rooms.</p></div></div>
+              <footer class="public-board-footer"><span id="directoryStatus" role="status" aria-live="polite">Live room availability</span><button id="retryPublicRooms" type="button" class="ui-button ui-quiet" hidden>Retry</button></footer>
+            </section>
+            <div class="discovery-actions">
+              <section class="entry-card create-card" aria-labelledby="createTitle"><h3 id="createTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M19 9v8M15 13h8"/></svg>Create a room</h3>
+                <fieldset class="room-visibility"><legend class="sr-only">Room visibility</legend><label><input type="radio" name="roomVisibility" value="public"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a17 17 0 0 1 0 18 17 17 0 0 1 0-18Z"/></svg>Public</label><label><input type="radio" name="roomVisibility" value="private" checked><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>Private</label></fieldset>
+                <label for="publicRoomName" class="sr-only">Room name</label><input id="publicRoomName" maxlength="48" placeholder="Room name (optional)" autocomplete="off" aria-describedby="createVisibilityHint"><p id="createVisibilityHint" class="create-visibility-hint">Invite only · you approve new drivers.</p><button id="createRoom" class="launch-btn ui-button ui-primary" type="button"><span id="createRoomLabel">CREATE PRIVATE ROOM</span><span aria-hidden="true">→</span></button>
+              </section>
+              <section id="joinCard" class="entry-card private-join" aria-labelledby="joinTitle"><h3 id="joinTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 4h7v16h-7M3 12h12M10 7l5 5-5 5"/></svg>Have a private invitation?</h3><div class="private-join-fields"><label for="joinCode" class="sr-only">Invitation link or room code</label><input id="joinCode" autocomplete="off" spellcheck="false" placeholder="Paste link or room code" aria-describedby="invitationHint"><button id="joinRoom" class="ui-button ui-secondary" type="button">JOIN <span aria-hidden="true">→</span></button></div><p id="invitationHint" class="invitation-hint">Your host will approve your request.</p></section>
+            </div>
           </div>
           <p id="entryStatus" class="entry-status" role="status" aria-live="polite"></p>
           <div class="entry-community">
@@ -87,7 +98,8 @@
           </div>
         </section>
         <section id="roomPanel" class="room-panel" hidden aria-labelledby="roomTitle" data-mobile-tab="grid">
-          <div class="room-heading"><div><span class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="roomTitle">Your room</h2></div><div class="room-heading-meta"><span id="roomPhase" class="phase-pill">LOBBY</span><span id="roomCount" class="room-count">0 / 8 players</span></div></div>
+          <div class="room-heading"><div><span id="roomVisibilityLabel" class="room-eyebrow">PRIVATE MULTIPLAYER</span><h2 id="roomTitle">Your room</h2></div><div class="room-heading-meta"><span id="roomPhase" class="phase-pill">LOBBY</span><span id="roomCount" class="room-count">0 / 8 players</span></div></div>
+          <div id="roomDirectoryNotice" class="room-directory-notice" hidden><p id="roomDirectoryMessage" role="status" aria-live="polite"></p><button id="retryRoomPublish" type="button" class="ui-button ui-secondary">Retry listing</button></div>
           <div class="room-mobile-tabs" role="tablist" aria-label="Room view"><button id="roomGridTab" role="tab" aria-selected="true" aria-controls="roomWorkspace" type="button">ROOM</button><button id="roomChatTab" role="tab" aria-selected="false" aria-controls="chatPanel" type="button">CHAT <span id="mobileChatUnread" class="unread-badge" hidden>0</span></button></div>
           <div id="roomWorkspace" class="room-layout">
             <section class="grid-section" aria-labelledby="gridTitle"><div class="section-label"><h3 id="gridTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="7" r="3"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M17 4a3 3 0 0 1 0 6M18 13a6 6 0 0 1 4 6v2"/></svg>STARTING GRID</h3><span id="readyCount">0 ready</span></div>
@@ -207,8 +219,8 @@
       </section>
     </div>
   </div>
-  <small id="buildVersion" class="build-version"><span>v46.1</span> · <time datetime="2026-10-18">18.10.26</time></small>
+  <small id="buildVersion" class="build-version"><span>v50.1</span> · <time datetime="2026-10-19">19.10.26</time></small>
   <div id="menuGamepadHints" class="menu-gamepad-hints" role="status" aria-label="Controller menu controls" hidden></div>
-  <script src="vendor/peerjs.min.js?v=46-race-names" defer></script><script src="daytona_engine.js?v=46-race-names" defer></script><script type="module" src="main.js?v=46.1-race-names"></script>
+  <script src="vendor/peerjs.min.js?v=50.1-public-security" defer></script><script src="daytona_engine.js?v=50.1-public-security" defer></script><script type="module" src="main.js?v=50.1-public-security"></script>
 </body>
 </html>

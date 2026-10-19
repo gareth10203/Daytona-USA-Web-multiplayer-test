@@ -1,5 +1,108 @@
 # Investigaciones y documentación de Daytona USA Web
 
+## 2026-10-19 — Versión 50.1: inactividad y protección del directorio
+
+Se mantiene el motor y protocolo de la 50/49, con caché de frontend `50.1-public-security` y versión visible `v50.1 · 19.10.26`. Se conserva el ZIP original de la 50; el nuevo paquete tiene otro nombre. El nombre interno BUILD_ID conserva la compatibilidad de salas de la 50; su etiqueta técnica no se usa como pie visible.
+
+### Pausa de cinco minutos
+
+`PublicRoomDirectory` registra actividad únicamente mientras se navega por el listado. Se cuentan puntero, teclado, rueda, entrada/cambio de campos y foco para cubrir la navegación por mando. El movimiento de puntero se registra como máximo una vez por segundo. Repetir un render, recibir anuncios o emitir estados no renueva el plazo. A los cinco minutos sin interacción, con comprobación cada 15 segundos y al recuperar visibilidad, se cancela la escucha, se detiene el temporizador, se borra el listado local y se llama `goOffline`. La conexión a RTDB se libera; el estado pausado no se confunde con disponibilidad actual.
+
+Mover el puntero, escribir o recuperar visibilidad no reactiva una lista pausada. Reconnect es explícito y espera otra suscripción antes de habilitar las plazas. Salir y volver a entrar desde el menú también inicia una navegación nueva. Crear una sala o entrar por código privado siguen disponibles. La condición excluye a un host que tiene un anuncio público y no abre conexiones para invitados en el lobby o en carrera.
+
+### Restricciones de la API key
+
+Se revisó la clave web ya existente en la consola del proyecto. Sus 25 APIs iniciales se redujeron a cinco que usa este cliente: `firebaseappcheck.googleapis.com`, `firebaseinstallations.googleapis.com`, `firebase.googleapis.com`, `identitytoolkit.googleapis.com`, `securetoken.googleapis.com`. Se añadieron referentes HTTP para `https://johannruiz.github.io/*`, `http://localhost:8122/*` y `http://127.0.0.1:8122/*`. La consola confirmó «URL de referencia HTTP, 5 API». No se rotó la clave, no se generaron credenciales administrativas y no se cambiaron reglas de datos. Son restricciones del servicio; editar el JS de una copia no las elimina. El referente HTTP no sustituye App Check ni es una prueba criptográfica contra un cliente malicioso.
+
+Tras guardar se repitió el ensayo Firebase/PeerJS real: sala temporal propia, entrada, contador, denegación de borrado por otro usuario y retirada; ambas cuentas temporales eliminadas. Los orígenes o puertos distintos necesitan autorización adicional en la consola. Los emuladores y Analytics con colección interceptada se prueban por separado.
+
+### App Check y cuota
+
+`createAppCheckGate` comparte una única inicialización y se espera antes de utilizar Auth/RTDB. SDK modular oficial 13.0.0, `ReCaptchaEnterpriseProvider`, renovación automática con caché del SDK, sin obtener tokens por fotograma ni por cada anuncio. La renovación se detiene con `goOffline` y se restaura al volver a usar el directorio. Un error de inicialización no se ignora si hay una clave configurada; permite un reintento posterior. Sin clave configurada no se simula una verificación ni se afirma protección activa.
+
+La configuración pública no incluye una clave secreta reCAPTCHA ni token debug. Se creó una clave de producción SCORE/Web, sin desafíos, sin puntuación de prueba y con verificación de dominio activada para `johannruiz.github.io`. Se registró en Firebase App Check con TTL de una hora. Se comprobó primero un token genuino desde el dominio autorizado: el HTML y los módulos propios se sirvieron desde dist mediante la ruta de prueba del navegador; reCAPTCHA, intercambio App Check, Authentication y RTDB fueron reales. No se falsificó el origen de red, no se devolvieron tokens simulados ni se usó un proveedor debug. El intercambio devolvió 200/3600s, Authentication adjuntó el token y la consulta acotada funcionó. La cuenta anónima temporal se eliminó; el informe no guarda tokens.
+
+La estrategia inicial era desplegar antes de exigir la protección. Después el propietario pidió expresamente dejar todo habilitado antes de recibir el ZIP, indicando que lo publicaría inmediatamente. Por ello se activó la exigencia tanto en Realtime Database como en Authentication desde la consola. La versión anterior dejará de acceder al directorio al propagarse la configuración; Firebase avisa de hasta 15 minutos. El estado configurado «Aplicada» se documenta en las capturas, sin confundirlo con una medición instantánea de propagación en cada endpoint. Un localhost con exigencia habilitada requiere un entorno debug autorizado conforme a la documentación oficial; la clave reCAPTCHA de producción nunca debe admitir localhost. Sin token debug local se omite la evaluación reCAPTCHA para no malgastar cuota, pero el servidor sigue rechazando el acceso protegido: no se introduce un bypass de servidor.
+
+El propietario autorizó expresamente aceptar las condiciones de Google Cloud Platform para habilitar reCAPTCHA Enterprise. Se mantiene Spark y no se habilita facturación. La cuota gratuita del proveedor es de 10.000 evaluaciones por mes natural agregadas por organización entre cuentas y sitios; sin facturación los excesos se rechazan con 429. No corresponde al número de anuncios o pasos del motor. El TTL por defecto recomendado es una hora y el SDK renueva aproximadamente a mitad del plazo; sesiones/reintentos influyen en el consumo. Referencias: [configuración App Check](https://firebase.google.com/docs/app-check/web/recaptcha-enterprise-provider), [API keys y servicios necesarios](https://firebase.google.com/docs/projects/api-keys), [cuotas del proveedor](https://docs.cloud.google.com/recaptcha/docs/billing-information).
+
+### Validación
+
+219 pruebas unitarias, incluidas pausa exacta, actividad que renueva el plazo, render que no lo renueva, regreso de pestaña oculta, reconexión explícita, exclusión del host y ausencia de conexiones para invitados. Pruebas de inicialización App Check única/ordenada, proveedor desconocido, reintento tras fallo, suspensión de renovación y exclusión de localhost sin debug explícito. 26 comprobaciones de reglas. Dos cabinas reales con emuladores y PeerJS verificaron la desconexión efectiva al pausar, retirada de filas, retorno mediante Reconnect y continuidad de una carrera al caer Firebase. Capturas de escritorio/móvil y del estado pausado. Informes de esta revisión en `build/public-security`, separados de las evidencias de la 50.
+
+Después de activar la exigencia se comprobó de nuevo el cliente con attestation real y una lectura RTDB válida. Un intento sin App Check, desde el mismo origen autorizado y con un ID token de usuario válido para RTDB, devolvió 401. El alta anónima sin token App Check también devolvió 401 con «Firebase App Check token is invalid». Por tanto, además de la configuración «Aplicada» se verificó el bloqueo efectivo en ambos endpoints. El informe no conserva credenciales; se retiraron los usuarios y anuncios temporales. Estas comprobaciones son específicas del servicio y no una garantía de impedir todo abuso o de disponibilidad ilimitada.
+
+## 2026-10-19 — Candidata 50: directorio público de salas
+
+Desarrollo separado en `multiplayer-public-rooms`. Se conserva íntegra la revisión 49 en `multiplayer-race-authority`, incluido su ZIP. No cambia ningún archivo nativo ni el JS/WASM del motor distribuido: SHA-256 WASM `e51a3fcccdaf4e8e4468bdf17d0d1182d4dd6febe8952d26d78d07adf3cd2ac7`. La clasificación, llegadas estimadas, predicción, física, checkpoints y políticas de desconexión conservan la 49. Esta revisión cambia el descubrimiento y la admisión de salas, no transporta el juego por Firebase.
+
+### Datos, presencia y admisión
+
+SDK modular oficial Firebase 13.0.0 desde gstatic, con carga diferida. Authentication anónimo identifica al propietario del anuncio; una identidad local eliminada o caducada se sustituye al volver a conectar. La configuración web del cliente es pública; no se incorporan credenciales administrativas. La ruta es `publicRooms/{id32hexDelHost}` y contiene exactamente `name`, `players`, `state`, `invite`, `ownerUid`, `updatedAt`, `version`. La invitación incluye el token PeerJS existente. Al ser pública, cualquier usuario del directorio puede solicitar entrar; no constituye un secreto privado.
+
+El listado consulta por `updatedAt`, con índice y `limitToLast(50)`. Rechaza registros malformados, oculta registros de más de 90 segundos y muestra como no disponibles los incompatibles, llenos, en arranque, en carrera o recuperando conexión. Se utiliza el desfase de reloj del servidor para la caducidad. Una sala sin conexión a Firebase puede tardar en desaparecer; no se promete presencia instantánea.
+
+El host registra y espera la confirmación de `onDisconnect().remove()` antes de escribir su anuncio. Al abandonar, primero confirma la eliminación y después cancela el registro. Si vuelve la conexión, vuelve a registrar la retirada y republica inmediatamente. Los cambios se agrupan, con mínimo de 1,5 segundos entre intentos; el pulso es cada 30 segundos y los errores de publicación retroceden 30 segundos, con reintento manual disponible. Los estados asíncronos antiguos no pueden resucitar una sala abandonada. Al salir del listado sin anunciar una sala se retiran suscripciones y se desconecta RTDB. No se envían fotogramas, informes de rendimiento ni datos de vehículos.
+
+Las reglas permiten armar una retirada sobre una ruta todavía vacía. Firebase vuelve a comprobar el permiso cuando ejecuta la desconexión: no puede borrarse una sala que después pertenece a otro UID. El ensayo con dos usuarios reales del emulador comprobó explícitamente esta carrera. Una sala existente sólo puede editarse o borrarse por su propietario. Se validan todos los tipos, rangos, timestamps, estados, identidad de host de la invitación y ausencia de campos adicionales. Son controles de propiedad y formato; no constituyen un sistema de moderación o protección completa contra spam de cuentas nuevas.
+
+Las salas privadas no se anuncian. El selector comienza en privado para preservar la intención anterior. Un host público aprueba automáticamente tras las comprobaciones existentes de versión, token, sesión, fase y capacidad; el invitado no decide la política. El host privado sigue aprobando manualmente, incluso si un cliente afirma venir de un enlace público. Las llegadas simultáneas no superan ocho plazas. No se añade entrada en caliente durante una carrera. El fallo de Firebase nunca invoca la salida de la sesión PeerJS ni detiene el motor.
+
+### Interfaz y Analytics
+
+Listado público a la izquierda, búsqueda local, ocupación, estado y acciones coherentes; a la derecha crear pública/privada, nombre de sala y enlace/código privado. Conserva Discord, nombre local, instrucciones, navegación estándar y controles del lobby. Estados vacíos, de carga, error y reintento explícitos. Las filas se mantienen y ordenan de forma estable para no mover el foco con cada pulso. Diseño de dos columnas en escritorio y apilado en móvil; sólo el listado tiene desplazamiento interno cuando es necesario.
+
+Analytics sigue habilitado y separado del directorio. `initializeAnalytics` desactiva el page_view automático y establece `page_location` como origen más ruta, sin hash ni query; los parámetros por defecto y el evento explícito usan ese valor. No se añaden nombres de sala/jugador, mensajes o invitaciones a eventos. La prueba interceptó la colección del SDK real, verificó page_view y cambios de enlace con invitaciones distintas, y comprobó que ninguno de los tokens llegó al envío. El bloqueo o incompatibilidad de Analytics no impide abrir el juego.
+
+### Validación reproducible y límites
+
+- 209 pruebas de `node --test tests/*.test.js`, incluidas presencia, publicación asíncrona, caducidad, reconexión, coalescencia, admisión pública/privada y capacidad simultánea.
+- `tests/public-rooms-rules.cjs`: 26 comprobaciones con Authentication y Realtime Database emulados y las reglas de esta versión. Namespace `demo-daytona-public-default-rtdb`; no se usa un namespace alternativo sin reglas.
+- `tests/public-rooms-browser.cjs`: dos Chrome con ROM del usuario y motor de distribución, SDK Firebase real conectado a emuladores y conexión PeerJS real. Comprueba listado/búsqueda, autoentrada, plazas, carrera, permisos al desconectar, retirada y recuperación. Al desconectar sólo Firebase, ambos contadores nativos avanzaron más de 50 pasos sin cambiar la época de carrera; al reconectar reapareció el anuncio. Se conserva la aprobación privada. Sin errores de página. Capturas de escritorio 1440×1000 y móvil 390×844, sin desbordamiento horizontal. El informe registra los hashes exactos del frontend probado.
+- `tests/analytics-browser.cjs`: SDK Analytics real con colección e instalación interceptadas para no alterar estadísticas. Confirma el envío sanitizado; no es una certificación de privacidad de cualquier configuración futura de Google Analytics.
+- `tests/public-rooms-live.cjs`: después de que el propietario publicara las reglas, prueba contra el proyecto Firebase real con dos cuentas anónimas temporales y PeerJS real. Publica una sala temporal, comprueba sus siete campos, entrada automática, contador, denegación de borrado por el invitado y retirada confirmada. El informe confirma la eliminación de ambas cuentas al terminar. No se entra ni modifica salas de terceros.
+- `scripts/package-public-rooms.py`: verifica las evidencias anteriores, hashes del frontend, identidad del motor y todos los archivos nativos respecto a la 49, preservación del ZIP anterior, manifest y contenido íntegro del ZIP nuevo.
+
+Informes en `build/public-rooms/{browser,rules,analytics,production,validation}.json` y `unit-tests.txt`, fuera de distribución. La prueba pública real comprueba el servicio y dos participantes; no certifica carga masiva, ocho equipos WAN ni nuevas mejoras físicas. Los límites de clasificación/llegadas y las comprobaciones pendientes de la revisión 49 siguen vigentes. Las reglas se incluyen como archivo de referencia en el ZIP; las que protegen los datos son las publicadas en Firebase, no el archivo servido por Pages.
+
+Referencias oficiales: [presencia y onDisconnect](https://firebase.google.com/docs/database/web/offline-capabilities), [condiciones de reglas](https://firebase.google.com/docs/database/security/rules-conditions), [SDK modular mediante CDN](https://firebase.google.com/docs/web/alt-setup), [Analytics](https://firebase.google.com/docs/analytics) y [versiones del SDK JS](https://firebase.google.com/support/release-notes/js).
+
+<!-- RACE AUTHORITY 49 -->
+## 2026-10-19 — Candidata 49: clasificación compartida y llegadas estimadas
+
+La 49 se desarrolla en multiplayer-race-authority. Conserva sin modificar la carpeta, motor y ZIP de la 48. No se cambian el predictor central_motion.h, las rutas inversas, la política CPU ni los checkpoints. El objetivo es separar la decisión de clasificación de la imagen reconstruida de cada rival. La implementación de retirada en caliente permanece en su experimento anterior; aquí se conserva la política de desconexión del producto 48, que puede devolver la sala al lobby.
+
+### Evidencia y protocolo
+
+Se observa la solicitud de meta original de Revision A: escritura en 0x5010d8 desde PC 0x139b4, tras la prueba nativa de vueltas validadas. Sólo se acepta para el coche propio, una vez por carrera y con vueltas suficientes. No se inventa una meta por posición predicha, por progresar muchos sectores ni por llegada de un paquete. Cada paso real del motor registra su contexto nativo, curso, vueltas, sectores y la tabla que asocia coche de carrera con ID de enlace. El número de coche de carrera no equivale al asiento elegido en el lobby.
+
+LocalRaceReporter conserva el evento original, fecha de observación y margen del paso. Emite como máximo unos diez informes por segundo, con envío inmediato al cambiar de escena o detectar meta. Un cambio de escena, attract o moneda nueva no borra un evento pendiente: se conserva un máximo de ocho informes históricos hasta recibir confirmación. La fecha de un evento histórico se transforma a partir del ancla de reloj actual, sumando deriva al margen; no se convierte su recepción tardía en una llegada tardía. Los relojes de resultados admiten incertidumbre mayor que el movimiento, sin alterar su umbral por defecto ni fingir una medida exacta de trayecto de ida.
+
+HostRaceAuthority identifica los participantes con la tabla auténtica de enlaces y la identidad autenticada del canal. Forma grupos por contexto nativo, curso, vueltas, sectores, sentido y proximidad temporal del comienzo. El host puede seguir en attract mientras arbitra a invitados. La clasificación en carrera usa progresos auténticos interpolados al mismo instante, sin extrapolarlos para proclamar un ganador. Si no hay historia común suficiente se conserva el orden anterior. Una desconexión o pausa no se deduce de que alguien avance menos en estos informes.
+
+La meta se confirma cuando existe evidencia de todos los participantes: evento de meta propio, estado terminal original o un informe completo posterior cuyo límite temporal inferior ya rebasa el límite superior de la llegada candidata. No se usa un temporizador fijo para declarar ganador al primero cuyo paquete llegó. La simulación no espera esta confirmación. Al concluir se fija una decisión inmutable, con puestos únicos para todos; quienes no llegaron se ordenan con progreso terminal auténtico. La estimación se ordena por fecha calibrada; si dos fechas estimadas son exactamente iguales, se usa el ID nativo de coche. El solapamiento de márgenes muestra PHOTO FINISH · ESTIMATED ORDER, manteniendo puestos distintos por preferencia explícita del usuario. Confirmar la estimación no constituye prueba física de precisión inferior a un fotograma.
+
+Los mensajes de decisión incluyen época de sesión, carrera, revisión, participantes y puestos únicos. Se aceptan sólo desde el host, se rechazan revisiones antiguas y se retransmiten cada segundo hasta ACK. La cola de esta metadata está acotada y no acumula informes redundantes con backpressure. No se alteran los límites existentes de conexión o watchdog. El informe Connections conserva decisiones, roster, evidencia temporal de meta y estado de ACK, también después de terminar la sesión local.
+
+### Integración nativa y presentación
+
+La autoridad no se limita a la lista HTML: las lecturas del byte nativo de puesto humano en car+0x6d reciben el mismo orden, con controles de carrera local, firma de participantes, revisión, dirección válida y límites de memoria. El puesto final propio almacenado en 0x501ad4 recibe la decisión confirmada. Los bytes crudos originales se conservan como fallback cuando no hay autoridad válida. Los consumidores originales incluyen HUD, coordinación, resultados y reglas dependientes del puesto; por ello una clasificación diferente también puede variar las ayudas/bonificaciones nativas según posición. No se escribe progreso, checkpoint, vuelta ni flag de meta.
+
+La rutina de resultados 0x224444/0x24444 vuelve a consultar el puesto en su presentación; el camino 0x224358 la llama durante su actualización. No se añade un bloqueo global ni se congela el motor esperando la decisión. La lista anuncia CONFIRMING FINISH…, FINISH CONFIRMED, RESULT CONFIRMED o PHOTO FINISH · ESTIMATED ORDER según el estado. Los anuncios accesibles sólo cambian cuando cambia el texto. La clasificación conserva su permanencia hasta attract y se limpia al comenzar otra carrera.
+
+### Pruebas y alcance
+
+- 199 pruebas JS: progreso común, host en attract, metas recibidas fuera de orden, incertidumbre solapada, igualdad exacta entre estimaciones, DNF, moneda nueva, identidad/asientos intercambiados, épocas/revisiones antiguas, retransmisión y ACK, y consistencia de la lista. Los casos de 2 a 8 participantes y ambos sentidos son pruebas de lógica; no representan ocho máquinas reales.
+- Dos motores reales en Chrome, Normal/Beginner con CPU, controles ordinarios y TURN UDP local autenticado bajo DTLS/SCTP. RTT 150 y 300 ms, jitter ±25 ms por trayecto, además de 300 ms con 3 % de pérdida UDP real. Entre 2045 y 2048 muestras fechadas por observador: cero discrepancias entre puesto humano nativo y decisión recibida. Cada revisión común tenía idéntico contenido y ambos observadores terminaron con la misma decisión. Cadencia nativa medida ~57,52 Hz. La recepción es asíncrona: durante el tránsito de una revisión las cabinas pueden mostrar revisiones diferentes brevemente.
+- Carreras originales completas en WASM: dos motores, ocho vueltas en Normal; tres motores con el host en attract y dos invitados con bots; otro recorrido con bots seguido de una moneda y selección de Advanced. Se registraron dos solicitudes de meta originales por carrera y todos los participantes recibieron el mismo resultado final. En los casos con márgenes solapados se obtuvieron puestos distintos con photo finish. La siguiente carrera usó otro contexto sin heredar la meta previa. Estas pruebas avanzan un reloj virtual y retrasan snapshots completos; son distintas de la prueba de UDP en tiempo real. No se fuerza RAM de coches, vueltas ni checkpoints. La frenada de la prueba no demuestra por sí sola un adelantamiento de último segundo.
+- El artefacto de producción, sin exports privados de inspección, arranca dos cabinas, entra en conducción tras el rolling start, publica autoridad, conserva fechas de los estados y limpia la sesión al volver al lobby. El análisis distingue las lecturas compartidas del puesto de las tablas crudas de RAM; comparar estas últimas como si siguieran siendo la autoridad produciría un diagnóstico erróneo.
+
+Reproducir con scripts/build-race-time.py, scripts/build-position-consistency.py, tests/race-authority-native.cjs, tests/position-consistency-browser.cjs, scripts/analyze-race-authority.py y tests/race-time-production.cjs. scripts/package-race-authority.py comprueba preservación de la 48, hashes del motor, evidencias y contenido del ZIP. Los probes, ROM y trazas quedan fuera de distribución. La adaptación del frontend tras las capturas sólo corrige la codificación de los signos de los avisos; el motor y el protocolo capturados no se cambian.
+
+Comprobación adicional de Advanced inverso/Normal/CPU: el primer piloto sostenía primera al rozar su limitador y agotó el tiempo poco después de una vuelta. Se ajustaron exclusivamente sus umbrales de cambio de marcha; en la repetición ambos completaron dos de cuatro vueltas antes del time-over. El ensayo que exigía meta conserva estado FAIL: Native finish reached, porque no hubo ninguna solicitud de meta. Un análisis separado de sus datos comprueba que ambos recibieron la misma decisión final DNF y sus puestos nativos coinciden con ella. Eso valida ese resultado por agotamiento de tiempo; no valida la llegada inversa. No se acortaron vueltas ni se amplió el contador para convertir el fallo del piloto en un pase.
+
+La predicción y los contactos siguen siendo los de la 48. Esta autoridad no hace coincidir cada imagen ni implementa rollback/físicas globales. La asimetría de red conserva incertidumbre y la confirmación puede tardar más con mala conectividad. No se ha certificado WAN de ocho dispositivos ni todas las combinaciones de circuitos/modos. Es una candidata para prueba manual de clasificación y llegadas, preservando la 48 como comparación.
+
 <a id="webgl2-fallback"></a>
 
 ## Revisión 36 — fallback WebGL2
@@ -88393,3 +88496,405 @@ Resultado detallado: build/race-names/browser.json; capturas en esa carpeta; bui
 ## Revisión 46.1: lista con puesto y nombre
 
 2026-10-18. A petición del usuario se retira la columna del número de coche (nP:) y su mención en el título accesible. Sólo se muestran puesto y nombre. Se conserva el número internamente para identidad y color, sin modificar el cálculo de puestos, la permanencia hasta attract, el motor ni las conexiones. Se amplía el espacio disponible para el nombre al retirar esa columna. Se actualizan las claves de caché de los recursos afectados y la etiqueta del menú a v46.1; BUILD_ID sigue siendo compatible con 46. Comprobación visual con el fixture UI existente: ocho filas en 1920×1080, 390×844 y 812×375; inspección de la captura móvil. No se repite la carrera de tres motores por este cambio de presentación. Se conserva el ZIP 46 original y se entrega otro ZIP 46.1.
+
+
+<!-- TAB RESUME LAB 46.1 -->
+## Ensayo aislado: cambios de pestaña y recuperación, revisión 46.1
+
+2026-10-18. El usuario solicita comprobar cambios de pestaña cortos antes de decidir si retirar la vuelta automática al lobby. No se modifica producción. El fixture tests/tab-resume-browser.cjs sirve main.js con un único bypass de room.visibilityChanged mientras la sesión está activa. Se conservan guards de arranque, los watchdogs originales de progreso/ACK de 10 s y silencio de 20 s, la red, SimulationClock, motor JS/WASM y paquetes. Hashes verifican que web/, dist/ y ZIPs 45, 46 y 46.1 permanecen idénticos. Este ensayo no integra la retirada de coches ni una migración de host.
+
+Tres motores de producción WebGL2, modo Endurance, PeerJS/WebRTC y TURN/UDP local sin latencia/pérdida añadidas. Tres Chrome externos con perfiles temporales, ventanas visibles no superpuestas y sin flags para desactivar throttling de segundo plano. Conexión CDP noDefaults=true sobre el contexto por defecto; no se sobrescriben document.hidden/visibilityState ni hasFocus. Se comprueba que abrir otra pestaña en la ventana de una cabina oculta realmente esa cabina y mantiene visibles las otras dos. Una comprobación inicial con el código normal reproduce la vuelta al lobby al ocultar al invitado. Los siguientes casos anulan únicamente esa regla en memoria dentro de la prueba.
+
+Cuidado metodológico: Playwright normalmente configura Emulation.setFocusEmulationEnabled en su propia sesión CDP. Desactivarlo desde una segunda sesión no eliminó esa emulación: cambiar de pestaña seguía dando document.hidden=false. Ese intento no es evidencia de segundo plano y se descartó. El ensayo válido lanza Chrome externamente y conecta con noDefaults=true, verificando las transiciones reales de visibilidad antes de medir.
+
+Resultados: ocultar un invitado 3 s con audio activo, el host 6 s con audio activo y un invitado 6 s con el contexto de audio suspendido conservó aproximadamente 57,5 pasos/s en las tres cabinas. No hubo deuda apreciable que recuperar, sólo la variación normal de un paso. El caso de audio suspendido se ensayó poco después de silenciar; no se afirma que se hubieran extinguido todas las exenciones de actividad audible recientes de Chrome ni que represente minutos en segundo plano.
+
+Como control separado se usa Page.setWebLifecycleState(frozen) durante 3 s sobre un invitado y luego sobre el host; no se presenta como una suspensión natural observada. En ambos casos, al reactivar y mostrar la pestaña, su reloj acumulaba unos 2970–2980 ms. Recuperó esos pasos en menos de aproximadamente 1 s (muestras a 0,1/0,25/0,5/1 s), con picos medidos de unos 316/324 pasos/s y regreso posterior a unos 57,5. La mayor tasa corresponde a pasos de simulación, no a imágenes distintas presentadas por la pantalla. Las otras cabinas siguieron a su ritmo normal durante la suspensión. A los 8 s, deuda de reloj normal, publicación nativa de listas cercana a 57 y cero frames señalados como fallback nativo de 30 Hz en la última ventana diagnóstica. No se reproduce la antigua lentitud persistente en estos ensayos cortos. Las fases antes/después y medidas por cabina quedan en el resumen.
+
+Limitaciones: tres motores en un PC, red local limpia y pausas de hasta 6 s; no iPhone, congelación prolongada, descarte de pestaña, cortes de Internet ni ocho dispositivos reales. Los coches no se ponen a disputar colisiones cercanas ni se valida la justicia de contactos durante la recuperación. Si el host está congelado, su distribución de estados también se detiene: que los demás sigan simulando no significa que reciban datos frescos de él durante esa pausa. No se mide subjetivamente continuidad de sonido ni se demuestra la causa histórica de todos los episodios de lag. Cambiar foco no equivale a desconectarse; un cierre real o un watchdog por suspensión larga siguen teniendo la política actual.
+
+Conclusión acotada: es viable evaluar una política que no termine inmediatamente una carrera por visibilitychange. Un cambio corto puede no requerir aceleración si el fallback timer sigue ejecutando; una suspensión real sí acumula deuda y el reloj actual puede recuperarla. No corresponde retirar o marcar desconectado un coche únicamente por pérdida de foco. Antes de generalizar conviene una candidata optativa y pruebas PC/iPhone y recuperaciones con tráfico real, manteniendo las protecciones de fallos confirmados. El ZIP actual conserva su comportamiento anterior.
+
+Datos: build/tab-resume/browser.json y build/tab-resume/summary.json. Resumen observado:
+
+```json
+{
+  "status": "PASS",
+  "productionUnchanged": true,
+  "realEngines": 3,
+  "originalWatchdogsRetained": true,
+  "scenarios": [
+    {
+      "name": "Guest natural tab switch, audio running, 3 seconds",
+      "target": 2,
+      "forcedFreeze": false,
+      "hiddenHz": [
+        57.56,
+        57.56,
+        57.51
+      ],
+      "targetDebtAtReturnMs": 9.6,
+      "targetDebtBelow50msBy": 7,
+      "targetPeakCatchupHz": 61.1,
+      "finalDebtMs": [
+        14.4,
+        13.9,
+        15.0
+      ],
+      "finalNativeListHz": [
+        58.23,
+        57.24,
+        57.24
+      ],
+      "finalNative30Frames": [
+        0,
+        0,
+        0
+      ],
+      "scenesBeforeAfter": [
+        22,
+        22
+      ],
+      "allContinue": true
+    },
+    {
+      "name": "Host natural tab switch, audio running, 6 seconds",
+      "target": 1,
+      "forcedFreeze": false,
+      "hiddenHz": [
+        57.66,
+        57.57,
+        57.42
+      ],
+      "targetDebtAtReturnMs": 14.6,
+      "targetDebtBelow50msBy": 5,
+      "targetPeakCatchupHz": 60.0,
+      "finalDebtMs": [
+        14.9,
+        14.4,
+        15.5
+      ],
+      "finalNativeListHz": [
+        57,
+        57.47,
+        56.99
+      ],
+      "finalNative30Frames": [
+        0,
+        0,
+        0
+      ],
+      "scenesBeforeAfter": [
+        22,
+        22
+      ],
+      "allContinue": true
+    },
+    {
+      "name": "Guest natural tab switch, game audio suspended, 6 seconds",
+      "target": 2,
+      "forcedFreeze": false,
+      "hiddenHz": [
+        57.51,
+        57.66,
+        57.51
+      ],
+      "targetDebtAtReturnMs": 13.9,
+      "targetDebtBelow50msBy": 5,
+      "targetPeakCatchupHz": 60.9,
+      "finalDebtMs": [
+        11.4,
+        10.6,
+        6.9
+      ],
+      "finalNativeListHz": [
+        57.24,
+        58.23,
+        57.24
+      ],
+      "finalNative30Frames": [
+        0,
+        0,
+        0
+      ],
+      "scenesBeforeAfter": [
+        22,
+        22
+      ],
+      "allContinue": true
+    },
+    {
+      "name": "Guest forced renderer freeze, 3 seconds",
+      "target": 2,
+      "forcedFreeze": true,
+      "hiddenHz": [
+        57.55,
+        null,
+        57.55
+      ],
+      "targetDebtAtReturnMs": 2977.9,
+      "targetDebtBelow50msBy": 1002,
+      "targetPeakCatchupHz": 315.5,
+      "finalDebtMs": [
+        4.9,
+        4.3,
+        16.6
+      ],
+      "finalNativeListHz": [
+        58.32,
+        57.24,
+        58.24
+      ],
+      "finalNative30Frames": [
+        0,
+        0,
+        0
+      ],
+      "scenesBeforeAfter": [
+        22,
+        22
+      ],
+      "allContinue": true
+    },
+    {
+      "name": "Host forced renderer freeze, 3 seconds",
+      "target": 1,
+      "forcedFreeze": true,
+      "hiddenHz": [
+        null,
+        57.63,
+        57.63
+      ],
+      "targetDebtAtReturnMs": 2969.7,
+      "targetDebtBelow50msBy": 998,
+      "targetPeakCatchupHz": 324.2,
+      "finalDebtMs": [
+        3.6,
+        17.2,
+        15.2
+      ],
+      "finalNativeListHz": [
+        57.25,
+        58.25,
+        57.25
+      ],
+      "finalNative30Frames": [
+        0,
+        0,
+        0
+      ],
+      "scenesBeforeAfter": [
+        22,
+        22
+      ],
+      "allContinue": true
+    }
+  ]
+}
+```
+
+
+<!-- NETWORK REPORTS OCT18 2026 -->
+## Revisión acumulada de cuatro reportes de Connections del 18 de octubre UTC
+
+2026-10-18. Se analizan exclusivamente los cuatro archivos aportados por el usuario, exportados a las 03:20:56, 03:42:41, 03:43:41 y 03:51:09 UTC del día 18; en Colombia corresponden a la noche del 17. Todos declaran daytona-rev-a-central-experimental-35-uix-review, captureMode full y seis identidades de cabina. Son snapshots del lobby con históricos de juego. No representan la candidata 46.1 actual.
+
+Se deduplican muestras por (serial, race, sequence), verificando igualdad completa; eventos por (id, at), también verificando igualdad. Quedan 4.286 muestras únicas y 22 eventos únicos; se retiran 2.145 muestras repetidas sin conflictos. Los objetos performance de 03:42:41 y 03:43:41 son exactamente iguales. nuexz mantiene su historial archivado repetido en exportaciones posteriores, sin nueva participación. Las muestras pertenecen a tres tramos de juego, con retención máxima de 300 por cabina; no son cuarenta minutos continuos. Las horas de captura de los invitados no están sincronizadas con el host: se usan eventos del host para cronología, nunca capturedAt menos receivedAt como latencia de una vía.
+
+Los cinco eventos de parada únicos son: 22:16:41 N4h, visibility-interruption preparando; 22:20:32 nuexz, player-left en juego; 22:28:34 Julian8A, visibility-interruption preparando; 22:42:29 N4h, visibility-interruption en juego; 22:51:03 N4h, visibility-interruption en juego. Las cuatro interrupciones de visibilidad conservaban RTC connected y canal open, con cero bufferedBytes. La última indica RTT 170 ms, progreso remoto de hace 240,4 ms y mensaje de hace 0,1 ms: la regla de visibilidad corta, no un timeout largo. No aparecen fallos RTC, timeouts de progreso/silencio ni límites de cola como causa de parada. La ausencia de esos eventos no demuestra que la red nunca perdiese datagramas.
+
+SIM se resume ponderando por duración de muestra: suma(simulationHz × seconds) / suma(seconds). Los seis participantes quedan aproximadamente a 57,53–57,54 Hz. Ninguna muestra única baja de 50 Hz; todos los contadores nativeLink.video30Frames valen cero. El host gamergDriver conserva máximo intervalo entre pasos de 29 ms y cero reinicios de programación de audio. No hay evidencia del antiguo estado sostenido a media cadencia en los períodos disponibles.
+
+RTT mediano de invitados: Sebiches 96 ms, N4h 170 ms, Mop 271 ms, Julian8A 93 ms y nuexz 175 ms. Se corrobora escala/orden con ACK medidos por el host. Mop tiene P95 278 ms y máximo 290 ms en sus propias muestras; recibe mediana de 19 paquetes de estado/s, frente a ~44,4 Sebiches y ~48,3 Julian8A. SnapshotFlow espacia envíos por RTT y ventanas pendientes: menos actualizaciones remotas es compatible con mayor retraso/correcciones, sin ralentizar la simulación local. No hay trayectoria o vídeo para cuantificar el efecto visual. RTT del host en el agregado es el peor invitado y no una latencia propia del host.
+
+Picos de planificación local: N4h máximo maxStepGapMs 114,6 ms, mínimo SIM en ventana ~52,92 Hz (~53,80 al excluir progreso inicial <1400); Julian8A máximo 90,1 ms. Pueden percibirse como pequeños tirones. Son intervalos entre pasos, no medidas directas de ocupación CPU/GPU; hace falta una traza del navegador para atribuirlos. El coste medio instrumentado del paso no incluye todo el renderizado, JS ni GPU. Todas las muestras usan distancia 2×; no hay A/B Classic en estos archivos.
+
+No hay relay TURN en las muestras. Máximo buffer de envío observado 19.946 bytes (incluido agregado del host), muy inferior al límite de protección de 1 MiB. La antigüedad máxima de progreso de ACK observada en el host es ~338 ms, lejos del watchdog de 10 s. packetLossPercent es null; unreceivedSamples=0 mide ausencia de huecos diagnósticos retenidos, no pérdida UDP. discardedSamples refleja la retención del histórico. poseHeldPercent alto tampoco significa coche congelado ese porcentaje: alcanza la muestra más nueva disponible.
+
+Recomendación: revisar la política de pestaña oculta durante la carrera en una candidata, preservando guards de inicio y fallos/progreso reales; repetir PC/iPhone y versión actual; investigar N4h con una traza si percibe tirones; evaluar contactos con un invitado de ~270 ms antes de tocar interpolación, colas o límites. Estos reportes no justifican aumentar buffers ni tiempos de espera.
+
+Reproducibilidad: scripts/analyze-network-oct18.py; resultados y hash de entradas en build/network-oct18/summary.json; muestras deduplicadas en unique-samples.json. Informe portable canónico en artifact.json y report.html. Las tablas finales también se seleccionan/ordenan con consultas SQLite realmente ejecutadas sobre reviewed.sqlite3, derivada de los agregados Python; se conserva esa procedencia en las fuentes. Una gráfica nativa compara los RTT medianos de cinco invitados; no se dibuja una línea continua entre ventanas ni se alinean relojes de dispositivos.
+
+QA de datos: claves y duplicados iguales, tipos/valores finitos y running/linked comprobados; contraste ACK host frente a RTT remoto; sensibilidad excluyendo arranque. QA del HTML: validación canónica y estructura/payload/fallback semántico correctos. No se encontró headless-shell compatible; el intento con Chrome completo falló por entorno de extracción no coincidente, por lo que no se afirma verificación visual automática. Recibo en delivery.json. El informe conserva datos/tablas legibles en su fallback semántico. No se modifica web/, dist/, el motor, las conexiones ni los ZIPs publicados.
+
+
+<!-- NUEXZ VISUAL RANK CASE OCT19 UTC -->
+## Caso del host nuexz: coche visualmente primero y contador segundo
+
+2026-10-18 local. Reporte aportado daytona-host-connections-2026-10-19T01-18-55-842Z.json, exportado el día 18 a las 20:18:55 de Colombia. Declara daytona-rev-a-central-experimental-46-race-names; el identificador es compatible también con la corrección visual 46.1. Host nuexz/cabina 1, Sebiches con cambios de asiento 3→6→5, S the Hedgehog/cabina 2 archivado tras salir. No se atribuye el problema al cambio de asiento sólo por coexistir en el registro.
+
+Cobertura: 300 muestras del host (24 del tramo 2, 276 del 3), 300 de Sebiches (26 del tramo 2, 274 del 3) y 226 del tercero (23 del tramo 1, 203 del 2). Son históricos limitados por retención, no la sesión completa. La fuente final de datos del tramo 3 es de aproximadamente 20:14:26–27 en el reloj del host; el reporte se exporta después desde lobby. Los relojes remotos no están sincronizados.
+
+Cadencia del tramo 3: host 57,544 Hz ponderados por duración, Sebiches 57,536. Coste CPU medio por paso, como mediana de ventanas: 6,419 y 3,116 ms; máximo intervalo local entre pasos 47,5 y 41,2 ms respectivamente. nativeLink.video30Frames=0. El host tiene mayor coste de ejecución, pero los datos no demuestran una simulación persistentemente retrasada o el antiguo estado a media cadencia. Más FPS por sí solos no verifican coherencia espacial o de clasificación.
+
+Sebiches tiene RTT mediano 188 ms, P95 190 y máximo 207 en el tramo 3. Recibe mediana de 28,628 paquetes arcade/s y envía 22,700; el host recibe ~22,929. Los valores de la sesión anterior con gamergDriver rondaban 96 ms de RTT y 44 actualizaciones/s para Sebiches. Es una comparación entre sesiones, no A/B controlado ni prueba causal de hardware o ruta. No se transforma la mitad del RTT en una latencia unidireccional medida.
+
+Hallazgo de código: native/include/runtime/central_motion.h ajusta campos de movimiento mediante interpolación, predicción acotada y correcciones graduales, dejando los demás bytes del último bloque original. La clasificación conserva datos del arcade; web/race-standings.js lee la tabla original del coordinador y la traduce por ID de enlace a identidad/nombre/asiento. La representación de un coche y el dato de puesto pueden corresponder a referencias temporales distintas. Es una hipótesis compatible con verse delante y figurar detrás; no se demuestra el adelantamiento concreto ni se certifica qué parte tenía razón. Las poses entran en el juego, incluidos contactos, así que no se descarta como un problema cosmético.
+
+En el tramo 3, host y Sebiches muestran mediana poseHeldPercent=100 y poseBufferTicks=0. En CommBoard::central_pose se incrementa held cuando metrics.endpoint es verdadero, y endpoint incluye playhead >= newest, también durante predicción. El contador buffer sólo acumula max(0,newest-head). Por ello no significa coche congelado el 100 % del tiempo, interpolador roto o ausencia de compensación. No hay en el JSON valores individuales de prediction, edad/incertidumbre aplicada o offset residual por coche que permitan medir su exactitud. En el tramo 2 con tres participantes, el agregado puede combinar caminos diferentes y no debe compararse como si midiera siempre un mismo rival.
+
+Limitación decisiva: el reporte no registra coordenadas propias/remotas, progreso, vueltas, checkpoints, tabla de puestos o instante de meta. No se puede probar quién debía ser primero, si había una diferencia legítima de vueltas/checkpoints, si era un caso inverso o si discrepaba POSITION frente a la lista nueva. Se pregunta al usuario su identidad, contador afectado y sentido del circuito; no se cambia el producto por una suposición.
+
+Los máximos de intervalos recibidos de ~81 s pertenecen a ventanas que retienen el hueco entre sesiones, no a una interrupción de 81 s confirmada jugando. El contador de red describe los últimos 256 intervalos. Excluyendo arranque con progressFrames>1400, los máximos del tramo 3 son 96,9 ms para host y 66,9 ms para Sebiches. No se usan esos outliers históricos para diagnosticar una congelación actual.
+
+Los tres eventos de parada únicos corresponden al host: retorno solicitado a las 20:04:44, visibilidad a las 20:08:35 y otro retorno solicitado a las 20:14:26. S the Hedgehog sale desde lobby. No son una demostración de por qué el orden visual de los coches y el puesto discrepan en carrera.
+
+Siguiente prueba propuesta: observador breve por coche alrededor de un cambio de puesto, con progreso/vuelta original, puesto local y tabla de coordinador, pose recibida y aplicada, reloj/edad/incertidumbre y corrección pendiente. Reproducir adelantamientos cercanos a ~190 ms limpios, intercambiar host y revisar la meta sobre una referencia temporal explícita. Antes de corregir el orden hay que localizar si falla la reconstrucción, el progreso/clasificación o la asignación de identidad. No ajustar el HUD para disimular el caso ni aumentar suavizado/predicción sin ese contraste. Las pruebas previas de cadencia/recuperación no certificaban exactitud espacial ni llegadas justas, que siguen pendientes.
+
+Evidencia local en build/network-oct19/summary.json, artifact.json, reviewed.sqlite3 y report.html. El HTML canónico fue validado y empaquetado con comprobación estructural/fallback semántico; no se certifica la vista gráfica automáticamente por faltar headless-shell compatible. No se modifica web/, dist/, native/ ni los ZIPs publicados.
+
+
+<!-- POSITION CONSISTENCY LAB 46.1 -->
+## Posiciones propias y remotas a 150–190 ms: prueba aislada de 46.1
+
+2026-10-18 local. El usuario confirma que era Sebiches y que el caso con nuexz fue en sentido normal. Sigue sin identificar inequívocamente si discrepaba POSITION, la lista de nombres o ambos. La prueba nueva observa RAM y paquetes originales; no reconstruye retroactivamente su partida.
+
+Dos motores reales derivados del binario candidato 46.1, Chrome/Windows, WebGL2, Classic, Normal/Easy/Beginner, CPU habilitadas y ocho vueltas nativas. Se verifica course=0 y totalLaps=8 en todos los finales de fase. El enlace usa PeerJS y TURN/UDP local autenticado; se comprueba relay/UDP en ambos extremos. Retardo, jitter y descartes configurados operan debajo de DTLS/SCTP. No hay escrituras de coordenadas, progreso, puestos, checkpoints ni reglas. El piloto adicional lee la carretera original y aplica dirección/acelerador/freno ordinarios en carriles separados. No es una certificación WAN, iPhone, ocho cabinas o llegadas a meta.
+
+Instrumentos de sólo lectura confinados a build/: RAM de cada coche (XYZ, rumbo, velocidad, progreso, vueltas y puesto), tabla nativa de clasificación, bloques enviados y recibidos por reloj original, posición antes/después de central_pose, edad/incertidumbre, predicción y offset residual. Se muestrea al terminar cada paso. Los relojes de los procesos se calibran contra el mismo PC, escogiendo el intercambio de menor duración de nueve; no se igualan contadores de simulación de cabinas distintas. Para comparar el mismo instante se interpola linealmente entre estados propios contiguos, rechazando huecos mayores de 45 ms. Las lecturas son exactas; esa referencia entre instantes es una aproximación limitada por el paso original y los intervalos observados. Las unidades de distancia son internas, no metros verificados.
+
+Control del propio laboratorio: la primera ejecución guardaba acumulativamente trazas grandes mientras el mismo proceso atendía TURN. Sus fases posteriores sufrieron interferencia de escritura/serialización y se excluyen de las conclusiones de latencia limpia. Se conserva browser-initial-writer-stalls.json como evidencia del ensayo descartado. Se repitieron los tres perfiles guardando trazas sólo después de detener ambos registradores; durante carrera sólo se escribe un manifiesto pequeño. Se mide además el retardo de ejecución del proceso relay. No se usan las pausas de ese primer intento para acusar al port.
+
+### Retardo fijo, sin pérdidas ni jitter añadidos
+
+Cada perfil captura unos 35,5 segundos de carrera, primero acelerando y luego haciendo frenar a uno y al otro. Las trayectorias no son replays idénticos. El conductor fijo puede empujar al coche delantero; por ello esta primera matriz no certifica adelantamientos ni colisiones justas.
+
+| RTT base configurado | Desfase estimado mediano host / invitado (ms) | Error espacial mediano host / invitado (unidades) |
+|---|---:|---:|
+| 0 | 53.4 / 53.4 | 2.19 / 1.70 |
+| 150 | 66.9 / 53.1 | 2.78 / 1.62 |
+| 190 | 79.6 / 53.5 | 3.43 / 1.95 |
+
+El desfase se estima buscando la posición más cercana en la trayectoria propia del origen, sólo mientras se mueve, entre 500 ms atrás y 150 ms adelante. No mide latencia unidireccional y puede sesgarse en curvas, frenadas o contactos; si el error excede esa ventana la estimación queda acotada. Con retardo fijo de 150 ms, los RTT observados en la última fase son 155/153 ms; con base 190 ms, 203/207 ms en esa fase. Persisten diferencias entre coordenadas aunque el canal ya compensa individualmente la edad. A ~200 ms se observaron cambios transitorios donde ambas cabinas se atribuían el mismo puesto durante hasta ~200 ms. Esto no demuestra quién debía ganar ni una divergencia persistente del resultado.
+
+### Adelantamientos controlados y variación del ping
+
+El piloto de carretera produce dos cambios originales de puesto en cada cabina con base 150 ms y sin jitter/pérdida añadidos. No se fuerza un ganador ni se modifica el HUD. Se repite con jitter uniforme sembrado ±25 ms por trayecto y 0 % de descartes añadidos; puede reordenar datagramas y provocar retenciones/retransmisiones del canal fiable. Es un perfil concreto, no una distribución universal de Internet. Comparar percentiles no equivale a comparar la misma trayectoria física, pues las correcciones cambian la conducción y los contactos.
+
+| Perfil | Desfase estimado mediano host / invitado (ms) | p95 host / invitado (ms) | Máxima secuencia observada de discrepancia geométrica host / invitado (ms) |
+|---|---:|---:|---:|
+| 150 ms estables | 68.5 / 53.2 | 106.9 / 67.1 | 106.3 / 104.9 |
+| 150 ms + jitter ±25 ms/trayecto | 82.0 / 66.4 | 120.0 / 80.7 | 80.5 / 119.7 |
+
+La comparación geométrica de cercanía exige misma vuelta y contador de vuelta de carretera, separación menor de 30 unidades, ambos en movimiento, rumbos casi paralelos (coseno >=0,98) y margen longitudinal de 0,5 unidades. Proyecta sobre el rumbo común; no sustituye el cálculo de progreso ni clasifica coches doblados. Se conservan denominadores y ejemplos, sin vender estas frecuencias como tasas universales de errores de carrera.
+
+En la pasada estable con piloto, las dos cabinas cambian el puesto con ~146–160 ms de diferencia. Se reproducen diferencias de orden geométrico de unos 105–106 ms. La contradicción entre tabla nativa y orden geométrico local alcanza ~280 ms en el host y ~476 ms en el invitado, dentro del filtro anterior. Son diferencias transitorias medibles, compatibles con mezclar movimiento reconstruido y progreso original de otra antigüedad. No son una prueba de corrupción de paquetes: todos los bloques comparables coinciden exactamente en XYZ con el envío original del mismo reloj. Las muestras iniciales sin pareja se cuentan, no se inventan.
+
+La cadencia se mide a partir de fotogramas y tiempo observado y permanece entre 57 y 58 Hz en todos los perfiles aceptados. La comprobación de captura PASS acredita arranque, enlace, integridad de trazas y preservación del producto; no significa que posiciones/contactos/metas estén corregidos. La clasificación visual es una cuestión distinta de recuperar cadencia.
+
+Siguiente intervención propuesta: estudiar juntos el instante auténtico de generación de la pose, la preparación central y los dos pasos de proyección horizontal originales; después revisar cómo se consume el progreso remoto para ordenar coches próximos. Evaluar correcciones con estas trazas y con metas reales antes de cambiar reglas o suavizado. Reducir ping no elimina el retraso de base, y aumentar predicción/reserva a ciegas puede introducir otras contradicciones. Este trabajo no cambia web/, dist/, native/ ni ZIP; motor publicable SHA256 6b7451e0cf461960eaf79a6342d090786acfe531d8a4e585067b4a4d9a54023f y ZIP 46.1 SHA256 3d2b539f4c4d0ff9ab47f970f4cdad3505e553d10b4ed6586bed3ba10774ef03 conservados.
+
+Reproducibilidad: scripts/build-position-consistency.py, tests/position-consistency-browser.cjs y scripts/analyze-position-consistency.cjs. POSITION_DRIVER=1 activa el piloto; POSITION_RTTS selecciona las bases; POSITION_JITTER=25 y POSITION_LOSS=0 seleccionan el perfil variable. Los archivos browser*.json guardan método, perfiles reales, relojes, fases y SHA256 de cada trace*.json. summary*.json contienen agregados y ejemplos; comparison*.csv contiene coordenadas del origen interpoladas al instante observado y las posiciones aplicadas, con sus puestos/progreso. Los instrumentos y ROM no se empaquetan. scripts/record-position-consistency.py valida trazas, hashes y cobertura antes de registrar esta sección en el archivo único de investigaciones.
+
+
+<!-- STATE GENERATION AND SORT AUDIT 46.1 -->
+## Auditoría causal: generación del estado, edad del puente y clasificación original
+
+2026-10-18 local. Revisión solicitada de los dos primeros pasos de coherencia temporal, sin publicar cambios al comportamiento. Se leen las rutinas recompiladas originales y se añaden sondas a una copia de M2Board en build/state-timing/. No se edita código generado de la ROM. Se repite la carrera de laboratorio con dos motores reales: 150 ms RTT base sin jitter y otra con ±25 ms por trayecto, sin pérdida añadida. Normal/Easy/Beginner, CPU activadas, controles ordinarios y piloto lector de carretera. La pasada fija produce dos cambios de puesto; la variable produce uno. No son replays físicos idénticos ni pruebas de meta.
+
+### Qué se midió
+
+Las sondas registran la escritura física de X del coche propio, la generación de progreso (PC 0x14360), la copia XYZ/progreso al bloque de comunicaciones (0x1a8e0), el contador del encabezado (0x1a878), la aplicación del progreso remoto (0x1ab74), lecturas del ordenador original (0x127c8 / 0x127d4), asignación de puesto humano (0x12860) y publicación/aplicación de tabla (0x1b04c / 0x1b0a8). Se registra frame de placa, orden de instrucciones, contador de juego, progreso, sector, vuelta, puesto y XYZ. Las sondas no escriben en los datos del juego; el búfer no se desborda. Se obtienen ~26.600 eventos en host y ~22.500–22.700 en invitado por pasada. El LS count se usa para ordenar instrucciones, nunca como conversión directa a milisegundos.
+
+M2Board incrementa frame_ al terminar vblank_end. Por ello, un evento con frame de placa N pertenece al paso JS completado N+1. Se comprobó esta frontera antes de interpretar tiempos. Una diferencia bruta de dos contadores entre copia y emisión equivale aquí a un paso completado de retención, no a dos pasos de retraso real. En la segunda pasada se mide además el inicio y final reales de cada llamada nativa; el evento queda dentro de ese intervalo. Se conservan cotas de edad, no una precisión temporal inventada dentro del WASM.
+
+### Hallazgos confirmados
+
+1. **Origen coherente.** En más de 2.000 copias por cabina y pasada, los X/Z publicados coinciden exactamente con el coche propio y el progreso copiado coincide con el progreso original. La última actualización física y de progreso ocurre en el mismo frame de placa que la copia. El contador bajo del encabezado coincide con el contador original de ese estado. Todos los paquetes salvo el primero sin historial registrado se vinculan exactamente por contador, XYZ y progreso con una publicación observada; no se encuentra corrupción ni mezcla de procedencias en ese tramo.
+
+2. **La marca de envío JS no es la generación del estado.** Los paquetes observados llegan a room.write un paso completado después de la copia original. web/multiplayer.js asigna publishedAt=performance.now() en ese momento y trata la muestra local del host como ageMs=0. El contador original sigue siendo correcto; lo incompleto es la edad física estimada al usar como nacimiento el momento del envío. No debe corregirse cambiando arbitrariamente los contadores originales.
+
+3. **Otra espera local al recibir.** La metadata de edad se fija en onBytes/nativeTimedState y se introduce en la cola nativa. Al consumirla en central_read_fg/CentralTrack.accept, esa espera previa no se añade. En las primeras ingestiones emparejadas, la diferencia entre edad aplicada y edad de la metadata es aproximadamente cero; el tiempo entre llegada JS y ejecución sí es positivo. El tiempo posterior que avanza CentralTrack por ticks no recupera esa espera inicial omitida.
+
+| Cabina, pasada con jitter | Edad del origen al enviar: medianas de cotas inferior / superior (ms) | Espera receptora omitida: medianas de cotas inferior / superior (ms) |
+|---|---:|---:|
+| 1 | 13.5 / 16.1 | 10.8 / 13.3 |
+| 2 | 13.5 / 16.1 | 9.6 / 12.2 |
+
+Son edades de dos etapas diferentes; no se suman percentiles o medianas marginales para afirmar una latencia total exacta. Las cotas incluyen la duración del paso nativo y no miden scanout. Hay 2.045 primeras ingestiones emparejadas del host y 817 del invitado variable; la coalescencia y repetición de relojes explican denominadores distintos. No se reutilizan posteriores poses del mismo paquete como si fueran recepciones nuevas.
+
+4. **El ordenador original mezcla edades distintas.** El progreso es int16 en car+0x60: la rutina 0x14348–0x14364 combina vuelta de carretera y tramo. El ordenador 0x12798 compara esos enteros; si son iguales, no intercambia ambos elementos y conserva su orden anterior. La coordinadora original, identificada por 0x540028 frente a 0x540002, escribe +0x6d y publica la tabla. No es necesariamente el host de la sala cuando éste queda fuera de carrera. En estas dos pruebas ambos participan y el host es la coordinadora.
+
+La ruta de recepción copia el progreso del último bloque auténtico en 0x1ab74; central_pose compensa XYZ/velocidad/ángulos y conserva ese progreso recibido. Se reescribe cada frame aunque no exista una muestra más reciente: edad cero desde la última escritura de RAM no significa edad cero desde su origen. El ordenador compara progreso propio recién actualizado con progreso remoto antiguo. En la pasada variable se documenta una comparación propia=118, rival recibido=117, mientras el propietario del rival ya tiene 119 en el mismo instante calibrado; el coordinador se asigna primero. Las XYZ usadas localmente también sitúan al rival por delante en ese ejemplo. Se reproduce así un caso similar al síntoma comunicado sin suponer fallo exclusivo del overlay. La comparación entre propietarios tiene resolución de paso y tolerancia de 25 ms; no se presenta como una prueba exacta de meta.
+
+5. **La tabla también tiene su propia fase.** En los cambios observados, la decisión se copia al encabezado en el siguiente frame original y sale por JS un paso más tarde: dos pasos completados desde la decisión hasta la emisión, antes del tránsito de red. El ordinal de otra cabina puede cambiar posteriormente. La lista y POSITION pueden coincidir entre sí y discrepar de los coches representados. En la pasada fija, los puestos cambian dos veces en ambas cabinas; las diferencias entre decisiones y recepciones se registran en timing.json. Los empates de tramo añaden otra conservación legítima del orden anterior, incluso con una red ideal.
+
+### Qué procede y qué no se da por resuelto
+
+La siguiente corrección debe contabilizar la edad del estado desde el paso original que lo genera hasta su consumo nativo, con reloj de origen y cota de incertidumbre. Conservar el contador original y fechar el estado correctamente es preferible a restar RTT/2, añadir un número fijo de ticks o modificar el orden de nombres. También hay que conservar/sumar la espera de recepción, especialmente con callbacks y jitter variables. Las pausas y recuperación de simulación requieren distinguir tiempo de ejecución de pasos lógicos; una constante de ~17 ms no sustituye esa medición.
+
+Ese ajuste por sí solo no hace justa la clasificación: anticipar mejor XYZ mientras +0x60 continúa antiguo puede aumentar su separación temporal. El segundo componente es comparar progresos auténticos sobre una referencia común, incluido el del coordinador, respetando vueltas, checkpoints, coches doblados y resolución por tramos. Si se añade precisión dentro de un tramo debe validarse sobre la carretera original, con reglas explícitas de empate e incertidumbre. La llegada debe comprobarse con eventos originales válidos y no decidirse por el orden de recepción ni por una pose predicha. No se propone sobrescribir vueltas/checkpoints para hacer coincidir una imagen.
+
+No se publica aún una corrección, no se completó una meta ajustada y no se certifican contactos idénticos. La cadencia permanece 57–58 Hz en ambas pasadas, por lo que no se explica este caso de laboratorio por una caída general de simulación. Sólo se modifican scripts/tests y fuentes generadas del laboratorio en build/. native/, web/, dist/ y ZIP 46.1 conservan hashes; motor 6b7451e0cf461960eaf79a6342d090786acfe531d8a4e585067b4a4d9a54023f, ZIP 3d2b539f4c4d0ff9ab47f970f4cdad3505e553d10b4ed6586bed3ba10774ef03.
+
+Reproducibilidad: scripts/build-state-timing.py y tests/position-consistency-browser.cjs con POSITION_DRIVER=1, POSITION_GENERATION=1, POSITION_RTTS=150 y POSITION_JITTER=0/25. El export adicional sólo observa. scripts/analyze-state-timing.cjs genera build/state-timing/timing.json y timing-jitter25.json, con conteos, edades, secuencias y ejemplos; las trazas originales permanecen en build/position-consistency/trace-150-pilot[-jitter25]-generation.json y sus manifiestos browser*.json incluyen hash del motor instrumentado y de la traza. Los summary/comparison asociados comparan posiciones y cadencia. scripts/record-state-timing.py valida esta evidencia antes de añadirla al único archivo de investigación. Un intento inicial de la segunda ejecución falló al instalar demasiado pronto el wrapper de tiempos, antes de cargar WASM; se corrigió para instalarlo al habilitar la captura y se repitió sin errores. Ese intento no produjo datos de carrera usados en las conclusiones.
+
+
+<!-- RACE TIME CANDIDATE 47 -->
+## 2026-10-19 — Candidata 47: generación, entrega y clasificación común
+
+Se crea otra versión en `multiplayer-race-consistency`; 46.1 y su ZIP permanecen con SHA256 verificado. No se cambia el algoritmo de vueltas, checkpoints, sentido de marcha o meta. `reverse_expert.h` y `cpu_cars.h` son idénticos a 46.1. No se cambia la política de pérdida de foco, desconexión o tiempos de conexión.
+
+### Temporización
+
+`SourceTimeline` conserva 128 intervalos de ejecución asociados al contador original 0x5010b0. El paquete lleva el instante medio del intervalo que produjo su contenido y la semiduración como incertidumbre adicional; no el instante posterior de envío. La instrumentación previa comprobó que el contador de ese paso coincide con el de la copia original del cuerpo. Se normaliza el retorno i32 de WASM a uint32 antes de indexar el historial. El tiempo real de ejecución permite contemplar una cabina lenta o pasos de recuperación sin sumar un tick fijo inventado.
+
+El host suma tránsito calibrado y retención por origen. Se mantiene la incertidumbre del reloj por conexión y la incertidumbre de generación. Un dato sin fecha/calibración válida sigue siendo desconocido. `NativeStateInbox` conserva sólo el último estado completo pendiente y suma la espera hasta el siguiente paso. La comboard suma además el tiempo entre ese comienzo y su consumo real, leyendo el reloj una vez por snapshot. El cuerpo original de 448 bytes, su contador y los campos de control siguen viajando íntegros. El límite de predicción de movimiento no se amplía.
+
+### Clasificación
+
+`CommonRaceOrder` conserva hasta 128 muestras por coche nativo, incluidas CPU. Compara todos los coches en el último instante que se puede interpolar para todos; también retrasa la referencia del coche local. Una muestra de movimiento predicha no concede progreso, checkpoints ni vueltas. La fracción de sector se obtiene de la posición auténtica y la línea ROM adyacente; no de distancia recta entre vehículos. Cerca de la unión de vuelta y fuera del margen local se conserva el entero original. Los empates exactos conservan el orden previo.
+
+Sólo se sustituye la clave consumida por el sorter original en 0x127c8/0x127d4. El propio arcade sigue publicando su tabla y eligiendo al coordinador de carrera. No se sustituye al coordinador por el dueño de la sala. HUD y lista de nombres conservan la tabla original compartida. Los puntos de control, contadores de vueltas y eventos de meta no se escriben desde este mecanismo.
+
+Los historiales y búsquedas están acotados. No se interpola a través de un salto grande/reubicación, un hueco de más de 250 ms o un instante común atrasado más de 500 ms; si faltan datos se usa la clasificación nativa original. Es una recuperación conservadora de clasificación, no un motivo de desconexión. El reloj de cuatro marcas conserva incertidumbre de asimetría: no se demuestra un retardo exacto de ida por Internet.
+
+### Evidencia y límites
+
+181 pruebas JavaScript pasan. El test C++/WASM comprueba comparación temporal con ventaja remota real pese a su estado viejo, fracciones, sentido inverso, 2–8 IDs con ritmos y edades distintos, huecos, wrap y memoria acotada. Los ensayos de red utilizan dos motores originales, controles ordinarios, PeerJS/DTLS/SCTP y un relay UDP local con perfiles 150 ms estables y ±25 ms de jitter por trayecto. Se evita serializar trazas grandes mientras se atienden los temporizadores del relay. La calibración temporal compara posiciones propietarias y remotas en el mismo tiempo local; las unidades espaciales son internas del juego.
+
+Resultados comparativos de retraso visual mediano por observador, en ms (46.1 → 47):
+
+- RTT 150, jitter ±0: [68.47216796875, 53.227783203125] → [36.714599609375, 26.685546875]. Cadencia nativa [57.534292563625876, 57.51989713866375].
+
+- RTT 150, jitter ±25: [81.97509765625, 66.425048828125] → [53.238525390625, 40.361328125]. Cadencia nativa [57.52995323795686, 57.5362344083944].
+
+Las trayectorias reales difieren entre recorridos: estas cifras no son un replay idéntico, una garantía para toda conexión ni una prueba de ganadores. Hay discrepancias breves entre imagen y tabla durante adelantamientos; no se elimina la latencia de propagación de la tabla. La clasificación común busca eliminar el sesgo persistente de comparar el presente local con el pasado remoto. No se afirma que todos los máximos de discrepancia mejoren en cada recorrido.
+
+Cuatro motores con reloj virtual determinista: tres invitados completan dos vueltas de Beginner/Normal/CPU mientras el host permanece en attract. La clasificación común se ejecuta en más del 99% de los pasos de los corredores y no usa al espectador como coordinador. Dos motores completan una vuelta nativa de Advanced inverso/CPU en Grand Prix, con 150 ms y jitter, sin perder una unión de vuelta. El modo Grand Prix sólo se usa en ese ensayo para dar tiempo al piloto; el valor por defecto del producto no cambia.
+
+Los intentos de llegada automática en Normal no alcanzaron meta antes de agotarse el tiempo. Los informes fallidos se conservan en build/race-time; no se cuentan como validación positiva de una llegada. También se conservan los intentos descartados por la espera/elección del selector del fixture. No se certifica aún una foto finish ni la clasificación final de una carrera completada. La validación positiva del artefacto de distribución comprueba dos motores sin exports privados, fechas de origen, clasificación activa y limpieza de historiales/buzón al volver a la sala.
+
+Se entrega ZIP estático sin ROM, trazas ni funciones privadas de inspección. Versión visible `v47 test · 19.10.26`, compatibilidad de sala independiente de 46.1. Datos reproducibles: scripts/build-race-time.py, build-position-consistency.py, tests/position-consistency-browser.cjs, tests/race-time-native.cjs, tests/race-time-production.cjs y build/race-time/validation.json. Es candidata para prueba manual, no una afirmación de estabilidad final ni de ocho dispositivos físicos.
+
+
+<!-- ADAPTIVE MOTION 48 -->
+## 2026-10-19 — Candidata 48: compensación gradual a RTT alto
+
+Se conserva la 47 publicada. El A/B real de referencia, con ±25 ms por trayecto, confirmó que a 300 ms su confianza nativa alternaba entre conocida y desconocida (aproximadamente 54%/76% de muestras conocidas según observador). A 400 ms, ninguna muestra de la captura tuvo temporización aceptada para movimiento. Las dos simulaciones sostuvieron ~57,5 Hz. Esto aisló el corte de incertidumbre de 150 ms y el horizonte adicional fijo de 6 ticks; no se atribuye el desfase a una caída de FPS ni a un nuevo problema del juego original.
+
+El único archivo nativo modificado es central_motion.h. Se acepta metadata temporal válida hasta el límite existente de 500 ms de incertidumbre; la confianza permanece completa hasta 200 ms y decae con smoothstep hasta 500 ms. No se confunde ese parámetro con RTT ni se inventan fechas para paquetes sin metadata válida. La contribución de edad de transporte converge a la medida con límite de cambio por paso; la espera local sigue sumándose. La invalidación de una calibración, incluso en un snapshot repetido, deja de conservarla como conocida indefinidamente.
+
+El horizonte adicional pasa gradualmente de 6 a un máximo de 16 ticks de origen (~278 ms). Cambios auténticos de velocidad y rumbo estiman el riesgo de continuar en línea recta; el margen vuelve hacia el horizonte corto cuando ese riesgo o el jitter aumenta. No se predice aceleración futura ni se alteran entradas. Los dos pasos originales del TGP se descuentan del objetivo. La continuación se detiene en un extremo acotado si faltan paquetes y la corrección conserva su offset de continuidad. Los campos de control, progresos, vueltas, ranks, flags y datos CPU siguen auténticos. No se modifica clasificación, autoridad de resultados ni desconexiones.
+
+Las pruebas deterministas A/B usan la misma trayectoria fuente y entregas para ambas versiones: velocidad constante, curva, frenada completa, parada, arranque, giro cerrado, 3% de pérdidas aisladas y corte de ~1,7 s. Verifican error medio/máximo sin degradación material frente a la 47 en esas trayectorias. Las unitarias incluyen 149/150/151 ms de incertidumbre, recuperación de calibración, fuentes lentas, wrap y preservación byte por byte de campos ajenos a movimiento. No son una réplica exhaustiva de todas las físicas del arcade.
+
+Comparación de medianas de retraso visual estimado por observador (ms), con motores reales, UTC local calibrado y controles ordinarios:
+
+- RTT 300 ms, jitter ±25 ms: 47 [223.791259765625, 160.108642578125] → 48 [40.73779296875, 31.162109375].
+
+- RTT 400 ms, jitter ±25 ms: 47 [292.947021484375, 279.85302734375] → 48 [69.83349609375, 53.16650390625].
+
+Resultados completos de la candidata:
+
+- RTT 150 ms, jitter ±25 ms, pérdida 0%: Hz [57.53591089016831, 57.528982431604305], mediana visual [40.091796875, 53.308349609375], p95 [68.291748046875, 80.00830078125], error mediano en unidades del juego [2.7849163925111946, 3.1661965417564892].
+
+- RTT 300 ms, jitter ±25 ms, pérdida 0%: Hz [57.51407648912852, 57.514237927679574], mediana visual [40.73779296875, 31.162109375], p95 [93.73779296875, 79.962158203125], error mediano en unidades del juego [3.0674412651454466, 2.1777251893798755].
+
+- RTT 400 ms, jitter ±25 ms, pérdida 0%: Hz [57.52003491055337, 57.520519881850575], mediana visual [69.83349609375, 53.16650390625], p95 [123.03369140625, 173.266357421875], error mediano en unidades del juego [4.603808312406625, 3.7471865649386653].
+
+- RTT 300 ms, jitter ±25 ms, pérdida 3%: Hz [57.52914442794482, 57.528658836767704], mediana visual [173.080078125, 133.6201171875], p95 [491.380126953125, 426.820068359375], error mediano en unidades del juego [9.516828518587138, 8.05917812197594].
+
+Los recorridos reales son independientes: no se comparan como replays idénticos. La captura usa TURN UDP local autenticado, DTLS/SCTP real y dos navegadores visibles; no representa ocho dispositivos ni Internet real. El muestreo se alinea por tiempo local, no por contadores nativos iguales. La serialización se realiza al parar la captura para no introducir bloqueos en el relay. Hay frenadas alternadas y cambios de rumbo en Beginner/Normal/CPU; no se modifica el modo por defecto del producto. La prueba del artefacto final usa WASM sin exports de inspección y comprueba arranque de dos cabinas, fechas y limpieza al volver a la sala.
+
+Quedan límites físicos: ningún predictor conoce una frenada no recibida; más horizonte puede generar una corrección cuando el movimiento cambia. La posición reconstruida también alimenta contactos nativos. No se presenta como colisiones globalmente autoritativas, foto finish resuelta ni ausencia de discrepancias. Los límites de confianza, edad y horizonte siguen acotados. Reproducir con scripts/build-race-time.py, scripts/build-position-consistency.py, tests/temporal-motion.cpp, tests/adaptive-motion-ab.cpp, tests/position-consistency-browser.cjs y scripts/package-adaptive-motion.py. Informes y trazas privados permanecen en build/, fuera del ZIP.

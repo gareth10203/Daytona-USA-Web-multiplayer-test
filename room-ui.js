@@ -1,13 +1,19 @@
-import {carColor} from './car-colors.js?v=46-race-names';
-import {parseInvitation,invitation} from './room-settings.js?v=46-race-names';
-import {createLobbyNotifications} from './lobby-notifications.js?v=46-race-names';
+import {PublicRoomDirectory} from './public-rooms.js?v=50.1-public-security';
+import {createFirebaseDirectoryBackend} from './firebase-client.js?v=50.1-public-security';
+import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=50.1-public-security';
+import {carColor} from './car-colors.js?v=50.1-public-security';
+import {parseInvitation,invitation} from './room-settings.js?v=50.1-public-security';
+import {createLobbyNotifications} from './lobby-notifications.js?v=50.1-public-security';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
 export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry'),singlePanel=$('singlePlayerPanel');
+ const directory=new PublicRoomDirectory({backend:createFirebaseDirectoryBackend});
  let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='';
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
  const notifications=createLobbyNotifications({notifyChat,notifyReady,notifyConfirmed});
+ let entryBusy=false;
+ function entryAction(fn){return action(async()=>{if(entryBusy)return;entryBusy=true;$('createRoom').disabled=$('joinRoom').disabled=true;try{await fn();}finally{entryBusy=false;$('createRoom').disabled=$('joinRoom').disabled=false;}});}
  const utilities=document.querySelector('.menu-quick-controls'),utilitiesHome=utilities.parentElement;
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
  function layout(active,showGuide=false){$('menuDialog').classList.remove('single-view');singlePanel.hidden=true;$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
@@ -29,8 +35,8 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
   if(changed&&valid&&room.occupied&&!room.active&&room.phase!=='preparing'&&room.snapshot().code!==code)room.leave();
   if(['idle','error'].includes(room.phase))showEntry(false);
  }
- function showEntry(sync=true){if(sync)syncInvitation();layout(true,true);navigation('entry');entry.hidden=false;panel.hidden=true;$('entryStatus').textContent='';$('message').textContent='Create a private room or join your friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
- function showModes(){layout(false);entry.hidden=true;panel.hidden=true;navigation('modes');$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
+ function showEntry(sync=true){directory.setBrowsing(true);if(sync)syncInvitation();layout(true,true);navigation('entry');entry.hidden=false;panel.hidden=true;$('entryStatus').textContent='';$('message').textContent='Find a public room, or race privately with friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
+ function showModes(){directory.setBrowsing(false);layout(false);entry.hidden=true;panel.hidden=true;navigation('modes');$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
  function action(fn){return async()=>{try{$('entryStatus').textContent='';await fn();}catch(e){$('entryStatus').textContent=e.message;$('roomMessage').textContent=e.message;$('message').textContent=e.message;}};}
  function rememberName(){try{localStorage.setItem('daytona-driver-name-v1',$('driverName').value.trim().slice(0,24));}catch{}}
  $('driverName').addEventListener('input',rememberName);
@@ -43,8 +49,9 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
  $('singlePlayer').onclick=action(async()=>{setURL('');room.leave();showModes();await single();});
  $('multiplayerPlayer').onclick=()=>showEntry();
  $('modeBack').onclick=()=>{setURL('');showModes();};
- $('createRoom').onclick=action(async()=>{void unlockAudio();rememberName();setURL('');panel.hidden=false;entry.hidden=true;await room.create($('driverName').value);if(room.phase==='lobby')setURL(room.snapshot().code);});
- $('joinRoom').onclick=action(async()=>{void unlockAudio();const parsed=parseInvitation($('joinCode').value);rememberName();setURL(invitation(parsed.host,parsed.token));panel.hidden=false;entry.hidden=true;await room.join($('joinCode').value,$('driverName').value);});
+ $('createRoom').onclick=entryAction(async()=>{void unlockAudio();rememberName();const visibility=document.querySelector('input[name="roomVisibility"]:checked').value;if(visibility==='public'){await directory.prepare();if(view!=='entry'||entry.hidden)return;}setURL('');directory.setBrowsing(false);panel.hidden=false;entry.hidden=true;await room.create($('driverName').value,{visibility,roomName:$('publicRoomName').value});if(room.phase==='lobby')setURL(room.snapshot().code);});
+ $('joinRoom').onclick=entryAction(async()=>{directory.setBrowsing(false);void unlockAudio();const parsed=parseInvitation($('joinCode').value);rememberName();setURL(invitation(parsed.host,parsed.token));panel.hidden=false;entry.hidden=true;await room.join($('joinCode').value,$('driverName').value);});
+ mountPublicRoomBrowser(directory,{join:async listed=>{try{void unlockAudio();rememberName();directory.setBrowsing(false);setURL(listed.invite);panel.hidden=false;entry.hidden=true;await room.join(listed.invite,$('driverName').value,{publicRoom:true});}catch(e){$('entryStatus').textContent=e.message;showEntry(false);}}});
  $('leaveRoom').onclick=()=>{room.leave();showEntry();};
  $('seatSwapAccept').onclick=()=>{const o=room.swapFor(room.id);if(o)room.answerSwap(o.id,true);};
  $('seatSwapDecline').onclick=()=>{const o=room.swapFor(room.id);if(o)room.answerSwap(o.id,false);};
@@ -125,14 +132,14 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
  }
 
  return {
-  single(){layout(true,true);navigation('single');$('menuDialog').classList.add('single-view');singlePanel.hidden=false;entry.hidden=true;panel.hidden=true;$('menuDialog').setAttribute('aria-labelledby','singleTitle');},
+  single(){directory.setBrowsing(false);layout(true,true);navigation('single');$('menuDialog').classList.add('single-view');singlePanel.hidden=false;entry.hidden=true;panel.hidden=true;$('menuDialog').setAttribute('aria-labelledby','singleTitle');},
   modes(){showModes();$('singlePlayer').focus();},
   opened(){navigation();},
   backLabel(){const o=room.swapFor(room.id);return o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)?o.to===room.id?'Decline swap':'Cancel request':null;},
   escape(){const o=room.swapFor(room.id);if(o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)){o.to===room.id?room.answerSwap(o.id,false):room.cancelSwap(o.id);return true;}if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
   verified(){verified=true;$('startBtn').hidden=true;$('dropzone').hidden=true;syncInvitation();if(invitationFromURL(location.href))showEntry(false);else{showModes();$('singlePlayer').focus();}},
-  loading(){layout(false);verified=false;navigation('loading');entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;},
-  running(){if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
+  loading(){directory.setBrowsing(false);layout(false);verified=false;navigation('loading');entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;},
+  running(){directory.setBrowsing(false);if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
   link(state,_id,count){
    // Discovery numbers the guests backwards. The lobby seat is the driver's
    // public cabinet/car number; the native link ID is transport identity only.
@@ -141,6 +148,7 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
    for(const name of ['networkStatus','arcadeLinkStatus'])if($(name).textContent!==text)$(name).textContent=text;
   },
   render(state){
+   directory.updateHost(state);if(state.phase!=='idle')directory.setBrowsing(false);
    notifications.update(state);
    $('networkStatus').hidden=state.phase!=='playing';$('arcadeLinkStatus').hidden=state.phase!=='playing';
    const key=state.host||state.id||'idle';if(key!==roomKey){roomKey=key;pendingIDs=new Set();pendingStamp='';lastChatSeq=0;lastAckCommand=0;lastSeatAck=0;previousSeat=null;focusSeatReady=false;swapStamp='';$('seatStatus').textContent='';messages.clear();$('chatLog').replaceChildren();cards.clear();emptySeats.clear();$('playersList').replaceChildren();$('chatInput').value='';$('chatLength').textContent='0/240';markRead();mobileTab('grid');}
@@ -148,7 +156,8 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
    layout(true);panel.classList.toggle('guest-room',!state.isHost);panel.classList.toggle('has-requests',state.isHost&&state.pending.length>0);panel.dataset.phase=state.phase;
    if($('settingsModal').hidden&&$('hostConsole')?.hidden!==false)$('menuDialog').setAttribute('aria-labelledby','roomTitle');
    $('startBtn').disabled=state.phase!=='playing';navigation('room');panel.hidden=false;entry.hidden=true;
-   $('roomTitle').textContent=state.phase==='pending'?'Request sent':state.phase==='error'?'Room unavailable':state.isHost?'Your starting grid':'Your race room';
+   $('roomVisibilityLabel').textContent=state.visibility==='public'?'PUBLIC MULTIPLAYER':'PRIVATE MULTIPLAYER';
+   $('roomTitle').textContent=state.phase==='pending'?'Request sent':state.phase==='error'?'Room unavailable':state.roomName|| (state.isHost?'Your starting grid':'Your race room');
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length} / 8 drivers`;
    const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';$('inviteBlock').hidden=!state.isHost||!state.code;
@@ -163,8 +172,8 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
    if(focusSeatReady&&!$('readyRoom').disabled){focusSeatReady=false;if(state.phase==='lobby'&&!$('overlay').hidden&&$('settingsModal').hidden&&$('hostConsole')?.hidden!==false){$('readyRoom').focus({preventScroll:true});if(document.documentElement.classList.contains('gamepad-navigation'))$('readyRoom').scrollIntoView({block:'nearest'});}}
    $('startRoom').hidden=!state.isHost||state.phase!=='lobby';$('startRoom').disabled=state.members.length<2||state.pending.length>0||(state.swaps||[]).length>0||state.members.some(x=>!x.ready||x.connection==='reconnecting');$('stopRoom').hidden=!state.isHost||state.phase!=='playing';
    $('leaveRoom').textContent=state.phase==='playing'?'Leave game':state.phase==='error'?'← Back to rooms':'← Leave room';
-   const waiting=state.members.filter(x=>!x.ready).length,lobby=(state.swaps||[]).length?'A seat swap is awaiting a reply.':state.pending.length?'Review the requests to complete your grid.':state.members.length<2?'Copy your invitation and bring a friend.':waiting?`${waiting} ${waiting===1?'driver is':'drivers are'} not ready yet.`:state.isHost?'Your grid is ready. Start when you are.':'Your grid is ready. Waiting for the host.';
-   const labels={connecting:'Connecting to the room…',pending:'Your host will admit you shortly.',lobby,preparing:'Setting up every cabinet. Please wait…',playing:'The race keeps running while this menu is open.',error:'Try another invitation.'};
+   const waiting=state.members.filter(x=>!x.ready).length,lobby=(state.swaps||[]).length?'A seat swap is awaiting a reply.':state.pending.length?'Review the requests to complete your grid.':state.members.length<2?(state.visibility==='public'?'Your public room is open. Waiting for another driver.':'Copy your invitation and bring a friend.'):waiting?`${waiting} ${waiting===1?'driver is':'drivers are'} not ready yet.`:state.isHost?'Your grid is ready. Start when you are.':'Your grid is ready. Waiting for the host.';
+   const labels={connecting:'Connecting to the room…',pending:state.visibility==='public'?'Confirming your seat with the host…':'Your host will admit you shortly.',lobby,preparing:'Setting up every cabinet. Please wait…',playing:'The race keeps running while this menu is open.',error:'Try another invitation.'};
    $('roomMessage').textContent=(state.error||labels[state.phase]||'')+(state.awaitingStop?' Waiting for the host to return to the room.':'');$('roomConnection').textContent=state.phase==='connecting'?'Connecting…':state.phase==='reconnecting'?'Reconnecting automatically · seat reserved':state.phase==='error'?'Disconnected':state.signaling?'● Room connected':'Room connected · invitation service reconnecting';$('roomConnection').dataset.state=state.phase==='error'?'offline':state.phase==='reconnecting'||!state.signaling?'recovering':'connected';
    $('returnRoomGame').hidden=state.phase!=='playing';$('startBtn').hidden=true;
    if(state.phase!==lastPhase&&!$('overlay').hidden){lastPhase=state.phase;if($('hostConsole')?.hidden!==false){if(state.phase==='lobby'&&me)$('readyRoom').focus();else if(state.phase==='error')$('leaveRoom').focus();}}

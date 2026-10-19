@@ -1,28 +1,30 @@
-import {mountRaceStandings} from './race-standings.js?v=46.1-race-names';
-import {createGamepadHome} from './gamepad-home.js?v=46-race-names';
-import {protectTouchSurface} from './touch-guard.js?v=46-race-names';
-import {createKeyboardControls} from './keyboard-controls.js?v=46-race-names';
-import {SimulationClock} from './simulation-clock.js?v=46-race-names';
-import {nativeTimedState} from './link-timing.js?v=46-race-names';
-import {linkIdForSeat} from './central-link.js?v=46-race-names';
-import {createLobbySound} from './lobby-sound.js?v=46-race-names';
-import { mountDiagnostics } from './diagnostics.js?v=46-race-names';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=46-race-names';
-import {createControllerControls} from './controller-controls.js?v=46-race-names';
-import { createRenderer } from './renderer.js?v=46-race-names';
-import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=46-race-names';
-import {mountMenuGamepad} from './menu-gamepad.js?v=46-race-names';
-import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=46-race-names';
-import { createTouchControls } from './touch.js?v=46-race-names';
-import { createGamepadRumble } from './haptics.js?v=46-race-names';
-import { loadSettings, saveSettings } from './preferences.js?v=46-race-names';
-import { createWheelControls } from './wheel-controls.js?v=46-race-names';
-import { Multiplayer } from './multiplayer.js?v=46-race-names';
-import { createRoomUI } from './room-ui.js?v=46-race-names';
-import { mountHostConsole } from './host-console.js?v=46-race-names';
-import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=46-race-names';
-import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=46-race-names';
-import {createSinglePlayerUI} from './single-player-ui.js?v=46-race-names';
+import {startAnalytics} from './firebase-client.js?v=50.1-public-security';
+import {LocalRaceReporter,applyNativeOrder} from './race-authority.js?v=50.1-public-security';
+import {mountRaceStandings} from './race-standings.js?v=50.1-public-security';
+import {createGamepadHome} from './gamepad-home.js?v=50.1-public-security';
+import {protectTouchSurface} from './touch-guard.js?v=50.1-public-security';
+import {createKeyboardControls} from './keyboard-controls.js?v=50.1-public-security';
+import {SimulationClock} from './simulation-clock.js?v=50.1-public-security';
+import {SourceTimeline,NativeStateInbox} from './link-timing.js?v=50.1-public-security';
+import {linkIdForSeat} from './central-link.js?v=50.1-public-security';
+import {createLobbySound} from './lobby-sound.js?v=50.1-public-security';
+import { mountDiagnostics } from './diagnostics.js?v=50.1-public-security';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=50.1-public-security';
+import {createControllerControls} from './controller-controls.js?v=50.1-public-security';
+import { createRenderer } from './renderer.js?v=50.1-public-security';
+import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=50.1-public-security';
+import {mountMenuGamepad} from './menu-gamepad.js?v=50.1-public-security';
+import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=50.1-public-security';
+import { createTouchControls } from './touch.js?v=50.1-public-security';
+import { createGamepadRumble } from './haptics.js?v=50.1-public-security';
+import { loadSettings, saveSettings } from './preferences.js?v=50.1-public-security';
+import { createWheelControls } from './wheel-controls.js?v=50.1-public-security';
+import { Multiplayer } from './multiplayer.js?v=50.1-public-security';
+import { createRoomUI } from './room-ui.js?v=50.1-public-security';
+import { mountHostConsole } from './host-console.js?v=50.1-public-security';
+import { prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=50.1-public-security';
+import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=50.1-public-security';
+import {createSinglePlayerUI} from './single-player-ui.js?v=50.1-public-security';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -53,12 +55,20 @@ let settingsOpen=false;
 let multiplayerProfile=false,linkStartedAt=0;
 let roomUI,hostConsole,diagnostics,roomDiagnostics,singleUI,graphicsAPISettings,menuControls,raceStandings;
 let singleApplied=null,preparingSingle=false;
+const sourceTimeline=new SourceTimeline(),nativeInbox=new NativeStateInbox(),raceReporter=new LocalRaceReporter();
+function syncAuthoritativeOrder(sample){
+ if(!room.active||!sample)return;
+ if(sample[17]>0&&sample[18]===sample[1])raceStandings?.pendingFinish();
+ if(sample[5]!==1)return;
+ const order=room.raceOrderFor(room.id,sample[1]);if(order){applyNativeOrder(wasm,sample,order);raceStandings?.authority(order);}
+}
 const room=new Multiplayer({
  isVisible:()=>!document.hidden,
  readHealth:()=>({receiveBytes:wasm?._daytona_link_pending_bytes()||0,backlogMs:Math.max(0,lagMs)}),
  readPerformance:(epoch,after)=>diagnostics?.share(epoch,after),
  onChange:state=>{diagnostics?.setAutomatic(state.phase==='playing');roomDiagnostics?.sync();roomUI?.render(state);hostConsole?.sync();graphicsAPISettings?.sync();raceStandings?.sync(room);},
  onPrepare:async(config,cancelled)=>{
+  sourceTimeline.reset();nativeInbox.clear();raceReporter.reset();
   saveNVRAM();singleApplied=null;
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();rumble.stop();multiplayerProfile=true;
   ui.start.disabled=true;ui.close.hidden=true;
@@ -71,16 +81,16 @@ const room=new Multiplayer({
  },
  onStart:()=>{wasm._daytona_delivery_mode(1);ui.start.disabled=false;linkStartedAt=performance.now();roomUI.running();void resumeGame();},
  onStop:reason=>{
+  sourceTimeline.reset();nativeInbox.clear();raceReporter.reset();
   wasm?._daytona_delivery_mode(0);wasm?._daytona_central_config(0,0);
   for(const source of audioSources){try{source.stop();}catch{}}audioSources.clear();audioNext=0;
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();rumble.stop();wasm?._daytona_link_enable(0);
   ui.start.disabled=true;ui.start.hidden=true;openMenu();setStatus('Room ready',true);ui.message.textContent=reason;
  },
+ onRaceOrder:order=>{raceReporter.acknowledge(order,room.id);if(wasm)syncAuthoritativeOrder(new Float64Array(wasm.HEAPU8.buffer,wasm._daytona_race_sample_ptr(),48));},
  onBytes:(bytes,timing)=>{
   raceStandings?.receive(bytes);
-  bytes=nativeTimedState(bytes,timing);
-  wasm.HEAPU8.set(bytes,wasm._daytona_link_receive_ptr());
-  if(!wasm._daytona_link_receive(bytes.length))throw Error('The arcade receive queue overflowed.');
+  nativeInbox.receive(bytes,timing,performance.now());
  }
 });
 raceStandings=mountRaceStandings($('raceStandings'));
@@ -338,17 +348,23 @@ function simulateStep(now){
   renderer.prepare(wasm);
   const i=inputs();
   if(diagnostics.collecting)wasm._daytona_probe_reset();
-  const stepBegin=diagnostics.collecting?performance.now():0;
+  const stepBegin=performance.now();
+  if(room.active){
+    const bytes=nativeInbox.take(stepBegin);
+    if(bytes){wasm.HEAPU8.set(bytes,wasm._daytona_link_receive_ptr());if(!wasm._daytona_link_receive(bytes.length))throw Error('The arcade receive queue overflowed.');}
+    wasm._daytona_link_step_time(stepBegin);
+  }
   if(!wasm._daytona_step(i.steer,i.accel,i.brake,i.gear,i.buttons)) {
     failure(cString(wasm._daytona_error()));return false;
   }
+  if(room.active){const end=performance.now();sourceTimeline.record(wasm._daytona_source_clock()>>>0,stepBegin,end);wasm._daytona_link_record_step((stepBegin+end)/2);const raceSample=new Float64Array(wasm.HEAPU8.buffer,wasm._daytona_race_sample_ptr(),48);room.reportRace(raceReporter.observe(raceSample,(stepBegin+end)/2,(end-stepBegin)/2));syncAuthoritativeOrder(raceSample);}
   room.advance();
   simulated++;
   if(diagnostics.collecting)diagnostics.step(performance.now()-stepBegin,new Float64Array(wasm.HEAPU8.buffer,wasm._daytona_probe_ptr(),24));
   if(room.active){
     for(let packet=0;packet<64;packet++){
       const size=wasm._daytona_link_tx_size();if(!size)break;
-      const bytes=wasm.HEAPU8.slice(wasm._daytona_link_tx_ptr(),wasm._daytona_link_tx_ptr()+size);raceStandings.ingest(bytes);room.write(bytes);wasm._daytona_link_tx_pop();
+      const bytes=wasm.HEAPU8.slice(wasm._daytona_link_tx_ptr(),wasm._daytona_link_tx_ptr()+size);raceStandings.ingest(bytes);room.write(bytes,sourceTimeline.publication(bytes,performance.now()));wasm._daytona_link_tx_pop();
       if(!room.active)return false;
     }
     const state=wasm._daytona_link_state();
@@ -561,7 +577,7 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=46-race-names'});
+    wasm=await factory({locateFile:(path)=>path+'?v=50.1-public-security'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
@@ -572,3 +588,6 @@ async function main() {
   }catch(err){engineStartupError='Could not start the arcade engine: '+(err.message||String(err));failure(engineStartupError);}
 }
 engineReady=main();
+
+// Optional visit measurement runs after startup work, independently of the game.
+if(globalThis.requestIdleCallback)requestIdleCallback(()=>void startAnalytics(),{timeout:5000});else setTimeout(()=>void startAnalytics(),2500);

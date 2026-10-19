@@ -1,5 +1,5 @@
 import {WHEEL_ACTIONS,newWheelProfile,loadWheelProfiles,saveWheelProfiles,sanitizeBinding,bindingDevice,rawInput,
-  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=46-race-names';
+  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=50.1-public-security';
 
 export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const saved=loadWheelProfiles(storage),rows=new Map();

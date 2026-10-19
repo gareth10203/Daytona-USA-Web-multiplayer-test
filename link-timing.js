@@ -2,6 +2,40 @@
 // asymmetry: no observation here can prove a one-way Internet delay.
 const finite=x=>typeof x==='number'&&Number.isFinite(x);
 export const NATIVE_HZ=16000000/(656*424),TIMED_STATE_BYTES=3621+8*8;
+// Bind a packet's original clock to the step that produced its contents.
+// A step interval is honest about execution-time uncertainty, including during
+// slow frames/catch-up. Neither a displayed RTT nor a fixed tick is a timestamp.
+export class SourceTimeline {
+ constructor(){this.reset();}
+ reset(){this.steps=new Map();}
+ record(clock,start,end){
+  if(!Number.isInteger(clock)||clock<0||clock>0xffffffff||![start,end].every(finite)||end<start)return;
+  this.steps.set(clock,{at:(start+end)/2,uncertaintyMs:(end-start)/2});
+  while(this.steps.size>128)this.steps.delete(this.steps.keys().next().value);
+ }
+ publication(bytes,now){
+  if(!(bytes instanceof Uint8Array)||bytes.length!==453||!finite(now))return null;
+  const clock=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength).getUint32(449,true),step=this.steps.get(clock);
+  return step&&now>=step.at&&now-step.at<=10000&&step.uncertaintyMs<=150?{...step}:null;
+ }
+}
+export function sourceTiming(clockSync,publication,now){
+ if(!publication||!finite(publication.at)||!finite(publication.uncertaintyMs)||publication.uncertaintyMs<0||publication.uncertaintyMs>150)return null;
+ const transit=clockSync?.age(publication.at,now);
+ return transit?{ageMs:transit.ageMs,uncertaintyMs:transit.uncertaintyMs+publication.uncertaintyMs}:null;
+}
+// At most one complete snapshot waits for the next simulation step. Keep its
+// receipt time so waiting in the browser cannot masquerade as fresh data.
+export class NativeStateInbox {
+ constructor(){this.clear();}
+ clear(){this.pending=null;}
+ receive(bytes,timing,now){this.pending={bytes,timing,at:now};}
+ take(now){
+  const p=this.pending;this.clear();if(!p)return null;
+  const elapsed=Math.max(0,now-p.at);
+  return nativeTimedState(p.bytes,p.timing?.map(t=>t?{...t,ageMs:t.ageMs+elapsed}:null));
+ }
+}
 export class LinkClock {
  constructor(){this.pending=new Map();this.observations=[];}
  sent(time){if(!finite(time))return;this.pending.set(time,true);while(this.pending.size>16)this.pending.delete(this.pending.keys().next().value);}
@@ -11,12 +45,13 @@ export class LinkClock {
   const uncertainty=Math.max(0,roundTrip)/2+1,offset=((t1-t0)+(t2-t3))/2;
   this.observations.push({at:t3,offset,uncertainty});this.observations=this.observations.filter(o=>t3-o.at<=30000).slice(-32);return true;
  }
- age(remoteTimestamp,now){
+ age(remoteTimestamp,now,maximumUncertainty=250){
+  if(!finite(maximumUncertainty)||maximumUncertainty<0||maximumUncertainty>1000)return null;
   if(!finite(remoteTimestamp)||!finite(now))return null;
   const candidates=this.observations.filter(o=>now>=o.at&&now-o.at<=30000).map(o=>({...o,uncertainty:o.uncertainty+(now-o.at)*.0002}));
   candidates.sort((a,b)=>a.uncertainty-b.uncertainty);const best=candidates[0];if(!best)return null;
   const ageMs=now-(remoteTimestamp-best.offset);
-  if(ageMs < -best.uncertainty-5 || ageMs>10000 || best.uncertainty>250)return null;
+  if(ageMs < -best.uncertainty-5 || ageMs>10000 || best.uncertainty>maximumUncertainty)return null;
   return {ageMs:Math.max(0,ageMs),uncertaintyMs:best.uncertainty};
  }
 }

@@ -1,9 +1,10 @@
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=46-race-names';
-import {SnapshotFlow} from './snapshot-flow.js?v=46-race-names';
-import {LinkClock,receivedTiming} from './link-timing.js?v=46-race-names';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=46-race-names';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=46-race-names';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=46-race-names';
+import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=50.1-public-security';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState} from './central-link.js?v=50.1-public-security';
+import {SnapshotFlow} from './snapshot-flow.js?v=50.1-public-security';
+import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=50.1-public-security';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=50.1-public-security';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=50.1-public-security';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=50.1-public-security';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -20,11 +21,11 @@ export const RECONNECT_GRACE_MS=30000;
 const retryDelay=attempt=>Math.min(1000*2**Math.min(attempt,4),10000);
 const INACTIVE_REASON="The race was interrupted because a cabinet became inactive. Return to the room and start again.";
 export class Multiplayer {
- constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},isVisible=()=>true,readHealth=()=>({}),readPerformance=()=>null}={}){
-  Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,isVisible,readHealth,readPerformance});this.performanceCaptureEnabled=true;this.hostDiagnosticsEnabled=true;this.reset();
+ constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},onRaceOrder=()=>{},isVisible=()=>true,readHealth=()=>({}),readPerformance=()=>null}={}){
+  Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,onRaceOrder,isVisible,readHealth,readPerformance});this.performanceCaptureEnabled=true;this.hostDiagnosticsEnabled=true;this.reset();
  }
- reset(){this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.swaps=new Map();this.swapNotice='';this.settings={mode:0,difficulty:0,region:'Export',cpuCars:true,reverse:false};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
- snapshot(){return {diagnosticsEnabled:this.performanceCaptureEnabled,phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),seatPending:[...this.commands.values()].find(c=>c.data.type==='move-seat')?.data.cabinet??null,seatActionPending:[...this.commands.values()].some(c=>['move-seat','swap-request','swap-answer','swap-cancel'].includes(c.data.type)),swaps:this.swapState(),swapNotice:this.swapNotice,lastAck:this.lastAck};}
+ reset(){this.raceHistory=new Map();this.raceAuthority=null;this.raceInbox=null;this.raceDeliveries=new Map();this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.swaps=new Map();this.swapNotice='';this.visibility='private';this.roomName='';this.settings={mode:0,difficulty:0,region:'Export',cpuCars:true,reverse:false};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
+ snapshot(){return {visibility:this.visibility,roomName:this.roomName,diagnosticsEnabled:this.performanceCaptureEnabled,phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),pending:[...this.pending.values()].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),seatPending:[...this.commands.values()].find(c=>c.data.type==='move-seat')?.data.cabinet??null,seatActionPending:[...this.commands.values()].some(c=>['move-seat','swap-request','swap-answer','swap-cancel'].includes(c.data.type)),swaps:this.swapState(),swapNotice:this.swapNotice,lastAck:this.lastAck};}
  changed(){this.onChange(this.snapshot());}
  recordConnectionEvent(kind,conn=null,detail={}){
   const now=performance.now(),pc=conn?.peerConnection;
@@ -111,7 +112,7 @@ export class Multiplayer {
   }
   for(const [id,record] of this.consoleRecords)if(!activeIDs.has(id)&&record.row)rows.push({...record.row,archived:true,connection:'disconnected',performance:this.performanceHistory.summary(id)});
   this.trimConsoleRecords();
-  return {build:BUILD_ID,captureMode:this.performanceCaptureEnabled?'full':'off',generatedAt:new Date().toISOString(),live:true,phase:this.phase,signaling:this.signaling,rows,events:this.connectionEvents.map(e=>({...e})),packetLossPercent:null,...(includePerformance?{performance:this.performanceHistory.report(this.performanceIdentities())}:{})};
+  return {build:BUILD_ID,captureMode:this.performanceCaptureEnabled?'full':'off',generatedAt:new Date().toISOString(),live:true,phase:this.phase,signaling:this.signaling,rows,events:this.connectionEvents.map(e=>({...e})),packetLossPercent:null,raceOrders:[...this.raceHistory.values()].map(v=>structuredClone(v)),raceOrderDelivery:[...this.raceDeliveries.values()].map(d=>({peer:d.peer,race:d.order.race,revision:d.order.revision,acked:d.acked})),...(includePerformance?{performance:this.performanceHistory.report(this.performanceIdentities())}:{})};
  }
  get active(){return this.phase==='playing';}
  get occupied(){return !['idle','error'].includes(this.phase);}
@@ -143,7 +144,7 @@ export class Multiplayer {
  }
  syncConnection(conn){
   const admitted=this.members.some(m=>m.id===conn.peer);
-  this.send(conn,{type:'room-sync',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,revision:this.revision,admitted,members:admitted?this.members:[],settings:this.settings,chat:admitted?this.chat:[],swaps:admitted?this.swapState():[],reason:this.error});
+  this.send(conn,{type:'room-sync',visibility:this.visibility,roomName:this.roomName,diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,revision:this.revision,admitted,members:admitted?this.members:[],settings:this.settings,chat:admitted?this.chat:[],swaps:admitted?this.swapState():[],reason:this.error});
  }
  command(type,fields){if(this.commands.size>=32)throw Error('Waiting for the host to confirm pending actions.');const data={type,...fields,command:++this.commandSequence};this.commands.set(data.command,{data,at:performance.now()});try{this.send(this.server,data);}catch{if(this.server)this.detach(this.server,false);}this.changed();}
  acknowledge(conn,data,accepted,reason=''){
@@ -175,9 +176,9 @@ export class Multiplayer {
   });
   this.timer=setInterval(()=>this.heartbeat(),1000);
  }
- async create(name){this.leave();this.isHost=true;this.name=cleanName(name);this.phase='connecting';this.changed();try{await this.openPeer();this.host=this.id;this.secret=token();this.members=[{id:this.id,name:this.name,ready:false,cabinet:1,rtt:null}];this.phase='lobby';this.changed();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}}
- async join(code,name){
-  const invite=parseInvitation(code);this.leave();this.name=cleanName(name);this.sessionKey=token();this.host=invite.host;this.secret=invite.token;this.phase='connecting';this.changed();
+ async create(name,{visibility='private',roomName=''}={}){if(!['public','private'].includes(visibility))throw Error('Choose a public or private room.');this.leave();this.visibility=visibility;this.roomName=String(roomName).replace(/\s+/gu,' ').trim().slice(0,48)||cleanName(name)+"'s room";this.isHost=true;this.name=cleanName(name);this.phase='connecting';this.changed();try{await this.openPeer();this.host=this.id;this.secret=token();this.members=[{id:this.id,name:this.name,ready:false,cabinet:1,rtt:null}];this.phase='lobby';this.changed();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}}
+ async join(code,name,{publicRoom=false}={}){
+  const invite=parseInvitation(code);this.leave();this.visibility=publicRoom?'public':'private';this.name=cleanName(name);this.sessionKey=token();this.host=invite.host;this.secret=invite.token;this.phase='connecting';this.changed();
   try{await this.openPeer();this.connectHost();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}
  }
  attach(conn,incoming){
@@ -196,7 +197,7 @@ export class Multiplayer {
     const previous=this.connections.get(conn.peer);this.connections.set(conn.peer,conn);
     if(returning){session.until=0;const member=this.members.find(m=>m.id===conn.peer),pending=this.pending.get(conn.peer);if(member){member.connection='connected';member.ready=false;this.revision++;if(!this.members.some(m=>m.connection==='reconnecting'))this.error='';}if(pending)pending.connection='connected';}
     else{this.sessions.set(conn.peer,{key:meta.session,until:0,commands:new Map()});this.pending.set(conn.peer,{id:conn.peer,name:cleanName(meta.name),connection:'connected'});}
-    accepted=true;clearTimeout(expiry);if(returning)this.recordConnectionEvent('player-reconnected',conn);this.observeTransport(conn,incoming,generation);this.syncConnection(conn);this.publish();if(previous&&previous!==conn)previous.close();
+    accepted=true;clearTimeout(expiry);if(returning)this.recordConnectionEvent('player-reconnected',conn);this.observeTransport(conn,incoming,generation);if(!returning&&this.visibility==='public')this.approve(conn.peer);else{this.syncConnection(conn);this.publish();}if(previous&&previous!==conn)previous.close();
    }else{accepted=true;clearTimeout(expiry);this.observeTransport(conn,incoming,generation);if(this.phase!=='reconnecting'){this.phase='pending';this.changed();}}
   });
   conn.on('data',data=>{if(generation!==this.generation||(incoming?this.connections.get(conn.peer)!==conn:this.server!==conn))return;conn.lastSeen=performance.now();if(['arcade-sample','arcade-state'].includes(data?.type)&&data.bytes instanceof ArrayBuffer){this.payloadReceived+=data.bytes.byteLength;recordPacket(this.receivedTiming,this.performanceCaptureEnabled);conn.consoleCounters.rx+=data.bytes.byteLength;}try{this.handle(conn,data,incoming);}catch(e){this.recordConnectionEvent('data-handler-error',conn);if(this.isHost){this.detach(conn,true,e.message,false);conn.close();}else{if(this.active||this.phase==='preparing')this.end(e.message,this.id,'data-handler-error');this.detach(conn,false,e.message,false);conn.close();}}});
@@ -313,7 +314,7 @@ export class Multiplayer {
  }
  cancelSwapsFor(id){for(const offer of [...this.swaps.values()])if(offer.from===id||offer.to===id)this.finishSwap(offer,'The seat swap was cancelled because a driver disconnected.',false);}
  expireSwaps(now=performance.now()){if(!this.isHost)return;for(const offer of [...this.swaps.values()])if(now>=offer.until)this.finishSwap(offer,'The seat swap request expired.');}
- publish(){if(this.isHost&&this.phase!=='idle'){this.broadcast({type:'roster',diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,members:this.members,swaps:this.swapState(),settings:this.settings,revision:this.revision,phase:this.phase});}this.changed();}
+ publish(){if(this.isHost&&this.phase!=='idle'){this.broadcast({type:'roster',visibility:this.visibility,roomName:this.roomName,diagnostics:this.diagnosticsPolicy(),sequence:++this.lobbySequence,members:this.members,swaps:this.swapState(),settings:this.settings,revision:this.revision,phase:this.phase});}this.changed();}
  approve(id){if(!this.isHost||this.phase!=='lobby'||!this.pending.has(id)||!this.connections.get(id)?.open||this.members.length>=8)return;const member=this.pending.get(id);this.pending.delete(id);this.members.push({...member,ready:false,cabinet:this.firstOpenSeat(),rtt:null});this.recordConnectionEvent('player-admitted',this.connections.get(id),{source:'action'});this.revision++;for(const m of this.members)m.ready=false;const conn=this.connections.get(id);this.syncConnection(conn);this.publish();}
  kick(id){
   if(!this.isHost||this.phase!=='lobby'||id===this.id||!this.members.some(m=>m.id===id))return false;
@@ -368,8 +369,42 @@ export class Multiplayer {
   const now=performance.now();this.progressFrames=0;this.progressAt=now;
   for(const conn of this.isHost?this.connections.values():[this.server])if(conn){conn.lastStateAt=null;conn.emulation={epoch:this.epoch,frames:0,at:now};conn.snapshotFlow=new SnapshotFlow(this.epoch,conn.measuredRttMs);}
   if(this.isHost)this.performanceHistory.beginRace(this.epoch,this.members);
-  this.distributor=this.isHost?new HostDistributor(this.members):null;this.stateSequence=0;this.phase='playing';this.onStart();this.changed();
+  this.distributor=this.isHost?new HostDistributor(this.members):null;this.raceAuthority=this.isHost?new HostRaceAuthority(this.epoch,this.members,this.settings):null;this.raceInbox=new RaceOrderInbox(this.epoch,this.members);this.raceDeliveries.clear();this.stateSequence=0;this.phase='playing';this.onStart();this.changed();
  }
+ reportRace(report){
+  if(!this.active||!report)return;
+  const now=performance.now();
+  if(this.isHost){for(const value of [...(Array.isArray(report.previous)?report.previous.slice(-8):[]),report])this.raceAuthority?.observe(this.id,value,now,(at,uncertainty)=>({at,uncertainty}));this.publishRaceOrders(now);}
+  else if(this.server?.open&&(this.server.dataChannel?.bufferedAmount||0)<16384)this.send(this.server,{type:'race-progress',epoch:this.epoch,report});
+ }
+ receiveRaceReport(conn,report){
+  const now=performance.now();
+  const anchor=conn.clockSync?.age(report?.at,now,750);
+  const previous=Array.isArray(report?.previous)?report.previous.slice(-8).filter(r=>r&&r.run<report.run&&r.at<=report.at):[];
+  for(const value of [...previous,report])this.raceAuthority?.observe(conn.peer,value,now,(at,uncertainty)=>anchor?{at:now-anchor.ageMs-(report.at-at),uncertainty:uncertainty+anchor.uncertaintyMs+Math.abs(report.at-at)*.0002}:null);
+  this.publishRaceOrders(now);
+ }
+ publishRaceOrders(now=performance.now()){
+  if(!this.active||!this.isHost)return;
+  for(const order of this.raceAuthority?.poll(now)||[]){
+   this.raceInbox.receive(order);this.retainRaceOrder(order);this.onRaceOrder(order);
+   for(const member of this.members)if(member.id!==this.id)this.raceDeliveries.set(member.id+':'+order.race,{peer:member.id,order,sentAt:-Infinity,acked:false});
+  }
+  this.flushRaceOrders(now);
+ }
+ flushRaceOrders(now=performance.now()){
+  if(!this.active||!this.isHost)return;
+  for(const delivery of this.raceDeliveries.values()){
+   const conn=this.connections.get(delivery.peer);if(delivery.acked||now-delivery.sentAt<1000||!conn?.open||(conn.dataChannel?.bufferedAmount||0)>=16384)continue;
+   this.send(conn,{type:'race-order',epoch:this.epoch,order:delivery.order});delivery.sentAt=now;
+  }
+ }
+ retainRaceOrder(order){
+  const group=this.raceAuthority?.groups.find(g=>g.id===order.race);
+  const evidence=group?[...group.tracks.values()].map(t=>({id:t.id,run:t.run,car:t.car,terminal:t.terminal,finish:t.finish?{...t.finish}:null,lastAtMs:t.last?.at,lastUncertaintyMs:t.last?.uncertainty,lastNativeClock:t.last?.clock,lastNativeLap:t.last?.lap,lastProgress:t.last?.progress})):null;
+  this.raceHistory.set(order.race,{...structuredClone(order),roster:this.members.map(m=>({id:m.id,name:m.name,cabinet:m.cabinet})),...(evidence?{evidence}:{})});while(this.raceHistory.size>16)this.raceHistory.delete(this.raceHistory.keys().next().value);
+ }
+ raceOrderFor(id,run){return this.raceInbox?.forPlayer(id,run)??null;}
  advance(){if(this.active){this.progressFrames++;this.progressAt=performance.now();}}
  visibilityChanged(){if(!this.isVisible()&&(this.active||this.phase==='preparing')){this.recordConnectionEvent('visibility-interruption');this.end(INACTIVE_REASON,this.id,'visibility-interruption');}}
  checkProgress(now=performance.now()){
@@ -418,7 +453,9 @@ export class Multiplayer {
     // The connection identifies the requester; clients cannot name another cabinet.
     this.receiveHealth(conn,data);this.receivePerformance(conn,data);this.end(String(data.reason||'The cabinet stopped.').slice(0,180),conn.peer,STOP_CAUSES.includes(data.cause)?data.cause:'requested-stop','reported');
    }
-   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){const timing=conn.clockSync?.age(data.publishedAt,performance.now())??null;if(this.distributor.accept(conn.peer,data.frames,data.bytes,timing))conn.lastStateAt=performance.now();this.acknowledgeSnapshot(conn,data);}
+   else if(data.type==='race-progress'&&this.active&&data.epoch===this.epoch)this.receiveRaceReport(conn,data.report);
+   else if(data.type==='race-order-ack'&&this.active&&data.epoch===this.epoch){const delivery=this.raceDeliveries.get(conn.peer+':'+data.race);if(delivery?.order.revision===data.revision)delivery.acked=true;}
+   else if(data.type==='arcade-sample'&&this.active&&data.epoch===this.epoch){const timing=sourceTiming(conn.clockSync,data.publication,performance.now());if(this.distributor.accept(conn.peer,data.frames,data.bytes,timing))conn.lastStateAt=performance.now();this.acknowledgeSnapshot(conn,data);}
   }else{
    if(this.server!==conn)return;
    if(data.type==='diagnostics-policy'){if(this.applyDiagnosticsPolicy(data.diagnostics))this.changed();return;}
@@ -431,7 +468,7 @@ export class Multiplayer {
     const settings=validateSettings(data.settings),members=data.admitted?this.validateMembers(data.members):[];
     if(data.admitted&&!members.some(m=>m.id===this.id))throw Error('Missing session identity.');
     const chat=Array.isArray(data.chat)?data.chat.slice(-CHAT_HISTORY_LIMIT).map(m=>this.validateChatMessage(m)).filter(Boolean):[];
-    this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;this.revision=data.revision;this.settings=settings;this.members=members;this.applySwaps(data.admitted?data.swaps:[]);this.chat=data.admitted?chat:[];
+    this.visibility=data.visibility==='public'?'public':'private';this.roomName=String(data.roomName||'').slice(0,48);this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;this.revision=data.revision;this.settings=settings;this.members=members;this.applySwaps(data.admitted?data.swaps:[]);this.chat=data.admitted?chat:[];
     this.reconnectUntil=0;this.retryAt=0;this.retryAttempt=0;this.awaitingStop=false;this.phase=data.admitted?'lobby':'pending';this.error=String(data.reason||'').slice(0,280);
     for(const [id,command] of this.commands){if(command.data.type==='ready')this.commands.delete(id);else command.at=-Infinity;}this.changed();return;
    }
@@ -448,10 +485,15 @@ export class Multiplayer {
     const message=this.validateChatMessage(data.message);
     if(message&&message.seq>(this.chat.at(-1)?.seq??0)){this.chat.push(message);if(this.chat.length>CHAT_HISTORY_LIMIT)this.chat.shift();this.changed();}
    }
-   else if(data.type==='roster'){if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;if(this.awaitingStop&&data.phase==='lobby')this.awaitingStop=false;this.members=this.validateMembers(data.members);this.applySwaps(data.swaps);this.settings=validateSettings(data.settings);this.revision=data.revision;this.changed();}
+   else if(data.type==='roster'){if(!Number.isSafeInteger(data.sequence)||data.sequence<=this.lastLobbySequence)return;this.visibility=data.visibility==='public'?'public':'private';this.roomName=String(data.roomName||'').slice(0,48);this.applyDiagnosticsPolicy(data.diagnostics);this.lastLobbySequence=data.sequence;if(this.awaitingStop&&data.phase==='lobby')this.awaitingStop=false;this.members=this.validateMembers(data.members);this.applySwaps(data.swaps);this.settings=validateSettings(data.settings);this.revision=data.revision;this.changed();}
    else if(data.type==='prepare'&&this.phase==='lobby'){this.revision=data.revision;void this.prepare(data).catch(e=>this.end(e.message,this.id,'prepare-failed'));}
    else if(data.type==='go'&&this.phase==='preparing'&&data.epoch===this.epoch)this.go();
    else if(data.type==='stop'&&(data.epoch===this.epoch||(this.awaitingStop&&data.epoch===this.endedEpoch)))this.stopLocal(String(data.reason||'The arcade link stopped.').slice(0,280));
+   else if(data.type==='race-order'&&this.active&&data.epoch===this.epoch){
+    const order=validateRaceOrder(data.order,this.epoch,this.members);if(!order)return;
+    if(this.raceInbox.receive(order)){this.retainRaceOrder(order);this.onRaceOrder(order);}
+    if((conn.dataChannel?.bufferedAmount||0)<32768)this.send(conn,{type:'race-order-ack',epoch:this.epoch,race:order.race,revision:order.revision});
+   }
    else if(data.type==='arcade-state'&&this.active&&data.epoch===this.epoch){
     if(data.encoding!==undefined&&data.encoding!=='cabinet-slots')throw Error('Invalid state encoding.');
     const bytes=data.encoding==='cabinet-slots'?expandState(data.bytes,this.members.length):data.bytes;
@@ -461,12 +503,13 @@ export class Multiplayer {
   }
  }
  receiveBytes(bytes,timing=null){if(!(bytes instanceof ArrayBuffer)||bytes.byteLength<1||bytes.byteLength>4096)throw Error('Invalid arcade packet.');this.onBytes(new Uint8Array(bytes),timing);}
- write(bytes){
+ write(bytes,publication=null){
   if(!this.active)return;
-  const data={type:'arcade-sample',epoch:this.epoch,frames:this.progressFrames,publishedAt:performance.now(),bytes:bytes.slice().buffer};
+  const data={type:'arcade-sample',epoch:this.epoch,frames:this.progressFrames,publication,bytes:bytes.slice().buffer};
   try{
    if(!this.isHost){this.sendSnapshot(this.server,data);return;}
-   if(!this.distributor.accept(this.id,data.frames,data.bytes,{ageMs:0,uncertaintyMs:0})||!this.distributor.ready)return;
+   const now=performance.now(),age=publication&&Number.isFinite(publication.at)&&now>=publication.at?{ageMs:now-publication.at,uncertaintyMs:publication.uncertaintyMs}:null;
+   if(!this.distributor.accept(this.id,data.frames,data.bytes,age)||!this.distributor.ready)return;
    const sequence=++this.distributor.sequence;
    for(const member of this.members){
     const state=this.distributor.snapshot(member.id),timing=this.distributor.timing(member.id);
@@ -475,7 +518,7 @@ export class Multiplayer {
    }
   }catch(e){this.end(e.message,e.linkPeer||this.id,e.linkCause||'receive-error');}
  }
- stopLocal(reason){const hadSession=this.active||this.phase==='preparing';this.clearSnapshots();if(this.epoch)this.endedEpoch=this.epoch;this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.epoch='';this.phase='lobby';this.error=reason;for(const x of this.members)x.ready=false;if(hadSession)this.onStop(reason);this.changed();}
+ stopLocal(reason){this.raceAuthority=null;this.raceInbox=null;this.raceDeliveries.clear();const hadSession=this.active||this.phase==='preparing';this.clearSnapshots();if(this.epoch)this.endedEpoch=this.epoch;this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.epoch='';this.phase='lobby';this.error=reason;for(const x of this.members)x.ready=false;if(hadSession)this.onStop(reason);this.changed();}
  end(reason='The arcade session ended.',cabinet=this.id,cause='requested-stop',source='observed'){
   cause=STOP_CAUSES.includes(cause)?cause:'requested-stop';
   const member=typeof cabinet==='string'?this.members.find(m=>m.id===cabinet):cabinet;
@@ -485,7 +528,7 @@ export class Multiplayer {
   else{const hadSession=!!this.epoch;try{if(hadSession)this.send(this.server,{type:'stop',epoch:this.epoch,reason:detail,cause,health:this.makeHealth(),performance:this.makePerformance()});}catch{}this.stopLocal(message);this.awaitingStop=hadSession;this.changed();}
  }
  heartbeat(now=performance.now()){
-  this.expireSwaps(now);
+  this.expireSwaps(now);if(this.active&&this.isHost)this.publishRaceOrders(now);
   const health=this.makeHealth(now),performanceData=this.makePerformance();
   if(!this.signaling&&this.peer&&!this.peer.destroyed&&now>=this.signalRetryAt){this.signalRetryAt=now+retryDelay(this.signalAttempt++);if(this.peer.disconnected)try{this.peer.reconnect();}catch{}}
   if(this.phase==='reconnecting'){

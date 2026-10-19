@@ -1,9 +1,12 @@
-REVISION 46.1 - NOMBRES EN CARRERA
-Nombres, colores y puestos del arcade debajo de Cabinet.
-Permanecen durante resultados hasta volver a attract.
-WebGPU principal, WebGL2 de respaldo; API en Settings / Experimental.
-Subir el CONTENIDO del ZIP a GitHub Pages. No incluye ROM.
-Documentacion y limites: INVESTIGACIONES.md.
-Licencia de la fuente: fonts/VT323-OFL.txt.
-
-Only position and name are displayed; car colours and attract lifecycle retained.
+VERSION 50.1 - SALAS PUBLICAS Y SEGURIDAD
+Publicar 50.1: App Check ya esta exigido en RTDB y Authentication.
+Directorio publico a la izquierda, crear publica/privada y codigo privado a la derecha.
+Publicas: entrada automatica. Privadas: aprobacion del host. Maximo ocho participantes.
+No se admiten entradas nuevas durante una carrera.
+Firebase guarda siete campos de anuncio; el juego sigue conectado mediante PeerJS.
+Reglas, restricciones de API y App Check configurados en el servidor.
+Lista pausada tras cinco minutos sin actividad; Reconnect para continuar.
+Publicas locales requieren token debug privado registrado; no se incluye.
+Motor y archivos nativos identicos a la 49; conserva sus limites de simulacion y red.
+Subir el CONTENIDO del ZIP a GitHub Pages, con index.html en la raiz.
+Sin ROM ni herramientas privadas. Documentacion: INVESTIGACIONES.md y README.md.

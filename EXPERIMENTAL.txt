@@ -1,10 +1,12 @@
-DAYTONA USA WEB - REVISION 46.1 - RACE NAMES
-2026-10-18. Presentation update compatible with revision 46.
-Names, car colours and original human race positions below Cabinet.
-Names remain during results and name entry, until attract returns.
-Native engine, race and network rules unchanged from revision 45.
-178 unit tests; three production engines; responsive eight-row UI fixture.
-No ROM or test hooks. Upload ZIP CONTENTS to GitHub Pages.
-Details: INVESTIGACIONES.md. Font license: fonts/VT323-OFL.txt.
-
-Only position and name are displayed; car colours and attract lifecycle retained.
+DAYTONA USA WEB - 50.1 - PUBLIC ROOMS SECURITY
+2026-10-19. Deploy 50.1 now; server App Check enforcement is enabled.
+Public Firebase directory; actual game connections still use PeerJS.
+Public automatic admission; private host approval; maximum eight players.
+No hot join during an arcade session. Firebase failure does not stop a connected race.
+Native JS/WASM and native sources are identical to v49. Its game limitations remain.
+Firebase rules, API key restrictions and App Check enforcement are configured.
+Idle browsing disconnects after 5 minutes; explicit Reconnect resumes.
+Local public rooms need a registered private App Check debug token.
+Analytics retained with sanitized page location. No room/chat/player content events.
+No ROM or private probes. Upload ZIP CONTENTS to GitHub Pages.
+Evidence and limitations: INVESTIGACIONES.md. Font: fonts/VT323-OFL.txt.

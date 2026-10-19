@@ -9,3 +9,5 @@
 @media(max-width:600px){.race-network-hud{left:max(10px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));max-width:min(260px,52vw)}.race-standings{font-size:20px;margin-top:6px}.race-driver{-webkit-text-stroke:1.7px var(--driver-outline)}}
 @media(max-width:1100px){.touch-device .race-network-hud{top:calc(max(12px,env(safe-area-inset-top)) + 50px);max-width:min(280px,43vw)}}
 @media(orientation:landscape) and (max-height:500px){.race-standings{font-size:18px;line-height:1.02}.race-network-hud{max-width:min(280px,38vw)}}
+
+.race-order-status{display:block;margin-top:5px;color:#ffed70;font:400 clamp(13px,1.1vw,17px)/1.1 DaytonaHUD,monospace;letter-spacing:.03em;text-shadow:1px 1px #000,0 0 3px #000}.race-order-status[hidden]{display:none}
