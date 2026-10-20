@@ -1,18 +1,18 @@
-import {BUILD_ID,parseInvitation} from './room-settings.js?v=50.1-public-security';
+import {BUILD_ID,parseInvitation} from './room-settings.js?v=52.3-waiting-room';
 export const ROOM_TTL_MS=90000,ROOM_PULSE_MS=30000;
 export const DIRECTORY_IDLE_MS=5*60*1000;
 const states=new Set(['open','full','starting','racing','reconnecting']);
 export const cleanRoomName=value=>String(value||'').replace(/\s+/gu,' ').trim().slice(0,48);
 export function publicRoomPayload(s){
  if(!s.isHost||s.visibility!=='public'||!s.code||!['lobby','preparing','playing'].includes(s.phase)||!s.members?.length)return null;
- return {name:cleanRoomName(s.roomName)||'Daytona room',players:s.members.length,state:s.phase==='playing'?'racing':s.phase==='preparing'?'starting':s.members.some(m=>m.connection==='reconnecting')?'reconnecting':s.members.length>=8?'full':'open',invite:s.code,version:BUILD_ID};
+ return {name:cleanRoomName(s.roomName)||'Daytona room',players:s.members.length+(s.waiting?.length||0),state:s.phase==='playing'?'racing':s.phase==='preparing'?'starting':s.members.some(m=>m.connection==='reconnecting')?'reconnecting':s.members.length+(s.waiting?.length||0)>=8?'full':'open',invite:s.code,version:BUILD_ID};
 }
 export function readPublicRooms(value,now){
  if(!value||typeof value!=='object')return [];
  return Object.entries(value).flatMap(([id,r])=>{
   if(!/^[a-f0-9]{32}$/.test(id)||!r||typeof r.ownerUid!=='string'||!r.ownerUid||typeof r.name!=='string'||!r.name.trim()||r.name.length>48||!Number.isInteger(r.players)||r.players<1||r.players>8||!states.has(r.state)||typeof r.updatedAt!=='number'||!Number.isFinite(r.updatedAt)||now-r.updatedAt>ROOM_TTL_MS||r.updatedAt>now+10000||typeof r.version!=='string'||r.version.length>96)return [];
   try{const invite=parseInvitation(r.invite);if(invite.host!=='dt-'+id)return [];}catch{return [];}
-  const compatible=r.version===BUILD_ID,joinable=compatible&&r.state==='open'&&r.players<8;
+  const compatible=r.version===BUILD_ID,joinable=compatible&&['open','starting','racing'].includes(r.state)&&r.players<8;
   return [{id,name:r.name,players:r.players,state:r.state,invite:r.invite,updatedAt:r.updatedAt,compatible,joinable}];
  }).sort((a,b)=>Number(b.joinable)-Number(a.joinable)||Number(b.compatible)-Number(a.compatible)||a.name.localeCompare(b.name)||a.id.localeCompare(b.id));
 }

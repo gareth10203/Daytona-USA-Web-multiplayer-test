@@ -1,6 +1,6 @@
-import {createWebGPURenderer} from './webgpu-renderer.js?v=50.1-public-security';
-import {createWebGL2Renderer} from './webgl2-renderer.js?v=50.1-public-security';
-import {requestedGraphicsAPI} from './graphics-api-settings.js?v=50.1-public-security';
+import {createWebGPURenderer} from './webgpu-renderer.js?v=52.3-waiting-room';
+import {createWebGL2Renderer} from './webgl2-renderer.js?v=52.3-waiting-room';
+import {requestedGraphicsAPI} from './graphics-api-settings.js?v=52.3-waiting-room';
 
 export async function createRenderer(canvas,onFailure,options={}){
  const requested=options.backend??requestedGraphicsAPI({getItem:key=>globalThis.localStorage?.getItem(key)},globalThis.location?.search||'');

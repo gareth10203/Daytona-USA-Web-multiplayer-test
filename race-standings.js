@@ -1,5 +1,5 @@
-import {linkIdForSeat,SAMPLE_BYTES,STATE_BYTES,STATE_TAG,SLOT_BYTES} from './central-link.js?v=50.1-public-security';
-import {carColor} from './car-colors.js?v=50.1-public-security';
+import {linkIdForSeat,SAMPLE_BYTES,STATE_BYTES,STATE_TAG,SLOT_BYTES} from './central-link.js?v=52.3-waiting-room';
+import {carColor} from './car-colors.js?v=52.3-waiting-room';
 
 // Original block: 00..07 = human ranks by race car ID; 0b = human count;
 // 0c..13 = link ID by race car ID. Race IDs are not selectable lobby seats.

@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=50.1-public-security';
-export const BUILD_ID='daytona-rev-a-central-experimental-50-public-rooms';
+import {DEFAULT_EEPROM} from './nvram.js?v=52.3-waiting-room';
+export const BUILD_ID='daytona-rev-a-central-52.3-waiting-room';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

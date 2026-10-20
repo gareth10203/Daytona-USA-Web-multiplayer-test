@@ -1,3 +1,319 @@
+# 2026-10-20 — 52.3: asientos de espera durante la partida
+
+52.3 parte de 52.2, cuyo ZIP y carpeta se conservan. No incorpora 53. UI del juego en ingles.
+
+`waiters` es presencia de sala separada de `members`, el contrato nativo. Entradas durante preparing/playing reservan el primer asiento libre sin cambiar epoch, revision de carrera, distribuidor, barrera de preparacion, clasificacion o numero de cabinas. Quien espera no arranca una simulacion ni recibe snapshots, prepare/go o resultados. Publicas: entrada directa y promocion de conectados al lobby automaticamente. Privadas: espera y chat, Admit/Decline solamente en lobby. Conserva coche reservado y se borra Ready. Attract no es lobby: se usa Return all to room para incorporar cabinas a la siguiente sesion.
+
+Capacidad ocho activos+espera+solicitudes. Move/Swap no puede ocupar reservas. Start espera solicitudes/reservas sin resolver. Salida explicita libera; interrupcion conserva 30 s de recuperacion. Reconectar un visitante en carrera no interrumpe a quienes corren; si vuelve despues del retorno al lobby, un visitante publico se incorpora entonces.
+
+Solo roster/chat se difunden a visitantes. El host permite chat y presencia; ignora stop, ready, seat/swap, snapshots, native frames y race-progress de visitantes. Chat mantiene identidad, 240 caracteres, 60 mensajes, 900 ms, command ACK/deduplicacion y epoch. Canal de movimiento se negocia al admitir. Watchdogs nativos no esperan visitantes. Toast de 5.5 s sin foco/menu/pausa; tarjetas WAITING/REQUESTED; ventana NEXT RACE, ROOM/CHAT en movil. Connections distingue espera de simulacion detenida.
+
+Directorio ofrece WAIT FOR NEXT RACE en starting/racing compatibles con cupo. Cuenta incluye visitantes. Esquema Firebase, reglas, coalescencia, pulsos, pausa por inactividad, App Check y Analytics se conservan; no se agregan chats ni nombres de jugadores a la base. Todos usan 52.3 para evitar protocolos mezclados.
+
+Validacion: 268 pruebas Node pasan, con 14 nuevas de reserva/aislamiento, chat/autenticacion/deduplicacion, promocion y siguiente partida, aprobacion/rechazo, preparacion asincrona, capacidad, reconexion, cola y caducidad, acciones nativas no autorizadas, roster invalido y anuncio minimo. La retencion artificial de mensajes en pruebas de protocolo no se presenta como perdida UDP o benchmark WAN.
+
+`tests/waiting-room-browser.cjs`: PeerJS/WebRTC real y WASM de produccion. Dos cabinas enlazadas; host entra a rolling start nativo, tercero usa chat y asiento sin iniciar motor. Comprueba epoch/roster/progreso, ausencia de paquetes de juego y cambio de foco, reconexion RTC, promocion publica y posterior arranque con tres motores. Luego ruta privada y controles Admit/Decline. Chrome visible, WebGL2 Classic; tercer contexto tactil 390x844, no iPhone fisico. Firebase/Analytics sustituidos solo en fixture para evitar escrituras externas. Bindings solo en interceptacion local, excluidos de dist.
+
+La revision visual detecto que daytona-logo.png en la base 52.2 estaba danado (bytes UTF-8 de sustitucion). Se restaura el PNG original de 52, SHA256 1eee910e9fb2b5acc6a5b7b7636553a480181ba515dced798907d75fb7809a28, sin generar ni cambiar el diseno. La prueba de navegador exige decodificacion y ancho natural 1532; el asset queda en los hashes del informe.
+
+Informe/capturas finales en build/waiting-room. Se comprueban hashes frontend usados, mismo JS/WASM y 17 fuentes nativas de 52.2, igualdad web/dist, reglas, CRC y manifiesto ZIP. Sin afirmaciones nuevas sobre precision de colisiones, rendimiento WAN, Safari fisico ni hot join nativo.
+
+---
+
+# 2026-10-20 — 52.2: chat sobre el juego y bloqueo durante carrera
+
+Derivada de la 52.1; se conserva su ZIP. Diagnósticos detallados desactivados por defecto, mismo transporte de movimiento, mismo motor JS/WASM y mismas fuentes nativas. No se incorporan presupuesto de bytes ni heurísticas de la candidata 53.
+
+Se añade una ventana de chat translúcida en la esquina inferior derecha, con estilo del lobby, historial compartido, minimización local y contador de mensajes nuevos de otros jugadores. Abrirla o leer al final del lobby limpia los pendientes. Si el usuario está desplazado hacia arriba no se fuerza el scroll por un mensaje ajeno; aparece el acceso a mensajes nuevos. Los textos se insertan con textContent, no HTML. La preferencia de minimizar se guarda localmente; no se escribe chat en Firebase.
+
+Disponibilidad por cabina: lobby, attract, selección y presentación. La escena actual nativa del sample de autoridad existente gobierna la UI local; entrar en escena 22 (salida/rolling start/cuenta atrás y carrera) bloquea envío y oculta todo el panel, incluido el botón minimizado. El bloqueo se conserva durante resultados y nombre, y se libera al regresar a escenas 0–10. No se usa un temporizador aproximado ni detección de una muestra de audio. Se utiliza sólo la lectura local actual, evitando alternar la escena con un paquete propio de un fotograma anterior.
+
+El host comprueba el estado publicado de cada emisor, la identidad autenticada y el epoch de las solicitudes durante juego. Mantiene longitud máxima, limitación de frecuencia, confirmaciones y deduplicación. Una cabina en attract puede escribir mientras otra corre; la que corre acumula pendientes, sin mostrar el chat ni reproducir sus avisos. Los comandos de chat aún pendientes localmente se cancelan al entrar en la salida, para no reenviarlos durante carrera. Los mensajes y el historial del lobby se conservan al regresar a attract y también al volver a la sala.
+
+Al escribir, los inputs del juego son neutros y los eventos de teclado no llegan a los bindings de conducción. Enter envía y Escape minimiza si el foco está en el chat. El chat queda fuera de la superficie con protección estricta de gestos de conducción: la entrada y el scroll táctiles no relajan las protecciones de volante/pedales. Se reserva espacio sobre los controles táctiles y no se añade un atajo global que choque con asignaciones del usuario. Se oculta mientras hay un modal abierto y no aparece en single player ni fuera de una sesión enlazada.
+
+Validación final: **254 pruebas Node** y **dos motores de producción reales**, Chrome local/WebGL2 Classic, Normal con CPU; el host entra en carrera y el invitado permanece en attract. Se verifica historia del lobby, envío bidireccional, texto HTML inerte, input neutro al escribir, contador exacto de dos mensajes y limpieza al abrir, ventana estrecha sin overflow, foco mediante toque con iPhone emulado, escena 21 disponible/22 bloqueada, rechazo de envío del corredor, mensajes del invitado en attract acumulados invisibles y regreso natural por timeout/resultados a attract sin recargar. Se verifica que el chat vuelva con el mensaje pendiente, que los diagnósticos sigan apagados y que volver a lobby oculte el overlay. Sin errores de página. Las huellas de los JS/CSS/HTML/WASM exactos de la prueba quedan en build/game-chat/validation.json; capturas en ese mismo directorio. Las dos pasadas preliminares se conservan en build/game-chat-first-pass y build/game-chat-touch-pass, fuera del ZIP.
+
+Límites: la comprobación táctil es emulación Chromium, no un iPhone físico ni una certificación de su teclado virtual. El ciclo real validado es una carrera Normal que termina por tiempo; las reglas de bloqueo por escenas se comprueban también mediante tests. No se reproduce una medición acústica del instante exacto de la frase de salida. No se repite el benchmark de RTT/pérdidas ni se afirma una mejora de red, física, precisión visual o colisiones.
+
+Reproducción: node --test tests/*.test.js; PLAYWRIGHT_PATH al Playwright instalado y node tests/game-chat-browser.cjs con la ROM local existente. Las bindings privadas de fixture, trazas, capturas y ROM no se distribuyen. El test cierra sus ventanas y servidor al terminar. Publicación: contenido del ZIP 52.2 con index.html en la raíz; todos los participantes deben usar 52.2.
+
+---
+
+# 2026-10-20 — 52.1: diagnósticos detallados desactivados por defecto
+
+Se deriva de la 52 y se conserva ésta intacta. La 53 permanece separada y no se incorpora su presupuesto de red.
+
+Constructor y checkbox comienzan apagados. Se ignora la antigua preferencia persistente para que cada recarga requiera una activación manual del host en Connections → Record diagnostics. La política se propaga a los invitados al entrar, reconectar y recibir cambios durante la carrera. La activación manual se conserva mientras la página siga abierta. No se borra el histórico previamente capturado.
+
+Se mantienen latidos, confirmaciones, supervisión de progreso y desconexión, tráfico de juego y resultados. El visor de rendimiento de single player permanece disponible como opción local manual. No se modifican física, renderizado, motor WASM, algoritmo de movimiento ni límites de red.
+
+Validación: suite Node completa, incluyendo política de host/invitado, cambios en carrera sin reiniciar, rechazo de políticas inválidas, restauración de preferencias dentro de la página, UI inicialmente apagada aun con almacenamiento antiguo, activación manual y disponibilidad del visor single player. Los fixtures que verifican la captura detallada la activan explícitamente. Se comprueba por huellas que el motor y los módulos de transporte conservan la implementación de la 52. No se repite ni se atribuye a este cambio el benchmark A/B de red de versiones anteriores.
+
+---
+
+# 2026-10-20 — 52: red variable de 30–300 ms y saturación de un cliente
+
+## Experimento y conservación
+
+Comparación completada: **tres motores reales**, dos métodos (referencia fiable anterior y v52 adaptativa), dos repeticiones por método en orden anterior/adaptativa/adaptativa/anterior. **44 ventanas**, sin interrupciones de sesión. Host, un invitado sano y un invitado degradado. Endurance/Beginner con CPU, Chrome visible/WebGL2 Classic. Se conservan los archivos publicados, motor y ZIP; SHA256 del ZIP: `3cf2b1da8b092a6c530a3f24ae166f891136720ef8108f742ed64886b26cc68b`.
+
+Cada pasada tiene base de 12 s, cinco condiciones de 20 s y cinco recuperaciones limpias de 10 s. El enlace sano tiene RTT nominal de 30 ms. En el otro se repite cada segundo la secuencia 30/80/150/300/180/60 ms con jitter por trayecto ±8 ms. El perfil de picos usa jitter ±15 ms, 1 % de pérdida aleatoria, RTT nominal 600 ms durante 0,8 s y 1 s, y un corte UDP de 200 ms. Los picos están por encima del rango base deliberadamente; no se afirma que todo el tráfico permanezca bajo 300 ms.
+
+La saturación modela una FIFO independiente por sentido de **128.000 B/s (1,024 Mbit/s)**, contando 28 B IP/UDP adicionales por datagrama y un máximo de 25.000 B en cola (195,3 ms de servicio). El tráfico de fondo ocupa la misma FIFO en dos ráfagas, de los segundos 4–10 y 13–18. Se ofrecen 112.000 B/s en subida, 80.000 en bajada o 96.000 por sentido en el caso bidireccional. Son cargas diferentes; la prueba de subida deja el menor residuo nominal. No es una reserva garantizada de ancho libre: el modelo aplica descarte al llenarse la cola, también al tráfico de fondo. La cola se conserva al cambiar de perfil y sólo se vacía al transmitir; se distingue pérdida aleatoria de pérdida por desbordamiento. La congestión puede añadir RTT por encima de 300 ms.
+
+TURN/UDP autenticado local; deterioro sobre datagramas cifrados debajo de DTLS/SCTP, sin alterar mensajes PeerJS ni ajustes de red del PC. Cuatro pruebas del modelo de cola verificaron servicio, competencia, descarte y drenaje. El modelo representa un cuello de botella controlado, no una medición de un router doméstico real. El tráfico de fondo es una carga ofrecida por el emulador; no reproduce un cliente TCP/QUIC que ajuste su propia velocidad al perder paquetes. **Se degrada un cliente; no se prueba el cuello de botella compartido del propio host.**
+
+## Medición y calidad del ensayo
+
+Se muestrea a 20 Hz el estado nativo crudo que cada cabina conserva de cada otro jugador. Su reloj se cruza con el historial de publicación del emisor, usando timeOrigin + performance.now en este único PC. Así se observa el envejecimiento aunque deje de llegar información, sin confundirlo con el percentil de los paquetes recibidos o con el propio coche devuelto por el host. Es una referencia local de publicación; **no mide la posición renderizada, la compensación nativa ni la exactitud de las colisiones**.
+
+Se emparejaron 78.354 observaciones, con 0 sin origen conocido, 0 edades negativas inválidas y 0 observaciones con reloj ambiguo. Los relojes reutilizados durante el arranque aparecen en el historial pero no se usan como tiempos únicos si son ambiguos. No se excedieron los límites de cola o servicio del emulador. Los relojes y ticks de carrera acompañaron a los frames, alrededor de 57,5 Hz, en las tres cabinas.
+
+La primera preparación quedó en lobby; se corrigieron sincronización de Ready/revisión y visibilidad de las tres ventanas. Otro piloto reveló que serializar informes grandes en el mismo proceso del relay pausaba sus entregas. **Esos datos preliminares no sustentan las tablas finales.** El ensayo final sólo escribe progreso pequeño durante la partida (máximo observado 0,7 ms); las trazas grandes se escriben después de cerrar navegador y relay, y la memoria se recolecta entre pasadas. Firebase/Analytics se deshabilitan sólo en la fixture. No se escriben datos de carrera en Firebase.
+
+## Resultados finales
+
+Edad cruda p95 en ms. Cada celda es la mediana de los dos p95 por pasada, seguida de su rango entre corchetes; no un p95 combinado ni significación estadística. Hay dos repeticiones y ventanas cortas. Las fracciones de tiempo son aproximaciones por muestreo a 50 ms, no integración continua exacta.
+
+**Cómo recibe el host al cliente con problemas:**
+
+| Perfil | Anterior | V52 adaptativa |
+|---|---:|---:|
+| Base 30 ms | 90,5 [89,9–91,1] | 85,2 [81,9–88,4] |
+| 30–300 ms variables | 237,3 [232,9–241,7] | 210,4 [208,5–212,3] |
+| Picos breves y pérdidas | 757,2 [656,9–857,4] | 446,9 [438,5–455,3] |
+| Subida saturada | 1434,4 [1315,3–1553,6] | 1773,3 [1588,6–1957,9] |
+| Bajada saturada | 137,9 [136,1–139,6] | 114,8 [114,7–114,9] |
+| Ambos sentidos saturados | 218,9 [215,7–222,1] | 1306,3 [423,7–2188,8] |
+
+**Cómo recibe ese cliente al host:**
+
+| Perfil | Anterior | V52 adaptativa |
+|---|---:|---:|
+| Base 30 ms | 90,9 [89,9–91,8] | 80,3 [79,9–80,6] |
+| 30–300 ms variables | 235,1 [231,6–238,6] | 211,4 [205,8–217] |
+| Picos breves y pérdidas | 777,2 [697,3–857] | 523,7 [482,1–565,2] |
+| Subida saturada | 443,2 [346,5–539,9] | 104,8 [103,9–105,6] |
+| Bajada saturada | 259,6 [256,6–262,6] | 361 [350,2–371,9] |
+| Ambos sentidos saturados | 775,3 [735,4–815,3] | 537,2 [509,2–565,1] |
+
+**Aislamiento:** el peor p95 por ventana de host → invitado sano fue 85,6 ms con la referencia y 79,9 ms con v52, incluyendo perfiles de recuperación. La degradación del otro enlace no detuvo esa simulación. Esto no asegura que el coche del jugador con lag se vea siempre continuo: sus propios estados sí pueden llegar muy atrasados.
+
+**Recuperación tras la última ráfaga de tráfico de fondo:** tiempo aproximado hasta empezar un intervalo de al menos un segundo con edad cruda ≤250 ms. Se combinan el final del perfil y su recuperación posterior, con resolución de muestreo de unos 50 ms; el marcador de fin de ráfaga se reconstruye de la traza del relay. Los valores de pocos milisegundos significan «ya reciente en la siguiente observación», no precisión subfotograma. El umbral es un indicador de recuperación de este ensayo, no una garantía de calidad competitiva. Las dos cifras son las dos pasadas:
+
+| Saturación | Sentido | Anterior (ms) | V52 (ms) |
+|---|---|---:|---:|
+| Subida saturada | Cliente → host | 511,5 / 403 | 900,2 / 869,9 |
+| Subida saturada | Host → cliente | 571 / 299,8 | 20,7 / 18,6 |
+| Bajada saturada | Cliente → host | 21,9 / 51,1 | 34,3 / 31,1 |
+| Bajada saturada | Host → cliente | 21,3 / 210,3 | 37 / 31,2 |
+| Ambos sentidos saturados | Cliente → host | 12,4 / 1,7 | 248,8 / 296,3 |
+| Ambos sentidos saturados | Host → cliente | 312,2 / 444,4 | 15,9 / 46,5 |
+
+## Decisión
+
+- **30–300 ms variables sin saturación fuerte:** la v52 mantiene información reciente y mejora respecto a la referencia en ambas direcciones medidas.
+- **Picos breves y pérdidas:** la v52 reduce la edad respecto a la referencia, mantiene la sesión y permite volver a estados recientes.
+- **Subida casi ocupada:** sigue siendo un punto pendiente. La v52 conserva frescos los estados que recibe el cliente, pero sus datos hacia el host pueden envejecer más de un segundo y no mejoran uniformemente frente a la referencia. No atribuirlo sólo al RTT nominal.
+- **Bajada/bidireccional:** hay intercambios y dispersión entre pasadas, no una victoria uniforme. Hay que considerar el sentido, el tiempo con datos antiguos y la recuperación, no sólo la media global o que no se desconecte.
+- **Siguiente prioridad:** ajustar la adaptación/presupuesto de envío frente a saturación y revisar el tráfico, conservando la comparación anterior. Este encargo prueba y documenta; **no cambia la implementación ni publica otra versión**. Todavía no se valida experiencia perfecta bajo saturación fuerte, colisiones, ocho motores, WAN/móvil o saturación del host.
+
+Reproducción: `node --test tests/saturated-udp-relay.test.cjs`; `node --expose-gc tests/variable-network-native.cjs` con PLAYWRIGHT_PATH y la ROM local existente; `node scripts/analyze-variable-network.cjs`. Evidencia en `build/variable-network-native/report.json`, los cuatro `trial-*.json`, `summary.json` y capturas. Los pilotos se conservan aparte identificados como preliminares. Todas las ventanas, servidor y relay del ensayo se cierran al finalizar.
+
+---
+
+# 2026-10-20 — 52: comparación del canal nuevo con frecuencia fija y adaptativa
+
+## Alcance y conservación
+
+Se completó el experimento solicitado y se detuvo el trabajo después de guardar sus resultados. **No se cambió el frontend distribuido, el motor, Firebase ni el ZIP 52.** SHA256 del ZIP preservado: `3cf2b1da8b092a6c530a3f24ae166f891136720ef8108f742ed64886b26cc68b`. La opción fija de 60 Hz existe únicamente en el navegador de la prueba: se deshabilita una condición de reducción en LatestFlow, manteniendo codec, recibos, planificación, descarte de pendientes viejos y protección de búfer. No fuerza a RTC a aceptar estados mientras su cola está ocupada.
+
+## Método
+
+`tests/motion-frequency-ab.cjs`: dos motores WASM publicados sin cambios, Chrome visible/WebGL2 Classic, Endurance/Beginner, CPU activadas y aceleración automatizada igual en ambas cabinas. Tres variantes: referencia fiable anterior, canal nuevo con objetivo fijo de 60 Hz y canal nuevo adaptativo de 15–60 Hz. Dos pasadas por variante, en orden reflejado: anterior/fija/adaptativa/adaptativa/fija/anterior. Una semilla de red por terna, coincidente entre variantes. No se presupone que cambiar el protocolo conserve la misma secuencia de datagramas perdidos.
+
+Seis perfiles por pasada: limpio, 150 ms con jitter uniforme ±25 ms por trayecto, 300 ms/±25 ms/3 % UDP, 600 ms/±50 ms/3 % UDP, 1000 ms sin pérdida añadida y recuperación limpia. Antes de cada perfil no inicial: doce segundos de recuperación limpia; después cuatro segundos de asentamiento del perfil y diez segundos de captura. TURN/UDP autenticado de loopback, con ruta relay comprobada y deterioro por debajo de DTLS/SCTP. No se impuso un límite adicional de caudal. Firebase y Analytics se deshabilitan sólo en la fixture de navegador para evitar escrituras y contaminar estadísticas.
+
+Se verifican en cada muestra enlace nativo 2, carrera activa, método seleccionado, ausencia de mensajes inválidos, seguimiento acotado y frecuencia objetivo exacta de 60 en la variante fija. Se comparan frames, reloj y ticks de carrera para detectar ralentización de lógica. Los hashes de archivos publicados se comprueban antes y después; se guarda también el hash y la sustitución exacta de la fixture fija.
+
+## Resultados
+
+**PASS: seis pasadas y 36 ventanas**, con dos cabinas reales en cada una. Sin errores de página, relay o interrupciones de sesión. La lógica original avanzó entre **57,44 y 57,62 Hz**; sus relojes/ticks coincidieron con los frames. Al retirar el deterioro, las tres variantes recuperaron intervalos y edades cercanos a los iniciales.
+
+Intervalo de llegada p95, en ms, como **host / invitado**:
+
+| Perfil | Anterior | Nuevo fijo 60 | Nuevo adaptativo |
+|---|---:|---:|---:|
+| Limpio | 27,7 / 30,1 | 27,1 / 27,6 | 27,3 / 27,3 |
+| 150 ms, jitter | 77,6 / 74,0 | 54,9 / 52,7 | 52,8 / 53,5 |
+| 300 ms, jitter y 3 % UDP | 390,1 / 429,4 | 369,7 / 236,2 | 328,2 / 109,7 |
+| 600 ms, jitter y 3 % UDP | 1192,4 / 986,4 | 1561,5 / 477,1 | 1659,5 / 502,2 |
+| 1000 ms | 1065,5 / 495,8 | 778,8 / 452,7 | 1034,3 / 297,9 |
+| Recuperación limpia | 27,3 / 28,2 | 27,1 / 27,4 | 27,5 / 27,6 |
+
+Edad nativa p95 agregada, en ms, **host / invitado**:
+
+| Perfil | Anterior | Nuevo fijo 60 | Nuevo adaptativo |
+|---|---:|---:|---:|
+| Limpio | 54,9 / 55,1 | 52,5 / 53,5 | 52,5 / 53,5 |
+| 150 ms, jitter | 185,7 / 299,3 | 165,4 / 239,5 | 158,8 / 230,0 |
+| 300 ms, jitter y 3 % UDP | 712,4 / 886,0 | 1024,4 / 1109,9 | 529,1 / 1080,1 |
+| 600 ms, jitter y 3 % UDP | 1938,4 / 2359,7 | 2852,5 / 2820,1 | 2235,5 / 2579,9 |
+| 1000 ms | 1614,1 / 2939,2 | 2072,2 / 2979,8 | 1892,2 / 2826,7 |
+| Recuperación limpia | 52,1 / 52,9 | 53,0 / 53,4 | 53,5 / 54,8 |
+
+Cada cifra es la mediana de los dos p95 finales por ventana, no un p95 global ni evidencia de significación estadística. Las edades se estiman con los relojes del enlace; su incertidumbre se conserva por separado en JSON. La edad nativa es el máximo entre slots conocidos al consumir un estado: **en el invitado también puede incluir su propio coche devuelto por el host**. No equivale a retraso de ida del coche remoto, ni mide el tiempo que sigue envejeciendo un estado cuando no llega otro. Por eso no se interpreta como medida directa de calidad visual. El resumen incluye, como apoyo, edades del predecesor muestreadas una vez por segundo; son pocas observaciones.
+
+El objetivo de 60 Hz no equivale a envío efectivo de 60 Hz. En la variante fija, a 300 ms/3 % se enviaron aproximadamente **14,6/14,7 estados por segundo**, y a 600 ms/3 % **7,5/2,6**. La asociación SCTP y la protección de búfer ya limitan el caudal aunque se deshabilite la reducción automática. La variante adaptativa llegó a objetivo 15 Hz bajo pérdida fuerte, pero su envío efectivo también pudo ser inferior. Ninguna de estas tasas cambió la velocidad de la lógica del arcade.
+
+## Conclusión y límites
+
+- **150 ms con jitter:** ambos canales nuevos mejoran intervalo y edad frente al anterior; fija y adaptativa quedan próximas. La mejora no requiere forzar 60 Hz y es compatible con un beneficio del canal/recibos nuevos. No se atribuye a un único componente interno sin otro experimento.
+- **300 ms con pérdida:** adaptativa es más regular que fija y reduce la edad agregada del host; el invitado sigue con una edad agregada superior a la referencia anterior. No hay una mejora uniforme de todas las métricas o cabinas.
+- **600–1000 ms:** persisten esperas grandes y regresiones. La variante fija tampoco las resuelve. En 600 ms la referencia anterior conserva edades menores en ambas cabinas; a 1000 ms el resultado sigue dependiendo de la cabina/métrica.
+- **Decisión:** no hay fundamento en este ensayo para eliminar la adaptación y fijar 60 Hz. Mantener la 52 adaptativa como candidata, con la 51/ruta fiable preservadas; no declararla superior universal ni cambiar el ZIP basándose sólo en un intervalo p95 más pequeño.
+
+Esta prueba aísla transporte/frecuencia en un único PC y ventanas cortas. No valida redes WAN/iPhone, ocho motores ni colisiones o posiciones visibles exactas. Se guardaron XYZ nativos enviados/recibidos para observar desfase de estados crudos; la distancia entre esos datos **no es el error del coche renderizado**, porque excluye la predicción/interpolación nativa. Las trayectorias y colisiones pueden variar pese a repetir los controles. Los percentiles por recepción tampoco sustituyen una medición temporal continua de envejecimiento o un juicio de conducción.
+
+Evidencia: `build/motion-frequency-ab/report.json` (trazas, perfiles, rutas y hashes), `summary.json` (resumen reproducible), capturas de cada pasada. Analizador: `node scripts/analyze-motion-frequency.cjs`. Las herramientas locales de prueba cierran sus navegadores, servidor y relay al terminar. No se inició otra prueba ni se publicó una nueva versión después de esta comparación.
+
+---
+
+# 2026-10-20 — 52: canal de estados descartables y adaptación de frecuencia
+
+## Implementación final
+
+Carpeta nueva `multiplayer-motion-channel`; 51 y su ZIP se preservan. Se añade un segundo **RTCDataChannel negociado** al mismo RTCPeerConnection de cada enlace central: `negotiated:true`, ID libre (normalmente 16), `ordered:false`, `maxRetransmits:0`. El otro extremo crea explícitamente ese ID mediante oferta/confirmación enviadas por el canal fiable y ya autenticado. No se modifican los internos de PeerJS ni su manejador `ondatachannel`; el canal negociado no genera el anuncio que PeerJS podría confundir con su canal principal. Se verifican las propiedades realmente creadas y se usa la ruta fiable cuando no se admiten.
+
+El host fija qué enlaces usan movimiento nuevo en el mensaje fiable de preparación de cada sesión, asociado a su nonce y roster. Un handshake que termine después sólo sirve para otra sesión. No se cambia de método silenciosamente a mitad de carrera. Un cierre aislado del canal coordina un fallback por el fiable; conserva epoch, distribuidor y secuencia. Salas, aprobación, chat, Ready, arranque, informes y autoridad de resultados siguen siendo fiables. El control del juego (posición/física/render) y los 17 archivos de fuentes nativas y el motor no se modifican.
+
+`motion-codec.js` empaqueta estados completos de muestra o estado central compacto. Cabecera de 96 bytes, epoch, contadores seguros, tiempos Float64 y metadatos de slots; máximo 3.877 bytes para ocho cabinas. Los bytes nativos y sus relojes se reconstruyen exactamente. Se validan tamaño, identidad del emisor, tipo permitido, epoch, roster y secuencia. Datos antiguos no pueden hacer retroceder el último estado aceptado. El canal no permite codificar comandos de sala ni resultados finales. Las aplicaciones locales que fallen siguen produciendo un error real; datos de red malformados se descartan sin escribir en el motor.
+
+`LatestFlow` mantiene un único estado local pendiente y como máximo 256 registros de confirmación. **No aplica la ventana de ocho créditos** de SnapshotFlow. Expirar un registro no simula que haya llegado; otra confirmación válida permite avanzar sin esperar a cada entrega perdida. Los ACK más altos hacen innecesarios los anteriores, pero eso no demuestra que se hayan recibido todos.
+
+El receptor aporta un bitmap redundante de 32 entregas recientes dentro de sus propios estados. Los ping/pong fiables existentes llevan el mismo resumen como respaldo, sin otro temporizador de red. Para estimar huecos se dejan pasar 16 entregas posteriores y se consideran las últimas 64 observaciones; las que ya no cubre el bitmap permanecen desconocidas. Se distingue **ausencia de observación de un snapshot** de pérdida UDP: no es una medida de pérdida de red ni un diagnóstico causal.
+
+La frecuencia objetivo inicial es 60 Hz; mínimo 15, máximo 60. Baja ante una cola sostenida, feedback ausente o huecos de recepción reiterados; **no baja por el valor absoluto del ping**. La cola breve normal de RTC y los pasos agrupados del simulador no cuentan como congestión sostenida (se comprueba una espera de al menos 35 ms o dos intervalos). La subida es gradual, hasta 6 Hz/s después de un segundo sin presión. Los tiempos de confirmación y su jitter ajustan la tolerancia de feedback, no un límite RTT/6. La ruta de referencia conserva SnapshotFlow anterior sin modificar.
+
+La cola observable RTC debe estar vacía antes de presentar otro estado; se sustituye el pendiente local mientras tanto. Los mensajes en vuelo y el búfer interno de SCTP no equivalen a esa cola observable. La planificación tiene una tolerancia temporal de un intervalo: máximo dos envíos inmediatos para absorber temporizadores cuantizados de Windows; nunca vuelve a transmitir todo un backlog tras una pausa. Un único temporizador por sala sirve a sus enlaces; se retira al terminar o salir.
+
+## Decisiones y limitaciones
+
+No se conservó el experimento de caducidad de transmisión de 100 ms. Un estado grande puede fragmentarse en SCTP y, con RTT alto o una ventana congestionada, ese plazo puede ser demasiado corto para completar su primera transmisión. La configuración final evita retransmitir estados y limita la cola observable; no promete borrar bytes que ya estén dentro de SCTP o en Internet.
+
+Separar canales no separa la asociación SCTP, su control de congestión ni la conexión física. El flujo de movimiento puede sufrir todavía por esa congestión y por mensajes fiables grandes. Los estados siguen incluyendo bloques completos del arcade: no se transforman en una simulación autoritativa moderna ni se rehacen sus colisiones. La clasificación/fin de carrera fiable anterior permanece intacta. No se amplían timeouts ni se declara desconectado a alguien por ping alto o por el porcentaje estimado de huecos.
+
+La configuración final está en los reportes con hashes exactos de los archivos publicados. Las iteraciones preliminares y sus errores no son un A/B controlado de la entrega final y no fundamentan las cifras comparativas siguientes.
+
+## Validación
+
+- Pruebas unitarias del codec: bytes exactos, tiempos Float64, compactación/expansión de 2–8 cabinas, máscara de recibos, tamaños/mensajes malformados y rechazo de acciones ajenas a movimiento.
+- LatestFlow: pérdida de estados y feedback sin agotamiento de créditos, RTT 150–1000 ms con jitter, backpressure y recuperación, cola pendiente obsoleta, errores de envío transaccionales, observador que falla, bookkeeping acotado, nueva espera después de idle, cuantización de 15,625 ms y envío agrupado acotado. Se prueba que perder ACK no invente pérdida de snapshots y que la cola breve de un paso doble no reduzca la tasa.
+- Integración: canal fiable intacto, modo mixto por cliente, epoch antiguo y datos inválidos, cierre y fallback sin reinicio, propiedades de fiabilidad no admitidas, desmontaje y health con seguimiento de hasta 256 registros.
+- A/B por el mismo frontend 52: `movement=reliable` conserva el algoritmo 51; `adaptive` usa el nuevo. Chrome y TURN/UDP de loopback autenticado, degradación por debajo de DTLS/SCTP tras establecer ICE, rutas relay comprobadas. 2/6/8 conexiones y siete perfiles por grupo: limpio con captura, limpio sin captura, 150 ms/±25 ms, 300 ms/±25 ms/3 % UDP, 1000 ms sin pérdida, sólo último invitado 600 ms/±50 ms/3 %, recuperación limpia. Jitter uniforme por trayecto. Mismo seed y secuencia de perfiles; no se presupone la misma secuencia de paquetes o pérdidas al cambiar el protocolo.
+- Los ocho endpoints de esa matriz usan muestras sintéticas con formato nativo a frecuencia nominal 57,52 Hz (el temporizador del navegador redondea); no equivalen a ocho motores/GPU ni a una prueba WAN o iPhone.
+- Prueba de dos motores WASM publicados en Endurance con carrera real, coches CPU y clasificación compartida. Se miden tanto frames del simulador como reloj/ticks de carrera originales para descartar un falso SIM estable con lógica lenta. Captura activada/desactivada, 150 ms con jitter, 300/600 ms con jitter y 3 % UDP y 1000 ms sostenidos. Exportación real de Connections y UI a 1.200×900 / 390×844. No se escriben datos Firebase durante los tests.
+- Prueba nativa adicional: 1,5 s sin feedback del movimiento ni el respaldo fiable, sin frenar las entregas después de ocho; reanudación posterior. Cierre sólo del canal de movimiento y continuidad de carrera/reloj usando la ruta fiable.
+
+## Resultados finales
+
+Pasaron **247 pruebas unitarias**, los **42 escenarios de transporte** (dos métodos × 2/6/8 endpoints × siete perfiles), las catorce ventanas de dos motores reales (siete por método) y la prueba nativa de pérdida de feedback/fallback. Los reportes finales incluyen hashes de los archivos publicados. No hubo interrupciones de sesión en esos perfiles. Esto verifica continuidad y límites internos bajo esas condiciones, no calidad perfecta de conducción ni ocho motores reales.
+
+Comparación sintética con ocho endpoints, observada por el host:
+
+| Perfil | Intervalo de llegada p95, anterior → nuevo | Edad de origen p95, anterior → nuevo | TX del host, anterior → nuevo |
+|---|---:|---:|---:|
+| Limpio | 19,2 → 24,5 ms | 4,0 → 12,4 ms | 1.715,5 → 1.558,8 KiB/s |
+| 150 ms, jitter ±25 ms por trayecto | 83,4 → 50,2 ms | 104,4 → 102,1 ms | 455,8 → 401,0 KiB/s |
+| 300 ms, jitter ±25 ms y 3 % UDP | 437,2 → 208,8 ms | 560,2 → 280,2 ms | 171,6 → 116,1 KiB/s |
+| 1000 ms, sin pérdida añadida | 471,5 → 537,2 ms | 663,0 → 1.060,3 ms | 94,2 → 97,6 KiB/s |
+| Recuperación limpia | 22,3 → 23,8 ms | 12,3 → 11,9 ms | 1.721,8 → 1.579,2 KiB/s |
+
+Cada cifra de intervalo/edad es la mediana entre los p95 recientes de las conexiones del host en el último punto del perfil; no un p95 global de toda la prueba. Las edades son estimadas con el reloj del enlace. TX suma mensajes serializados de control y movimiento, sin UDP/IP, cifrado ni retransmisiones. Las ventanas y la secuencia de perfiles son cortas y pueden arrastrar recuperación de SCTP. Son observaciones A/B locales, no promedios estadísticos de Internet.
+
+La mejora es clara en la regularidad a 150 ms y en intervalo/edad a 300 ms con pérdida en esa matriz; en limpio se reduce aproximadamente un 9 % el tráfico serializado del host, pero algunos intervalos empeoran ligeramente. **A 1000 ms no hay una mejora uniforme y aparecen regresiones.** Con un único invitado degradado a 600 ms/±50 ms/3 %, los demás siguen activos; la mediana entre todos no representa la experiencia del invitado degradado.
+
+En las dos cabinas WASM reales, frames, reloj original y ticks de carrera avanzaron juntos a aproximadamente **57,5 Hz** en ambos métodos, incluso con 1000 ms: no se confundió fluidez del contador SIM con avance de la lógica. A 150 ms los intervalos p95 pasaron de 74,6/73,8 a 59,9/50,2 ms (host/invitado). A 300 ms/3 % pasaron de 345,6/363,6 a 228,9/219,9 ms. Sin embargo, la edad nativa p95 del host a 300 ms pasó de 678,7 a 799,0 ms; en 600–1000 ms también hubo edades peores. La regularidad de entrega por sí sola no demuestra estados más recientes en todos los casos. Al recuperar red limpia, ambos métodos recuperaron intervalos cercanos a 28 ms y edades nativas cercanas a 53–58 ms.
+
+La prueba adicional suprimió durante 1,5 s las confirmaciones redundantes y su respaldo fiable, manteniendo los estados de movimiento. El host siguió enviando más de ocho estados y el motor siguió avanzando; después se recuperó el feedback en la misma sesión. Cerrar únicamente el canal opcional permitió continuar por el fiable, con el mismo epoch y enlace nativo 2. No se simula con ello la caída completa de WebRTC.
+
+Conclusión: **52 es una candidata para A/B con jugadores**, especialmente en 150–300 ms; no sustituye la evidencia de partidas reales ni justifica prometer mejoras en todos los extremos. Se conserva la 51 y la ruta `?movement=reliable`. Las evidencias completas están en `build/motion-channel/`: `unit-tests.txt`, `transport-{adaptive,reliable}.json`, `native-{adaptive,reliable}.json`, `native-edge-adaptive.json`, exportaciones reales de Connections y capturas. Los resúmenes derivados son `transport-ab-summary.json` y `native-ab-summary.json`.
+
+## Uso y conservación
+
+`http://localhost:8124/` usa el canal nuevo cuando está disponible. `?movement=reliable` antes de crear/unirse sirve como referencia; un host con ese parámetro mantiene todos sus enlaces por la ruta anterior. La selección queda fijada por carrera. **Connections → Record diagnostics → Export all reports** incluye ambos transportes, frecuencia, colas, edad e incertidumbre y feedback estimado. No hace falta Show performance. Todos deben usar 52.
+
+Reglas/configuración Firebase y seguridad de producción no cambian; no se añaden escrituras de estos diagnósticos. La 51 conserva ZIP SHA256 `43e40e4957a46aa3264877e73a36aad37536148f785aca08e26382a7491fa3b5`. Motor WASM intacto: `e51a3fcccdaf4e8e4468bdf17d0d1182d4dd6febe8952d26d78d07adf3cd2ac7`.
+
+Fuentes primarias: [W3C RTCDataChannel y fiabilidad](https://www.w3.org/TR/webrtc/), [W3C estadísticas WebRTC](https://www.w3.org/TR/webrtc-stats/), [API de PeerJS](https://peerjs.com/client/api/peer). El bundle se inspeccionó: reliable:false sólo cambia ordered; por eso no se usa como sustituto de maxRetransmits.
+
+---
+
+# 2026-10-20 — 51: línea base de medición WebRTC
+
+## Alcance y decisión
+
+Se comienza por los puntos 1 y 4 antes de modificar la entrega del movimiento o la adaptación de frecuencia. Nueva carpeta `multiplayer-transport-diagnostics`, separada de `multiplayer-public-rooms` (50.1). No se cambian el motor, los shaders, el enlace central, las colisiones, la autoridad de resultados ni los límites de desconexión. El nuevo BUILD_ID obliga a usar 51 en todas las cabinas. No se modifican reglas, proveedores, cuotas ni opciones del proyecto Firebase de producción.
+
+## Mediciones y límites
+
+- `transport-probe.js`: ventanas circulares Float64Array de 256 observaciones y percentiles calculados como máximo cada 500 ms; apagado real de la captura con el control existente de Connections. Se conservan los informes previos, identificados como antiguos.
+- Envoltorio transparente del método público RTCDataChannel.send y observador de mensajes: cuenta los argumentos efectivamente entregados a RTC y conserva this, argumentos, retorno y errores. Al cerrar el canal restaura el método y retira su listener. Si el método no puede envolverse, se informa que la medición no está disponible.
+- `peerjsPrepare`: duración de llamada síncrona PeerJS menos tiempo medido dentro de RTC.send. Incluye gestión, empaquetado, fragmentación y parte de instrumentación. No es un perfil puro del serializador, ni mide preparación asíncrona; esta última se cuenta separadamente.
+- `receiveEvent`: tiempo desde Event.timeStamp hasta el observador RTC local. Incluye planificación y manejadores previos; no mide únicamente decodificación, ni cubre la decodificación asíncrona que termine después. Se comprobó que los listeners RTC no pueden suponerse anteriores al manejador PeerJS; no se resta la llegada del paquete previo para inventar una medida de decode/dispatch.
+- `receiptRtt`: confirmaciones de aplicación reales, distintas del RTT ICE del navegador. `pendingWait`: espera del estado más reciente; `creditWait`: espera continua con un estado pendiente, aunque se hayan sustituido estados viejos. Los contadores `gatedWindow/Buffer/Pacer` cuentan intentos de envío bloqueados, no datagramas perdidos.
+- `receiveGap`: intervalos entre estados nuevos aceptados, no entre cualquier mensaje de sala. `sourceAge/Uncertainty`: edad máxima conocida entre slots y máxima incertidumbre, separadas. `nativeWait/Age/Uncertainty`: observación antes de NativeStateInbox.take; no cambia los bytes entregados al motor ni pretende medir presentación en pantalla.
+- `getStats`: sólo atributos de data-channel y candidate-pair realmente expuestos, sin inventar pérdida UDP a partir de métricas RTP. No se añaden direcciones IP, puertos, tokens ni cadenas del navegador a los campos nuevos normalizados.
+- Bytes RTC: mensajes serializados, sin cabeceras/cifrado/retransmisiones. Bytes ICE: estadísticas independientes del navegador, tampoco equivalen al coste físico total. El host suma las tasas recientes de canales abiertos; sus ventanas de tasa pueden tener límites de tiempo distintos.
+- Los campos remotos se validan con lista permitida y límites; hasta ocho enlaces por muestra, 300 muestras por cabina e historial existente. Se reutilizan los informes de rendimiento y sus confirmaciones; no se añade otra tarea periódica de red ni escrituras Firebase.
+
+## Pruebas
+
+- `tests/transport-probe.test.js`: transparencia del hook, bytes UTF-8/ArrayBuffer/view/Blob, desmontaje, método no modificable, apagado/reinicio, ventanas acotadas, edad del evento, incertidumbre, entrega nativa idéntica, saneamiento de informes.
+- Comparación determinista con el SnapshotFlow original 50.1: **10.000 operaciones** de ofertas, presión de búfer, fallos de envío y confirmaciones válidas/duplicadas/futuras. Mismos datos enviados, orden, créditos y decisiones de cadencia, incluso si falla el observador. La referencia está sólo en `tests/fixtures/`.
+- Matriz sintética: PeerJS y canales RTC reales por TURN/UDP autenticado de loopback. Dos, seis y ocho endpoints. Por grupo: limpio con captura, limpio sin captura, RTT nominal 150 ms con jitter uniforme ±25 ms por trayecto, 300 ms con el mismo jitter y 3 % de pérdida por datagrama, sólo el último invitado a 600 ms/±50 ms/3 %, recuperación limpia. El deterioro se introduce debajo de DTLS/SCTP, tras negociar ICE, y se verifica ruta relay. Temporizador de entrada nominal 57,52 Hz (setInterval redondeado por el navegador); se informa la frecuencia medida, no se presupone que sea la del arcade.
+- Se reinician ventanas de medición entre perfiles, sin reiniciar los créditos ni modificar el algoritmo de entrega; pueden quedar retransmisiones y estimadores en recuperación. Se comprueba que sigan en partida, vuelo ≤8, pendiente ≤1, captura apagada sin métricas nuevas y entrega al host de los informes remotos. No es una certificación WAN, iPhone, renderizado ni física de ocho motores.
+- Dos motores WASM publicados sin exports de investigación: sala privada, Chrome/WebGL2 Classic, captura activada/desactivada/activada, perfil 150 ms ±25 ms por trayecto; verificación de enlace, avance de frames, informes de ambos, exportación real desde Connections y UI desktop/móvil. La prueba deshabilita Analytics/directorio sólo en el navegador de desarrollo para no escribir en Firebase.
+- Microbenchmark Node de siete sondas, 60 ciclos/s y 100 segundos virtuales por repetición, cinco repeticiones. Coste observado adicional mediano aproximado **1,99 ms de CPU por segundo virtual**, máximo 2,08 ms, exclusivamente de esas llamadas. No es una medición de CPU completa del juego o del navegador.
+
+Las evidencias finales están en `build/transport-diagnostics/`: unit-tests.txt, transport-browser.json, native-browser.json, connections-export.json, probe-cost.json y capturas. El empaquetado valida sus hashes contra los archivos publicados y verifica que la 50.1 y JS/WASM/fuentes nativas estén intactos.
+
+## Resultados finales
+
+La matriz final pasó los **18 escenarios** (seis perfiles × dos/seis/ocho endpoints) sin interrupciones de sesión; vuelo máximo ocho y un estado pendiente como máximo. Esto valida el transporte sintético bajo estas condiciones, no ocho motores renderizando.
+
+| Endpoints | Host RTC TX limpio (KiB/s) | TX a 150 ms ±25 ms (KiB/s) | TX a 300 ms ±25 ms / 3 % (KiB/s) | Confirmación mediana a 300 ms (rango por enlace) |
+|---:|---:|---:|---:|---:|
+
+| 2 | 72.4 | 36.7 | 14.0 | 406–406 ms |
+
+| 6 | 938.6 | 328.6 | 81.3 | 452–731 ms |
+
+| 8 | 1732.7 | 435.9 | 120.0 | 648–845 ms |
+
+
+Son tasas recientes del último punto del perfil, no capacidad máxima de la red ni medias de partidas reales. La matriz de entrada sintética quedó alrededor de 58,6–58,9 ciclos/s por redondeo de setInterval, tanto con captura como sin ella; no debe llamarse simulación nativa a 57,52 Hz. En limpio con ocho endpoints, 1.732,7 KiB/s de TX serializado del host son aproximadamente 14,2 Mbit/s decimales antes de cabeceras y retransmisiones: el reparto sigue creciendo con el número de destinos y merece una revisión posterior del empaquetado/frecuencia.
+
+Con dos endpoints y 300 ms/±25 ms/3 %, el RTT ICE final fue 326 ms y la mediana de confirmación 406 ms; gap p95 285 ms, edad del estado p95 578 ms con incertidumbre de reloj p95 de unos 6 ms. La preparación PeerJS p95 fue 0,3 ms y la edad del callback RTC p95 0,5 ms en este equipo. Las ventanas se reiniciaron por perfil, pero la recuperación del protocolo y del reloj se conservaron. Esto **sugiere** que, en este escenario, retransmisiones/orden, confirmaciones y adaptación pesan más que la preparación síncrona. No demuestra que el mismo cuello ocurra en todos los dispositivos o redes, ni identifica cuánto aporta cada componente sin un A/B del canal.
+
+Con ocho endpoints y sólo el último enlace deteriorado a 600 ms/±50 ms/3 %, los seis enlaces sanos terminaron con confirmaciones medianas cercanas a 32–33 ms y gaps p95 de unos 30 ms; el deteriorado llegó a aproximadamente 1.510 ms de confirmación y 880 ms de gap p95. Continuaron todos activos. No prueba que las colisiones/poses de ese jugador se vean perfectas: una muestra antigua seguirá siendo antigua. En recuperación limpia se restableció el flujo sin reiniciar la sala.
+
+Siguiente paso técnico: A/B optativo de estados de movimiento descartables y ajustes de confirmación **con esta misma medición**; después revisar su adaptación de frecuencia. No basta reliable:false de PeerJS: el bundle actual sólo cambia ordered, y se debe controlar explícitamente la fiabilidad y evitar que la ventana espere para siempre el ACK de una muestra perdida. Sala/inicio/resultados conservarán entrega fiable. Esta parte aún no está implementada en 51.
+
+
+## Validación nativa y publicación
+
+La validación con dos motores publicados terminó **PASS**, sin errores de página ni del relay. Ambas cabinas conservaron enlace 2 y avanzaron más de 400 frames en cada ventana de diez segundos con captura activada, desactivada y 150 ms/±25 ms. Los informes recibidos por el host contienen las métricas de transporte y entrega a simulación de ambos participantes. Se descargó y leyó el archivo con el botón real **Export all reports** (reportVersion 3). Se inspeccionaron capturas a 1.200 × 900 y 390 × 844 sin desbordamiento horizontal. No se utiliza la duración de la llamada de automatización para afirmar una tasa nativa exacta; los valores SIM proceden del muestreo interno del juego.
+
+Pasaron **226 tests unitarios**. Motor WASM SHA256: `e51a3fcccdaf4e8e4468bdf17d0d1182d4dd6febe8952d26d78d07adf3cd2ac7`. No se recompiló ni alteró ese motor. El ZIP 50.1 preservado mantiene SHA256 `a9ddf636006273fa2d1b5d671517ff459f128d1591f8a59f00828040170dabb4`.
+
+## Fuentes técnicas
+
+[W3C WebRTC Statistics](https://www.w3.org/TR/webrtc-stats/), [W3C WebRTC](https://www.w3.org/TR/webrtc/), [WebRTC Data Channels](https://webrtc.org/getting-started/data-channels), [API oficial PeerJS](https://peerjs.com/client/api/peer). Las conclusiones de rendimiento se limitan a nuestras pruebas; las especificaciones respaldan el significado de los contadores, no certifican latencias de Internet.
+
+---
+
 # Investigaciones y documentación de Daytona USA Web
 
 ## 2026-10-19 — Versión 50.1: inactividad y protección del directorio

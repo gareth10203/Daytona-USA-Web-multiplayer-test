@@ -1,12 +1,12 @@
 // Optional room-local observations. Never infer packet loss from delayed data.
-export const HEALTH_PHASES=['idle','connecting','pending','lobby','preparing','playing','reconnecting','error'];
+export const HEALTH_PHASES=['idle','connecting','pending','waiting','lobby','preparing','playing','reconnecting','error'];
 export const STOP_CAUSES=['requested-stop','player-left','visibility-interruption','local-progress-timeout','remote-progress-timeout','snapshot-ack-timeout','preparation-timeout','prepare-failed','send-error','send-queue-limit','receive-error','data-handler-error','transport-interruption','arcade-link-error','arcade-start-timeout','local-runtime-error'];
 const number=(v,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=max;
 export function normalizeHealth(h){
- if(!h||h.version!==1||!Number.isSafeInteger(h.sequence)||h.sequence<1||!HEALTH_PHASES.includes(h.phase)||typeof h.visible!=='boolean'||typeof h.signaling!=='boolean')return null;
- const result={version:1,sequence:h.sequence,phase:h.phase,visible:h.visible,signaling:h.signaling};
+ if(!h||!(h.version===1||h.version===2&&h.flowMode==='latest')||!Number.isSafeInteger(h.sequence)||h.sequence<1||!HEALTH_PHASES.includes(h.phase)||typeof h.visible!=='boolean'||typeof h.signaling!=='boolean')return null;
+ const result={version:h.version,...(h.version===2?{flowMode:'latest'}:{}),sequence:h.sequence,phase:h.phase,visible:h.visible,signaling:h.signaling};
  if(['full','off'].includes(h.captureMode))result.captureMode=h.captureMode;
- for(const [key,max] of Object.entries({simulationHz:240,sampleMs:120000,bufferedBytes:1024**3,inFlight:8,pending:1,ackRttMs:120000,receiveBytes:16*1024**2,backlogMs:120000})){
+ for(const [key,max] of Object.entries({simulationHz:240,sampleMs:120000,bufferedBytes:1024**3,inFlight:h.version===2?256:8,pending:1,ackRttMs:120000,receiveBytes:16*1024**2,backlogMs:120000})){
   if(h[key]===null){result[key]=null;continue;}if(!number(h[key],max))return null;result[key]=h[key];
  }
  if(!Number.isInteger(result.inFlight)||!Number.isInteger(result.pending))return null;
@@ -19,11 +19,19 @@ export class HealthSampler {
   if(this.phase!==room.phase||this.epoch!==room.epoch||room.progressFrames<this.frames){this.phase=room.phase;this.epoch=room.epoch;this.at=now;this.frames=room.progressFrames;this.hz=null;this.duration=null;}
   if(room.active&&now-this.at>=500){this.duration=now-this.at;this.hz=(room.progressFrames-this.frames)*1000/this.duration;this.at=now;this.frames=room.progressFrames;}
   const conn=room.server,flow=conn?.snapshotFlow?.snapshot();
-  return {version:1,sequence:++this.sequence,captureMode:room.performanceCaptureEnabled===false?'off':'full',phase:room.phase,visible:!!room.isVisible(),signaling:!!room.signaling,simulationHz:room.active?this.hz:null,sampleMs:room.active?this.duration:null,
-   bufferedBytes:conn?.dataChannel?.bufferedAmount||0,inFlight:flow?.inFlight||0,pending:flow?.pending||0,ackRttMs:flow?.ackRttMs??null,receiveBytes:number(extra.receiveBytes,16*1024**2)?extra.receiveBytes:null,backlogMs:number(extra.backlogMs,120000)?extra.backlogMs:null};
+  return {version:conn?.raceMotion?2:1,...(conn?.raceMotion?{flowMode:'latest'}:{}),sequence:++this.sequence,captureMode:room.performanceCaptureEnabled===false?'off':'full',phase:room.phase,visible:!!room.isVisible(),signaling:!!room.signaling,simulationHz:room.active?this.hz:null,sampleMs:room.active?this.duration:null,
+   bufferedBytes:(conn?.dataChannel?.bufferedAmount||0)+(conn?.motion?.channel.bufferedAmount||0),inFlight:flow?.inFlight||0,pending:flow?.pending||0,ackRttMs:flow?.ackRttMs??null,receiveBytes:number(extra.receiveBytes,16*1024**2)?extra.receiveBytes:null,backlogMs:number(extra.backlogMs,120000)?extra.backlogMs:null};
  }
 }
 const explanations={
+ 'motion-open':['Movement channel opened','A negotiated unordered channel with zero retransmissions is available. The host selects transport before starting each session.'],
+ 'motion-active':['Latest-state movement active','This arcade session uses the independent discardable snapshot channel. Room commands and race results stay reliable.'],
+ 'motion-legacy':['Reliable movement active','This arcade session uses the compatible reliable snapshot path.'],
+ 'motion-closed':['Movement channel closed','The movement channel closed; when possible, the reliable control connection coordinates a fallback.'],
+ 'motion-error':['Movement channel error','The browser reported an error on the movement channel.'],
+ 'motion-unavailable':['Movement channel unavailable','This connection could not negotiate the optional movement channel. The reliable path remains available.'],
+ 'motion-timeout':['Movement negotiation timeout','The optional movement channel did not become ready within ten seconds.'],
+ 'motion-fallback':['Movement returned to reliable delivery','The connection switched both endpoints to the reliable snapshot path without changing the session epoch.'],
  'diagnostics-changed':['Diagnostics recording changed','The host changed detailed recording for the room. Connection supervision remains active.'],
  'channel-open':['Connected','The data channel opened.'],
  'channel-close':['Channel closed','The browser reported a closed data channel. This alone does not identify why it closed.'],
@@ -74,6 +82,7 @@ export function classifyConnection(row,playing){
  if(row.channelState==='closed'||row.connectionState==='closed')return {level:'bad',label:'Channel closed',detail:'The data channel is closed.'};
  const threshold=Math.max(3000,(row.rttMs||0)*3+1000);
  if(row.lastMessageAgeMs!==null&&row.lastMessageAgeMs>threshold)return {level:'warn',label:'No recent messages',detail:'Messages are delayed or absent. This does not prove the remote game is frozen.'};
+ if(row.waiting)return {level:'muted',label:'Waiting for next race',detail:'Room connection only. No arcade snapshots or simulation progress are expected until the next session.'};
  if(row.pending)return {level:'muted',label:'Awaiting admission',detail:'Connected join request. Game telemetry starts after host admission.'};
  if(!row.health||row.reportAgeMs>threshold)return {level:'muted',label:'Awaiting status',detail:'No recent optional status report is available. Other game messages may still be arriving.'};
  if(!row.health.visible)return {level:'warn',label:'Tab hidden · reported',detail:'The participant’s latest report says the game tab is hidden.'};

@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=50.1-public-security">
-  <link rel="stylesheet" href="host-console.css?v=50.1-public-security">
-  <link rel="stylesheet" href="controller-settings.css?v=50.1-public-security">
-  <link rel="stylesheet" href="input-settings.css?v=50.1-public-security">
-  <link rel="stylesheet" href="single-player.css?v=50.1-public-security">
-  <link rel="stylesheet" href="ui-consistency.css?v=50.1-public-security">
-  <link rel="stylesheet" href="menu-gamepad.css?v=50.1-public-security">
-  <link rel="stylesheet" href="race-standings.css?v=50.1-public-security">
-  <link rel="stylesheet" href="public-rooms.css?v=50.1-public-security">
+  <link rel="stylesheet" href="style.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="host-console.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="controller-settings.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="input-settings.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="single-player.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="ui-consistency.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="menu-gamepad.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="race-standings.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="public-rooms.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="waiting-room.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="game-chat.css?v=52.3-waiting-room">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -37,6 +39,13 @@
       <span class="rotate-hint">Rotate your phone for a wider view</span>
     </div>
   </main>
+    <aside id="gameChat" class="game-chat" hidden aria-label="Room chat">
+      <button id="gameChatToggle" class="game-chat-toggle" type="button" aria-controls="gameChatPanel" aria-expanded="true" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg><span>CHAT</span><span id="gameChatUnread" class="unread-badge" hidden>0</span></button>
+      <section id="gameChatPanel" class="game-chat-panel" aria-labelledby="gameChatTitle"><header class="chat-heading"><h2 id="gameChatTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>ROOM CHAT</h2><button id="gameChatHide" class="game-chat-hide" type="button" aria-label="Hide chat" title="Hide chat"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button></header>
+      <div class="game-chat-scroll"><ol id="gameChatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Room messages" tabindex="0"></ol><p id="gameChatEmpty" class="chat-empty">Meet your grid.<br>Chat until the engines start.</p><button id="gameChatNew" class="game-chat-new" type="button" hidden>New messages ↓</button></div>
+      <form id="gameChatForm" class="chat-form"><label for="gameChatInput" class="sr-only">Message to your room</label><input id="gameChatInput" maxlength="240" autocomplete="off" enterkeyhint="send" placeholder="Message your friends…" aria-describedby="gameChatFeedback"><button id="gameChatSend" class="game-chat-send" type="submit" aria-label="Send message" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 9-18 9 4-9-4-9ZM7 12h14"/></svg></button></form><p id="gameChatFeedback" class="game-chat-feedback" role="status">Chat pauses during the race.</p></section>
+    </aside>
+  <aside id="waitingToast" class="waiting-toast" hidden role="status" aria-live="polite" aria-atomic="true"></aside>
   <div id="overlay" class="launcher">
     <div id="menuDialog" class="launcher-content" role="dialog" aria-modal="true" aria-labelledby="gameTitle">
       <div id="mainMenu">
@@ -207,7 +216,7 @@
         <div class="modal-stripe" aria-hidden="true"></div>
         <header class="connection-header"><button id="hostConsoleBack" type="button" class="quiet-btn ui-button ui-quiet">← Back</button><div><span class="room-eyebrow">HOST TOOLS</span><h1 id="hostConsoleTitle">Connection console</h1></div><button id="hostConsoleExport" type="button" class="ui-button ui-secondary">Export all reports ↓</button></header>
         <div class="connection-summary"><span id="hostConsoleState" class="phase-pill"></span><p id="hostConsoleSummary"></p></div>
-        <div class="connection-diagnostics-tools"><label class="connection-diagnostics-toggle"><input id="roomDiagnosticsEnabled" type="checkbox" checked><span>Record diagnostics<small>Applies to every cabinet in this room</small></span></label><div class="connection-local-tools"><label><input id="diagnosticsEnabled" type="checkbox">Show local overlay</label><button id="downloadDiagnostics" type="button" class="quiet-btn ui-button ui-quiet">Local report ↓</button></div><p id="roomDiagnosticsStatus" role="status"></p></div>
+        <div class="connection-diagnostics-tools"><label class="connection-diagnostics-toggle"><input id="roomDiagnosticsEnabled" type="checkbox"><span>Record diagnostics<small>Applies to every cabinet in this room</small></span></label><div class="connection-local-tools"><label><input id="diagnosticsEnabled" type="checkbox">Show local overlay</label><button id="downloadDiagnostics" type="button" class="quiet-btn ui-button ui-quiet">Local report ↓</button></div><p id="roomDiagnosticsStatus" role="status"></p></div>
         <p id="hostConsoleIncident" class="connection-incident" hidden></p>
         <div class="settings-tabs connection-tabs" role="tablist" aria-label="Connection console view"><button id="connectionPlayersTab" role="tab" aria-selected="true" aria-controls="connectionPlayersPanel" type="button">Players <span id="connectionPlayerCount"></span></button><button id="connectionEventsTab" role="tab" aria-selected="false" aria-controls="connectionEventsPanel" tabindex="-1" type="button">Events <span id="connectionEventCount"></span></button></div>
         <section id="connectionPlayersPanel" role="tabpanel" aria-labelledby="connectionPlayersTab">
@@ -219,8 +228,8 @@
       </section>
     </div>
   </div>
-  <small id="buildVersion" class="build-version"><span>v50.1</span> · <time datetime="2026-10-19">19.10.26</time></small>
+  <small id="buildVersion" class="build-version"><span>v52.3</span> · <time datetime="2026-10-20">20.10.26</time></small>
   <div id="menuGamepadHints" class="menu-gamepad-hints" role="status" aria-label="Controller menu controls" hidden></div>
-  <script src="vendor/peerjs.min.js?v=50.1-public-security" defer></script><script src="daytona_engine.js?v=50.1-public-security" defer></script><script type="module" src="main.js?v=50.1-public-security"></script>
+  <script src="vendor/peerjs.min.js?v=52.3-waiting-room" defer></script><script src="daytona_engine.js?v=52.3-waiting-room" defer></script><script type="module" src="main.js?v=52.3-waiting-room"></script>
 </body>
 </html>
