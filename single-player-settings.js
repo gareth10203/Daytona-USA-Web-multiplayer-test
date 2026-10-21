@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=52.5-race-options';
-import {raceOptionsMask,validateSettings} from './room-settings.js?v=52.5-race-options';
+import {DEFAULT_EEPROM} from './nvram.js?v=52.8-arrival-alerts';
+import {raceOptionsMask,validateSettings} from './room-settings.js?v=52.8-arrival-alerts';
 
 export const SINGLE_SETTINGS_ID='daytona-single-player-race-v1';
 export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,pitStops:true,region:'Export'});

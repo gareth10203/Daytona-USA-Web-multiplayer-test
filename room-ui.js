@@ -1,16 +1,18 @@
-import {mountWaitingToast} from './waiting-room.js?v=52.5-race-options';
-import {PublicRoomDirectory} from './public-rooms.js?v=52.5-race-options';
-import {createFirebaseDirectoryBackend} from './firebase-client.js?v=52.5-race-options';
-import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=52.5-race-options';
-import {carColor} from './car-colors.js?v=52.5-race-options';
-import {parseInvitation,invitation} from './room-settings.js?v=52.5-race-options';
-import {createLobbyNotifications} from './lobby-notifications.js?v=52.5-race-options';
+import {mountRoomInvitation} from './room-invitation.js?v=52.8-arrival-alerts';
+import {mountWaitingToast} from './waiting-room.js?v=52.8-arrival-alerts';
+import {PublicRoomDirectory} from './public-rooms.js?v=52.8-arrival-alerts';
+import {createFirebaseDirectoryBackend} from './firebase-client.js?v=52.8-arrival-alerts';
+import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=52.8-arrival-alerts';
+import {carColor} from './car-colors.js?v=52.8-arrival-alerts';
+import {parseInvitation,invitation} from './room-settings.js?v=52.8-arrival-alerts';
+import {createLobbyNotifications} from './lobby-notifications.js?v=52.8-arrival-alerts';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
-export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
+export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enableArrivalNotifications=()=>{},notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry'),singlePanel=$('singlePlayerPanel');
+ const invitationMenu=mountRoomInvitation({container:$('roomInvite'),trigger:$('inviteRoom'),content:$('inviteBlock'),closeButton:$('closeInvite'),initialFocus:$('copyRoom')});let invitePhase='';
  const directory=new PublicRoomDirectory({backend:createFirebaseDirectoryBackend});
- let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',pendingIDs=new Set(),unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='';
+ let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='';
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
  const toast=mountWaitingToast(document.getElementById('waitingToast'));
  const notifications=createLobbyNotifications({notifyChat,notifyReady,notifyConfirmed});
@@ -20,6 +22,7 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
  function layout(active,showGuide=false){$('menuDialog').classList.remove('single-view');singlePanel.hidden=true;$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
  function navigation(next=view){
+  if(next!=='room')invitationMenu.close();
   view=next;
   choices.hidden=view!=='modes'||!verified;
   const resume=view==='modes'&&verified&&canResume();
@@ -51,9 +54,10 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
  $('singlePlayer').onclick=action(async()=>{setURL('');room.leave();showModes();await single();});
  $('multiplayerPlayer').onclick=()=>showEntry();
  $('modeBack').onclick=()=>{setURL('');showModes();};
- $('createRoom').onclick=entryAction(async()=>{void unlockAudio();rememberName();const visibility=document.querySelector('input[name="roomVisibility"]:checked').value;if(visibility==='public'){await directory.prepare();if(view!=='entry'||entry.hidden)return;}setURL('');directory.setBrowsing(false);panel.hidden=false;entry.hidden=true;await room.create($('driverName').value,{visibility,roomName:$('publicRoomName').value});if(room.phase==='lobby')setURL(room.snapshot().code);});
+ $('createRoom').onclick=entryAction(async()=>{void unlockAudio();void enableArrivalNotifications();rememberName();const visibility=document.querySelector('input[name="roomVisibility"]:checked').value;if(visibility==='public'){await directory.prepare();if(view!=='entry'||entry.hidden)return;}setURL('');directory.setBrowsing(false);panel.hidden=false;entry.hidden=true;await room.create($('driverName').value,{visibility,roomName:$('publicRoomName').value});if(room.phase==='lobby')setURL(room.snapshot().code);});
  $('joinRoom').onclick=entryAction(async()=>{directory.setBrowsing(false);void unlockAudio();const parsed=parseInvitation($('joinCode').value);rememberName();setURL(invitation(parsed.host,parsed.token));panel.hidden=false;entry.hidden=true;await room.join($('joinCode').value,$('driverName').value);});
  mountPublicRoomBrowser(directory,{join:async listed=>{try{void unlockAudio();rememberName();directory.setBrowsing(false);setURL(listed.invite);panel.hidden=false;entry.hidden=true;await room.join(listed.invite,$('driverName').value,{publicRoom:true});}catch(e){$('entryStatus').textContent=e.message;showEntry(false);}}});
+ $('pendingJump').onclick=()=>{const first=$('pendingList').querySelector('button:not(:disabled)');if(first){first.focus({preventScroll:true});first.scrollIntoView({block:'nearest',inline:'nearest'});}};
  $('leaveRoom').onclick=()=>{room.leave();showEntry();};
  $('seatSwapAccept').onclick=()=>{const o=room.swapFor(room.id);if(o)room.answerSwap(o.id,true);};
  $('seatSwapDecline').onclick=()=>{const o=room.swapFor(room.id);if(o)room.answerSwap(o.id,false);};
@@ -61,8 +65,13 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
  $('readyRoom').onclick=()=>{void unlockAudio();const me=room.members.find(x=>x.id===room.id);room.ready(!me?.ready);};
  $('startRoom').onclick=action(async()=>{void unlockAudio();await room.start();});
  $('stopRoom').onclick=()=>room.end('The host returned everyone to the room.',room.id,'requested-stop','action');
- $('copyRoom').onclick=action(async()=>{await navigator.clipboard.writeText($('inviteLink').value);$('roomMessage').textContent='Link copied. Share it with your friends.';});
- $('copyCode').onclick=action(async()=>{await navigator.clipboard.writeText($('roomCode').textContent);$('roomMessage').textContent='Room code copied.';});
+ async function copyInvitation(value,message){
+  try{await navigator.clipboard.writeText(value);$('inviteFeedback').dataset.state='success';$('inviteFeedback').textContent=message;$('roomMessage').textContent=message;}
+  catch{$('inviteFeedback').dataset.state='error';$('inviteFeedback').textContent='Could not copy automatically. Select the link and copy it manually.';}
+ }
+ $('copyRoom').onclick=()=>copyInvitation($('inviteLink').value,'Link copied. Share it with your friends.');
+ $('copyCode').onclick=()=>copyInvitation($('roomCode').textContent,'Room code copied.');
+ $('inviteRoom').addEventListener('click',()=>{if(invitationMenu.isOpen()){$('inviteFeedback').textContent='';delete $('inviteFeedback').dataset.state;}});
  $('inviteLink').onclick=event=>event.target.select();
  $('returnRoomGame').onclick=()=>$('startBtn').click();
  // Page choice belongs to this browser; room updates must never steal it.
@@ -140,18 +149,18 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
   $('seatSwapMessage').textContent=incoming?`${other?.name||'A driver'} offers car ${offer.fromCabinet} for your car ${offer.toCabinet}. `:`You offered car ${offer.fromCabinet} for ${other?.name||'the driver'}’s car ${offer.toCabinet}. `;
   $('seatSwapAccept').hidden=$('seatSwapDecline').hidden=!incoming;$('seatSwapCancel').hidden=incoming;
   for(const id of ['seatSwapAccept','seatSwapDecline','seatSwapCancel'])$(id).disabled=!!state.seatActionPending;
-  if(stamp!==swapStamp){swapStamp=stamp;if(incoming)notifyRequest();if(!$('overlay').hidden&&$('settingsModal').hidden&&$('hostConsole')?.hidden!==false&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName))$(incoming?'seatSwapAccept':'seatSwapCancel').focus({preventScroll:true});}
+  if(stamp!==swapStamp){swapStamp=stamp;if(incoming)notifyRequest();if(!$('overlay').hidden&&$('settingsModal').hidden&&$('hostConsole')?.hidden!==false&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)){const target=$(incoming?'seatSwapAccept':'seatSwapCancel');target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest'});}}
  }
 
  return {
   single(){directory.setBrowsing(false);layout(true,true);navigation('single');$('menuDialog').classList.add('single-view');singlePanel.hidden=false;entry.hidden=true;panel.hidden=true;$('menuDialog').setAttribute('aria-labelledby','singleTitle');},
   modes(){showModes();$('singlePlayer').focus();},
   opened(){navigation();},
-  backLabel(){const o=room.swapFor(room.id);return o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)?o.to===room.id?'Decline swap':'Cancel request':null;},
-  escape(){const o=room.swapFor(room.id);if(o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)){o.to===room.id?room.answerSwap(o.id,false):room.cancelSwap(o.id);return true;}if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
+  backLabel(){if(invitationMenu.isOpen())return 'Close invite';const o=room.swapFor(room.id);return o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)?o.to===room.id?'Decline swap':'Cancel request':null;},
+  escape(){if(invitationMenu.close(true))return true;const o=room.swapFor(room.id);if(o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)){o.to===room.id?room.answerSwap(o.id,false):room.cancelSwap(o.id);return true;}if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
   verified(){verified=true;$('startBtn').hidden=true;$('dropzone').hidden=true;syncInvitation();if(invitationFromURL(location.href))showEntry(false);else{showModes();$('singlePlayer').focus();}},
   loading(){directory.setBrowsing(false);layout(false);verified=false;navigation('loading');entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;},
-  running(){directory.setBrowsing(false);if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
+  running(){invitationMenu.close();directory.setBrowsing(false);if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
   link(state,_id,count){
    // Discovery numbers the guests backwards. The lobby seat is the driver's
    // public cabinet/car number; the native link ID is transport identity only.
@@ -164,8 +173,9 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
    toast.sync(state);directory.updateHost(state);if(state.phase!=='idle')directory.setBrowsing(false);
    notifications.update(state);
    $('networkStatus').hidden=state.phase!=='playing';$('arcadeLinkStatus').hidden=state.phase!=='playing';
-   const key=state.host||state.id||'idle';if(key!==roomKey){roomKey=key;pendingIDs=new Set();pendingStamp='';lastChatSeq=0;lastAckCommand=0;lastSeatAck=0;previousSeat=null;focusSeatReady=false;swapStamp='';$('seatStatus').textContent='';messages.clear();$('chatLog').replaceChildren();cards.clear();emptySeats.clear();$('playersList').replaceChildren();$('chatInput').value='';$('chatLength').textContent='0/240';markRead();mobileTab('grid');}
-   if(state.phase==='idle')return;
+   const key=state.host||state.id||'idle';if(key!==roomKey){invitationMenu.close();roomKey=key;pendingStamp='';lastChatSeq=0;lastAckCommand=0;lastSeatAck=0;previousSeat=null;focusSeatReady=false;swapStamp='';$('seatStatus').textContent='';messages.clear();$('chatLog').replaceChildren();cards.clear();emptySeats.clear();$('playersList').replaceChildren();$('chatInput').value='';$('chatLength').textContent='0/240';markRead();mobileTab('grid');}
+   if(state.phase==='idle'){invitationMenu.setAvailable(false);return;}
+   if(invitePhase!==state.phase){invitationMenu.close();invitePhase=state.phase;}
    layout(true);panel.classList.toggle('guest-room',!state.isHost);panel.classList.toggle('has-requests',state.isHost&&state.pending.length>0);panel.dataset.phase=state.phase;
    if($('settingsModal').hidden&&$('hostConsole')?.hidden!==false)$('menuDialog').setAttribute('aria-labelledby','roomTitle');
    $('startBtn').disabled=state.phase!=='playing';navigation('room');panel.hidden=false;entry.hidden=true;
@@ -173,14 +183,14 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,notify
    $('roomTitle').textContent=state.phase==='pending'?'Request sent':state.phase==='error'?'Room unavailable':state.roomName|| (state.isHost?'Your starting grid':'Your race room');
    $('roomPhase').textContent={lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',waiting:'NEXT RACE',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length+(state.waiting?.length||0)} / 8 drivers`;
-   const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';$('inviteBlock').hidden=!state.isHost||!state.code;
+   const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';invitationMenu.setAvailable(state.isHost&&!!state.code&&['lobby','preparing','playing'].includes(state.phase));
    $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverse?'reverse':'normal';$('roomPlayerCollisions').value=String(state.settings.playerCollisions??true);$('roomPitStops').value=String(state.settings.pitStops??true);$('roomCpuLiveries').value=state.settings.cpuLiveries??'multiplayer';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection','roomPlayerCollisions','roomPitStops','roomCpuLiveries'])$(id).disabled=!state.isHost||state.phase!=='lobby';$('roomCpuLiveries').disabled||=state.settings.cpuCars===false;
    $('roomSettingsHint').textContent=state.settings.reverse?'Choose any circuit. CPU cars follow this setting on all tracks.':state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
    $('readyCount').textContent=state.phase==='waiting'||state.phase==='playing'?`${state.members.length} on track${state.waiting?.length?' · '+state.waiting.length+' waiting':''}`:`${state.members.filter(x=>x.ready).length} ready`;
    renderRoster(state);renderSwap(state);renderChat(state);
-   const nextIDs=new Set(state.pending.map(m=>m.id));if(state.isHost&&state.phase==='lobby'&&state.pending.some(m=>!pendingIDs.has(m.id)))notifyRequest();pendingIDs=nextIDs;
+
    const stamp=state.phase+JSON.stringify(state.pending);if(stamp!==pendingStamp){pendingStamp=stamp;$('pendingList').replaceChildren(...state.pending.map(m=>{const li=document.createElement('li'),name=document.createElement('span'),accept=document.createElement('button'),decline=document.createElement('button');name.textContent=m.name+(m.connection==='reconnecting'?' · Reconnecting…':'');name.title=m.name;accept.textContent='Admit';accept.disabled=state.phase!=='lobby'||m.connection==='reconnecting';accept.type=decline.type='button';decline.textContent='×';decline.disabled=state.phase!=='lobby';accept.setAttribute('aria-label',`Admit ${m.name}`);decline.setAttribute('aria-label',`Decline ${m.name}`);accept.onclick=()=>room.approve(m.id);decline.onclick=()=>room.reject(m.id);li.append(name,accept,decline);return li;}));}
-   $('pendingBlock').hidden=!state.isHost||!state.pending.length;$('pendingCount').textContent=String(state.pending.length);
+   $('pendingBlock').hidden=!state.isHost||!state.pending.length;$('pendingCount').textContent=String(state.pending.length);$('pendingJump').hidden=!state.isHost||!state.pending.length;$('pendingJump').textContent=`Requests · ${state.pending.length}`;
    const me=state.members.find(x=>x.id===state.id);$('readyRoom').disabled=!!state.awaitingStop||!!state.readyPending||!!state.seatActionPending||!!(state.swaps||[]).find(o=>o.from===state.id||o.to===state.id);$('readyRoom').hidden=state.phase!=='lobby'||!me;$('readyRoom').textContent=state.readyPending?'CONFIRMING…':me?.ready?'READY ✓':'I’M READY';$('readyRoom').setAttribute('aria-pressed',String(!!me?.ready));
    if(focusSeatReady&&!$('readyRoom').disabled){focusSeatReady=false;if(state.phase==='lobby'&&!$('overlay').hidden&&$('settingsModal').hidden&&$('hostConsole')?.hidden!==false){$('readyRoom').focus({preventScroll:true});if(document.documentElement.classList.contains('gamepad-navigation'))$('readyRoom').scrollIntoView({block:'nearest'});}}
    $('startRoom').hidden=!state.isHost||state.phase!=='lobby';$('startRoom').disabled=state.members.length<2||(state.pending.length>0||(state.waiting?.length||0)>0)||(state.swaps||[]).length>0||state.members.some(x=>!x.ready||x.connection==='reconnecting');$('stopRoom').hidden=!state.isHost||state.phase!=='playing';

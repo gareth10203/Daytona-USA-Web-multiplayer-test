@@ -1,3 +1,63 @@
+# Daytona USA Web — 52.8: lobby arrival alerts
+
+Based on 52.7, preserved in its original folder and ZIP. All participants must use 52.8.
+
+A new soft two-chord arrival sound distinguishes drivers joining the lobby from chat, Ready and join requests. It uses the existing UI volume and mute settings. Lobby guests hear arrivals; playing guests are not interrupted by arrival sounds. The host also hears arrivals during a session.
+
+The host receives browser/system notifications naming drivers who join a public room or request access to a private room, including waiting seats. Creating a room can request notification permission in that button's user gesture. Visiting the site or joining someone else's room does not request permission. Denying permission never prevents room creation or the existing sound alerts. Private admission after a request does not generate a second system notification.
+
+Repeated room updates, reconnects, seat/name changes and waiting-seat promotion do not replay alerts. Clicking a notification focuses its original host tab and opens the menu; stale room notifications cannot open or rejoin a room. The notification worker has no fetch handler, offline cache or push subscription. This uses existing room snapshots, with no extra Firebase writes or movement traffic.
+
+New arrivals can be detected while the host page remains open and connected. This is not server push after the page/browser closes. HTTPS (or localhost), permission, browser support and OS notification settings determine delivery. Ordinary mobile browsers may not offer system notifications; sound and normal room operation remain available.
+
+Validation: 289 Node tests; browser arrival/permission/deduplication checks, real service-worker routing with the OS display boundary simulated, five production audio waveforms, lobby layouts and production-engine ROM/chat regressions. A physical Windows banner and installed iPhone PWA were not certified. Native engine, sources, movement transport, cadence, Firebase rules and diagnostics defaults are preserved.
+
+Publish ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8133`. No ROM or private test instruments are packaged.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 52.7: balanced lobby and clear background
+
+Based on 52.6, preserved in its original folder and ZIP. All room participants must use 52.7.
+
+The multiplayer lobby has three aligned panels for the starting grid, paged race settings and chat. The eight seats retain their original move/swap/Ready actions and car colors. Desktop 1280×720 and 1440×900 fit the ordinary lobby without page or roster scrolling. Extra join requests and swap actions use a bounded grid area; a Requests button exposes pending admissions and incoming swap controls scroll into view. Tablet uses two columns; mobile retains Room/Chat tabs and normal vertical scrolling.
+
+The host's **Invite friends** button beside the title opens a small panel for the current link and code. It supports click outside, Close, Escape and standard gamepad B; A opens/activates and navigation stays inside while open. Keyboard Tab stays inside the panel. Clipboard success/failure is displayed there, and ordinary room updates preserve focus and text selection. The panel closes on room/phase changes and is unavailable for guests or offline rooms. Native browser popovers avoid clipping, with a disclosure fallback for older browsers.
+
+Connection status sits with the room message above the action row. The original decorative background remains subtle, with no menu backdrop blur and slightly clearer number 41/checkered floor. There are no new artwork assets or gameplay rendering changes.
+
+Native engine, native sources, movement transport, cadence, race authority, Firebase rules, diagnostics defaults and ROM memory remain unchanged. The new invitation controller is driven by UI events, with no network activity or per-frame timer. Menu gamepad commands still use standard physical UI buttons and do not edit driving bindings.
+
+Validation: 277 Node tests, build/lobby-validation/validation.json, build/rom-memory/validation.json and build/chat-polish/validation.json. Browser checks cover 8-seat DOM states, admission/kick/move/swap/chat controls, invitation access/clipboard/focus/gamepad/fallback and six viewport sizes. Production-engine regressions cover remembered-ROM restoration/starting and chat/controller inputs with two locally linked cabinets. This is not a new WAN or physical iPhone certification.
+
+Publish ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8132`. No ROM, browser profile or private fixture bindings are packaged.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 52.6: remember the ROM on this browser
+
+Based on 52.5, preserved in its original folder and ZIP. All room participants must use 52.6.
+
+After the original native engine verifies a selected ROM ZIP, the browser keeps one copy in IndexedDB for this published installation. On subsequent visits, after graphics and WASM startup finish, it retrieves and revalidates that ZIP and opens the mode menu automatically. Invitation links still open the correct multiplayer entry. The game does not start playing until the user chooses to start.
+
+The main mode menu contains one small **Change ROM** button. It is hidden inside single-player setup, multiplayer entry and the lobby. Choosing an invalid replacement restores the preceding loaded ROM and leaves the stored copy intact. A replacement is saved only after successful validation. Storage errors or quota failures do not prevent playing; a failed storage transaction keeps the previous saved record.
+
+The ZIP, its filename and contents stay on the device. This feature does not upload them to Firebase, Analytics, PeerJS or any server. IndexedDB is scoped to the browser origin and installation path, without the room hash or renderer query. Clearing site data, another browser/device, private browsing or browser storage eviction can require selecting the ZIP again. No persistent-storage permission prompt or extra checkbox is added.
+
+Native JS/WASM and all native sources are byte-identical to 52.5. Rendering, simulation cadence, movement transport, optional race rules, Firebase rules and diagnostics defaults are preserved. The cache is accessed on startup or ROM changes only; it adds no per-frame work.
+
+Validation: 277 Node tests and build/rom-memory/validation.json. The browser check uses the production engine and a real local ZIP, closes and relaunches Chrome with a persistent profile, tests invalid replacement, invitation routing, aborted storage writes, denied IndexedDB, cleared storage and three menu sizes. Local Chromium validation does not certify physical iPhone/Safari storage retention. No ROM or private browser profile is packaged.
+
+Publish ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8131`.
+
+---
+
+## Previous release notes (historical)
+
 # Daytona USA Web — 52.5: paged race settings and optional race rules
 
 Based on 52.4, preserved in its original folder and ZIP. All room participants must use 52.5.

@@ -1,4 +1,4 @@
-import {loadSingleSettings,sameSingleSettings,SINGLE_SETTINGS_ID} from './single-player-settings.js?v=52.5-race-options';
+import {loadSingleSettings,sameSingleSettings,SINGLE_SETTINGS_ID} from './single-player-settings.js?v=52.8-arrival-alerts';
 
 export function createSinglePlayerUI({storage,onOpen,onBack,onStart,getSession,unlockAudio}){
  const $=id=>document.getElementById(id),panel=$('singlePlayerPanel'),form=$('singleRaceForm');

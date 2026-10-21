@@ -7,7 +7,8 @@ const eligible=node=>!node.disabled&&node.getAttribute('aria-disabled')!=='true'
 export function mountMenuGamepad({root,hints,getPad,isOpen,isCapturing,back,backLabel,isFocused=()=>document.hasFocus()&&!document.hidden}){
  let key='',previous=new Set(),opened=false,mode=false,waitForNeutral=true,releasePending=false,captureSeen=false;
  let direction='',repeatAt=0,editing=null,testing=null,focused=null,hintHTML='',focusIndex=0;
- const items=()=>[...root.querySelectorAll(controls)].filter(node=>eligible(node)&&node.tabIndex>=0);
+ const scope=()=>root.querySelector('[data-menu-popover]:not([hidden])')||root;
+ const items=()=>[...scope().querySelectorAll(controls)].filter(node=>eligible(node)&&node.tabIndex>=0);
  const neutral=pad=>!UI_BUTTONS.some(i=>down(pad,i))&&Math.abs(pad?.axes[0]||0)<.35&&Math.abs(pad?.axes[1]||0)<.35;
  function clearFocus(){focused?.classList.remove('gamepad-focus');focused=null;}
  function options(node){return [...node.options].filter(o=>!o.disabled&&!(o.parentElement?.tagName==='OPTGROUP'&&o.parentElement.disabled));}
@@ -39,11 +40,11 @@ export function mountMenuGamepad({root,hints,getPad,isOpen,isCapturing,back,back
  function stopTesting(){testing?.classList.remove('gamepad-editing');testing=null;}
  function hide(){mode=false;hints.hidden=true;document.documentElement.classList.remove('gamepad-navigation');clearFocus();}
  function focus(node){if(!node)return;focusIndex=Math.max(0,items().indexOf(node));clearFocus();node.focus({preventScroll:true});focused=node;node.classList.add('gamepad-focus');node.scrollIntoView({block:'nearest',inline:'nearest'});}
- function active(){const node=document.activeElement;return root.contains(node)&&eligible(node)&&node.matches(controls)?node:null;}
+ function active(){const node=document.activeElement;return scope().contains(node)&&eligible(node)&&node.matches(controls)?node:null;}
  function target(){let node=active();if(!node){const all=items();node=all[Math.min(focusIndex,all.length-1)];focus(node);}else if(focused!==node)focus(node);return node;}
  function tabList(){
   const node=active(),nested=node?.closest('[role="tablist"]');
-  const groups=[...root.querySelectorAll('[role="tablist"]')].filter(eligible);
+  const groups=[...scope().querySelectorAll('[role="tablist"]')].filter(eligible);
   return nested&&eligible(nested)?nested:groups.find(g=>g.parentElement?.contains(node))||groups[0]||null;
  }
  function renderHints(){

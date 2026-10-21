@@ -1,3 +1,80 @@
+# 2026-10-21 — 52.8: sonido de llegada y avisos del sistema
+
+Versión separada multiplayer-arrival-alerts; 52.7 y su ZIP preservados. UI y textos de notificación en inglés.
+
+Se añade un motivo de llegada con dos acordes suaves y timbre diferente a chat, solicitudes y Ready. Respeta volumen de UI y silencio. Las llegadas se oyen en lobby; los invitados que corren no reciben este sonido. El host conserva avisos de llegada/solicitud durante una sesión.
+
+Sólo el host recibe avisos del sistema: nombre del jugador al entrar en sala pública o solicitar acceso en privada. También cubre asientos de espera. El permiso se solicita desde el clic existente Create room, antes de esperar Firebase; nunca al visitar ni entrar como invitado. Denegación, API no soportada o contexto inseguro no bloquean las salas. Se usa showNotification desde un service worker; hay fallback al constructor de escritorio si falla su registro. No se añade un toggle ni un prompt interno.
+
+El observador usa snapshots ya validados por Multiplayer y mantiene historial acotado por identidad/sala. No repite por heartbeat, reconexión, cambio de nombre/asiento ni promoción de espera. Una admisión privada produce el sonido de llegada, sin un segundo aviso de sistema tras la solicitud. Salir/cambiar de sala retira avisos asociados. Un clic sólo apunta a la pestaña original y a la sala vigente; no abre pestañas nuevas ni incorpora automáticamente a otra sala.
+
+El worker sólo entrega/cierra notificaciones y recibe clics, validando origen, ruta y cliente. No tiene fetch handler, caché, suscripción Push, acceso a ROM ni envíos Firebase. Los datos persistidos en la notificación sólo identifican cliente, tipo y sello opaco; no contienen código privado de invitación. Detectar entradas requiere que la página siga abierta y conectada. Permisos, soporte de navegador y ajustes del sistema controlan el anuncio. No se promete entrega después de cerrar la página ni soporte universal en Safari móvil.
+
+## Evidencia y límites
+
+- 289 pruebas Node aprobadas: observador, permisos, rechazo/fallback, clic obsoleto, payload y worker; integración con ocho participantes públicos y solicitud/admisión privada a través del estado real Multiplayer con transporte simulado.
+- build/arrival-alerts/validation.json: clic real Create room con gesto, ninguna solicitud al visitar/unirse, avisos con nombre en públicas/privadas, supresión de duplicados, espera/admisión, denegación sin bloqueo, clic vigente/obsoleto. Worker real registrado y validación/ruteo reales; la presentación del SO y foco físico se simulan para no mostrar avisos de prueba al usuario.
+- Audio: cinco formas de onda generadas por OfflineAudioContext con el sintetizador de producción, hashes diferentes, valores finitos, sin clipping y final limpio. El nuevo motivo alcanza pico 0.091 y finaliza aproximadamente a 410 ms. No se incluyó una nueva descarga/archivo sonoro en producción.
+- build/lobby-validation/validation.json: seis tamaños, ocho asientos, controles de invitación/solicitud/intercambio/chat y navegación por mando simulada.
+- build/rom-memory/validation.json y build/chat-polish/validation.json: regresiones del motor real, ROM recordada y dos cabinas enlazadas localmente. No certifica un nuevo escenario WAN, banner físico de Windows, mandos físicos o PWA en iPhone.
+
+Motor JS/WASM y todos los fuentes nativos idénticos a 52.7. Red de movimiento, reloj, gráficos, reglas Firebase, Analytics y diagnóstico manual no cambian funcionalmente. BUILD_ID y sufijos de módulos pasan a 52.8. Paquete limitado a dist con manifest SHA256 y verificación CRC/entradas; sin ROM, perfiles ni instrumentos privados.
+
+---
+
+## Investigaciones anteriores (históricas)
+
+# 2026-10-21 — 52.7: lobby equilibrado e invitación desplegable
+
+Versión separada multiplayer-lobby-refinement, basada en 52.6 preservada. Implementación de la propuesta visual aprobada: tres áreas alineadas, invitación junto al título y estado de conexión en el pie. La UI permanece en inglés.
+
+## Interfaz
+
+Se conservan los ocho asientos y las dos páginas de ajustes, con altura estable. En escritorio, roster ordinario, ajustes y chat miden 350 px; solicitudes y ofertas de intercambio se muestran dentro de una zona de parrilla con desplazamiento acotado para mantener accesibles las acciones. Un botón Requests, visible sólo con solicitudes, lleva al primer control habilitado de admisión/rechazo sin saltar automáticamente el foco al llegar una solicitud. Una oferta nueva sí conserva el foco explícito existente y desplaza el control a la vista dentro de la parrilla.
+
+Invite friends usa un panel con role dialog y nombre accesible, foco inicial en Copy link, éxito/error de portapapeles dentro del panel, cierre por botón/clic exterior/Escape/B y contención de Tab y navegación de mando. Se usa popover nativo cuando está disponible, posicionado según viewport (incluyendo visualViewport); hay fallback sin esa API. No se añaden consultas por fotograma: reposicionar sólo responde a apertura, resize y scroll mientras está abierto. Cerrar, recibir un heartbeat, copiar o cambiar de página no redimensiona el lobby. El enlace y código siguen procediendo del estado autenticado de sala; no se cambia su formato, aprobación ni transporte.
+
+La disponibilidad sigue siendo del host; se oculta en invitados y estados offline/conectando/pendiente. Cambios de sala/fase y salida de la vista cierran el panel. Los cambios de ajustes y Ready conservan validación/autorización previas. El selector de opciones del mando no se altera; sólo se limita el ámbito de navegación a un desplegable de menú abierto.
+
+El fondo decorativo se mantiene en CSS: capa oscura #05050570, sin backdrop-filter de launcher y alfa ligeramente mayor para el 41 y el ajedrezado. No se aplican filtros a la escena del juego ni se altera el desenfoque propio del chat.
+
+## Evidencia y límites
+
+- 277 pruebas Node sin fallos, sin cambios de protocolo funcional.
+- build/lobby-validation/validation.json: DOM real, viewport 1440×900, 1280×720, tablet 960×900, móviles 390×844, 320×740 y 844×390. Tres paneles alineados, escritorio sin scroll ordinario, sin overflow horizontal y popup dentro del viewport. Incluye copy link/code simulado sin tocar el portapapeles del usuario, error de copia, foco/selección conservados por heartbeat, Tab/Shift+Tab/Escape, A/D-pad/B con mando simulado, fallback sin API nativa, sólo host con invitación, ocho asientos, kick, cambio de asiento, solicitudes, oferta de intercambio y envío de chat. Los estados de 8 usuarios son fixtures DOM, no ocho motores ni benchmark WAN.
+- build/rom-memory/validation.json: ZIP real y motor de producción, cierre/reapertura de Chrome, restauración automática y arranque de cabina con audio, invitación en URL, sustitución inválida, transacción abortada, almacenamiento borrado/denegado. Copia local de ROM no cambia.
+- build/chat-polish/validation.json: regresión con dos motores de producción y WebRTC local, dispositivos emulados, chat, foco, scroll y tamaños táctiles. No se certifica hardware físico o Safari de iPhone.
+
+JS/WASM del motor y todos los fuentes nativos son idénticos a 52.6. Reglas Firebase, red, reloj, renderers y memoria de ROM no cambian funcionalmente. El versionado de módulos/BUILD_ID pasa a 52.7 para no mezclar archivos. El paquete se limita a dist y se comprueba por manifest SHA256 y CRC; no incluye ROM, perfiles o instrumentos de prueba.
+
+---
+
+## Investigaciones anteriores (históricas)
+
+# 2026-10-21 — 52.6: ROM recordada en el navegador
+
+Versión separada multiplayer-rom-memory; 52.5 preservada. Se añade únicamente un pequeño botón Change ROM en el menú de selección Single Player/Multiplayer. Pertenece a ese contenedor, por lo que se oculta al entrar en las demás vistas. Sin botones extra de borrar ni checkbox.
+
+## Flujo y garantías
+
+IndexedDB guarda la última ROM validada por instalación (ruta de publicación normalizada), como Blob/File con nombre y fecha. No usa Firebase ni red y no guarda sólo una ruta del disco que luego el navegador no pueda leer. La restauración espera a terminar inicialización de WASM y gráficos y vuelve a pasar por la validación original, restauración NVRAM y perfil DELUXE. No entra a una partida ni altera el hash de invitación.
+
+Selección manual invalida una restauración pendiente; las cargas nativas se serializan para que dos lecturas no alteren el motor al mismo tiempo. Sólo se persiste una sustitución validada. Si falla la nueva ROM, se reinstala la anterior en el motor y no se escribe el registro. Las transacciones IndexedDB resuelven sólo al completarse; un aborto conserva el valor anterior. Apertura bloqueada, almacenamiento inaccesible y transacciones detenidas tienen salida con error y timeout de 5 segundos, sin impedir la selección manual. Un registro estructuralmente inválido o rechazado como ROM en restauración se descarta; un fallo de inicialización del motor no borra un ZIP válido.
+
+No hay consultas por fotograma, sondeos de archivos, envío del ZIP o permisos de almacenamiento persistente. Al borrar datos del sitio o si el navegador libera almacenamiento, reaparece el selector normal. La retención en incógnito o Safari físico no se promete.
+
+## Comprobaciones
+
+277 tests Node (270 heredados + 7 de memoria de ROM): persistir sólo después de validar, conservar copia anterior, restaurar Blob como File, prioridad manual frente a lectura atrasada, exclusión de cargas concurrentes, fallos de cuota/acceso, limpieza de registros inválidos y aislamiento entre proyectos publicados.
+
+build/rom-memory/validation.json usa Chrome real, un perfil persistente privado y el motor de producción: carga y verificación del ZIP del usuario, cierre completo y nueva apertura del navegador sin elegir archivo, sustitución inválida con recuperación del motor anterior, hash de invitación conservado, aborto de escritura después de put con registro anterior intacto, datos borrados y denegación de IndexedDB. Layouts 1440×900, 1280×720 y 390×844 sin overflow horizontal, con un solo botón discreto en el menú principal. También se inicia una cabina real desde la copia recuperada y se comprueba avance de simulación y AudioContext activo tras Start.
+
+Motor WASM/JS y todos los archivos nativos preservados byte a byte de 52.5. El BUILD_ID y sufijos de caché pasan a 52.6 para evitar mezclar archivos/versiones. Reglas Firebase, transporte, reloj y renderers sin cambios funcionales. El ZIP se verifica mediante manifest SHA256, CRC y comparación de cada entrada con dist. Perfiles privados y ROM quedan fuera de dist y del paquete.
+
+---
+
+## Investigaciones anteriores (históricas)
+
 # 2026-10-21 — 52.5: reglas opcionales y ajustes paginados
 
 Versión separada multiplayer-race-options. La 52.4 queda preservada. La UI se mantiene en inglés. El panel Race settings se pagina mediante flechas y contador: Race setup (modo/dificultad/CPU/sentido) y Race rules (contactos/pits/liveries). Altura reservada por breakpoint, elección de página local y no reconstruida por heartbeats. Invitados y participantes en pista pueden consultar las páginas; sólo el host edita en lobby. No se mueve el foco al recibir estado.

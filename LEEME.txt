@@ -1,6 +1,6 @@
-VERSION 52.5 - AJUSTES DE CARRERA PAGINADOS
-Publicar el contenido del ZIP, con index.html en la raiz. Todos deben usar 52.5.
-Race settings: flechas para Race setup / Race rules, sin saltos de altura.
-Reglas originales por defecto. Pits Off permite el carril como atajo sin parada automatica.
-Sin cambios en Firebase. Diagnosticos manuales. Sin ROM ni instrumentos privados.
-Local: node scripts/serve.js dist 8130
+VERSION 52.8 - AVISOS DE LLEGADA
+Publicar contenido del ZIP con index.html en la raiz. Todos deben usar 52.8.
+Sonido nuevo al entrar un jugador. Avisos del sistema para host: entradas publicas y solicitudes privadas.
+Permitir notificaciones al crear sala. Rechazar no impide jugar. Se necesita pagina abierta/conectada y soporte del navegador/SO.
+Sin cambios de motor, red, cadencia ni reglas Firebase. Sin ROM ni perfiles privados.
+Local: node scripts/serve.js dist 8133

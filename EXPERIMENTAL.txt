@@ -1,4 +1,6 @@
-DAYTONA USA WEB 52.5 - PAGED RACE SETTINGS
-Original race rules are the default. Optional human contacts, automatic pit service and original single-player CPU liveries.
-Shared by all cabinets; host edits only in lobby. Original movement transport, timing and rendering preserved.
-Private instrumentation and ROM are not packaged. Read INVESTIGACIONES.md for validation limits.
+DAYTONA USA WEB 52.8 - ARRIVAL ALERTS
+Distinct soft arrival sound. Host system notifications for public arrivals and private access requests.
+Create room can ask notification permission; denial does not block rooms.
+Notification-only service worker: no fetch handler, cache or Push subscription. Keep the host page open and connected.
+Native engine, network cadence, Firebase rules and ROM memory preserved from 52.7.
+Read INVESTIGACIONES.md for validation and platform limits. No ROM or private instruments included.

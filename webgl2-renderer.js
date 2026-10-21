@@ -4,7 +4,7 @@ const TILE_BYTES=0x94000+496*384,PAGE=4096,PAGES=Math.ceil(TILE_BYTES/PAGE);
 const SHADERS=['model2.vert.glsl','model2.frag.glsl','fullscreen.vert.glsl','system24.frag.glsl','tiles-present.frag.glsl'];
 export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}){
  const sources=await Promise.all(SHADERS.map(async name=>{
-  const response=await fetch(new URL(name+'?v=52.5-race-options',import.meta.url));
+  const response=await fetch(new URL(name+'?v=52.8-arrival-alerts',import.meta.url));
   if(!response.ok)throw Error('Could not load '+name);return response.text();
  }));
  const gl=canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});

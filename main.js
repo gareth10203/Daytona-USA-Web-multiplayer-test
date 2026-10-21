@@ -1,31 +1,34 @@
-import {mountGameChat} from './game-chat.js?v=52.5-race-options';
-import {startAnalytics} from './firebase-client.js?v=52.5-race-options';
-import {LocalRaceReporter,applyNativeOrder} from './race-authority.js?v=52.5-race-options';
-import {mountRaceStandings} from './race-standings.js?v=52.5-race-options';
-import {createGamepadHome} from './gamepad-home.js?v=52.5-race-options';
-import {protectTouchSurface} from './touch-guard.js?v=52.5-race-options';
-import {createKeyboardControls} from './keyboard-controls.js?v=52.5-race-options';
-import {SimulationClock} from './simulation-clock.js?v=52.5-race-options';
-import {SourceTimeline,NativeStateInbox} from './link-timing.js?v=52.5-race-options';
-import {linkIdForSeat} from './central-link.js?v=52.5-race-options';
-import {createLobbySound} from './lobby-sound.js?v=52.5-race-options';
-import { mountDiagnostics } from './diagnostics.js?v=52.5-race-options';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=52.5-race-options';
-import {createControllerControls} from './controller-controls.js?v=52.5-race-options';
-import { createRenderer } from './renderer.js?v=52.5-race-options';
-import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=52.5-race-options';
-import {mountMenuGamepad} from './menu-gamepad.js?v=52.5-race-options';
-import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=52.5-race-options';
-import { createTouchControls } from './touch.js?v=52.5-race-options';
-import { createGamepadRumble } from './haptics.js?v=52.5-race-options';
-import { loadSettings, saveSettings } from './preferences.js?v=52.5-race-options';
-import { createWheelControls } from './wheel-controls.js?v=52.5-race-options';
-import { Multiplayer } from './multiplayer.js?v=52.5-race-options';
-import { createRoomUI } from './room-ui.js?v=52.5-race-options';
-import { mountHostConsole } from './host-console.js?v=52.5-race-options';
-import { raceOptionsMask,prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=52.5-race-options';
-import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=52.5-race-options';
-import {createSinglePlayerUI} from './single-player-ui.js?v=52.5-race-options';
+import {createRoomArrivals} from './room-arrivals.js?v=52.8-arrival-alerts';
+import {createRoomSystemAlerts} from './room-system-alerts.js?v=52.8-arrival-alerts';
+import {createROMStore,createROMMemory} from './rom-memory.js?v=52.8-arrival-alerts';
+import {mountGameChat} from './game-chat.js?v=52.8-arrival-alerts';
+import {startAnalytics} from './firebase-client.js?v=52.8-arrival-alerts';
+import {LocalRaceReporter,applyNativeOrder} from './race-authority.js?v=52.8-arrival-alerts';
+import {mountRaceStandings} from './race-standings.js?v=52.8-arrival-alerts';
+import {createGamepadHome} from './gamepad-home.js?v=52.8-arrival-alerts';
+import {protectTouchSurface} from './touch-guard.js?v=52.8-arrival-alerts';
+import {createKeyboardControls} from './keyboard-controls.js?v=52.8-arrival-alerts';
+import {SimulationClock} from './simulation-clock.js?v=52.8-arrival-alerts';
+import {SourceTimeline,NativeStateInbox} from './link-timing.js?v=52.8-arrival-alerts';
+import {linkIdForSeat} from './central-link.js?v=52.8-arrival-alerts';
+import {createLobbySound} from './lobby-sound.js?v=52.8-arrival-alerts';
+import { mountDiagnostics } from './diagnostics.js?v=52.8-arrival-alerts';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=52.8-arrival-alerts';
+import {createControllerControls} from './controller-controls.js?v=52.8-arrival-alerts';
+import { createRenderer } from './renderer.js?v=52.8-arrival-alerts';
+import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=52.8-arrival-alerts';
+import {mountMenuGamepad} from './menu-gamepad.js?v=52.8-arrival-alerts';
+import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=52.8-arrival-alerts';
+import { createTouchControls } from './touch.js?v=52.8-arrival-alerts';
+import { createGamepadRumble } from './haptics.js?v=52.8-arrival-alerts';
+import { loadSettings, saveSettings } from './preferences.js?v=52.8-arrival-alerts';
+import { createWheelControls } from './wheel-controls.js?v=52.8-arrival-alerts';
+import { Multiplayer } from './multiplayer.js?v=52.8-arrival-alerts';
+import { createRoomUI } from './room-ui.js?v=52.8-arrival-alerts';
+import { mountHostConsole } from './host-console.js?v=52.8-arrival-alerts';
+import { raceOptionsMask,prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=52.8-arrival-alerts';
+import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=52.8-arrival-alerts';
+import {createSinglePlayerUI} from './single-player-ui.js?v=52.8-arrival-alerts';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -56,6 +59,12 @@ let settingsOpen=false;
 let multiplayerProfile=false,linkStartedAt=0;
 let gameChat,roomUI,hostConsole,diagnostics,roomDiagnostics,singleUI,graphicsAPISettings,menuControls,raceStandings;
 let singleApplied=null,preparingSingle=false;
+let roomSystemAlerts,roomArrivals;
+let currentROM=null;
+const romMemory=createROMMemory({store:createROMStore(),load:loadROM,canRestore:()=>!currentROM,
+ onBusy:busy=>{ui.input.disabled=busy;$('changeROM').disabled=busy;ui.dropzone.setAttribute('aria-disabled',String(busy));},
+ onWarning:error=>{console.warn('Could not remember the local ROM',error);if(currentROM&&!$('playerModes').hidden)ui.message.textContent='ROM ready. This browser could not remember it; choose it again next visit.';}
+});
 const sourceTimeline=new SourceTimeline(),nativeInbox=new NativeStateInbox(),raceReporter=new LocalRaceReporter();
 function syncAuthoritativeOrder(sample){
  if(!room.active||!sample)return;
@@ -68,7 +77,7 @@ const room=new Multiplayer({
  isVisible:()=>!document.hidden,
  readHealth:()=>({receiveBytes:wasm?._daytona_link_pending_bytes()||0,backlogMs:Math.max(0,lagMs)}),
  readPerformance:(epoch,after)=>diagnostics?.share(epoch,after),
- onChange:state=>{diagnostics?.setAutomatic(state.phase==='playing');roomDiagnostics?.sync();roomUI?.render(state);gameChat?.sync(state);hostConsole?.sync();graphicsAPISettings?.sync();raceStandings?.sync(room);},
+ onChange:state=>{roomSystemAlerts?.sync(state);roomArrivals?.update(state);diagnostics?.setAutomatic(state.phase==='playing');roomDiagnostics?.sync();roomUI?.render(state);gameChat?.sync(state);hostConsole?.sync();graphicsAPISettings?.sync();raceStandings?.sync(room);},
  onPrepare:async(config,cancelled)=>{
   sourceTimeline.reset();nativeInbox.clear();raceReporter.reset();
   saveNVRAM();singleApplied=null;
@@ -196,7 +205,10 @@ function lobbySound(kind='request'){
  // may suspend it when a window loses focus; never create autoplay audio here.
  void ctxAudio.resume().then(()=>joinChime(kind)).catch(()=>{});return false;
 }
-roomUI=createRoomUI(room,{canResume:()=>started&&!multiplayerProfile&&!room.occupied,notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:()=>singleUI.open(),unlockAudio:activateAudio});
+roomSystemAlerts=createRoomSystemAlerts({onClick:()=>{openMenu();if(room.phase==='lobby'&&!$('pendingJump').hidden)$('pendingJump').click();}});
+roomArrivals=createRoomArrivals({notify:event=>{if(event.sound)lobbySound(event.kind==='joined'?'arrival':'request');if(event.system)void roomSystemAlerts.show(event);}});
+roomSystemAlerts.sync(room.snapshot());roomArrivals.update(room.snapshot());
+roomUI=createRoomUI(room,{enableArrivalNotifications:()=>roomSystemAlerts.enable(),canResume:()=>started&&!multiplayerProfile&&!room.occupied,notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:()=>singleUI.open(),unlockAudio:activateAudio});
 gameChat=mountGameChat($('gameChat'),{room,storage:settingsStorage,gameShown:()=>started&&running&&ui.overlay.hidden,notify:()=>lobbySound('chat'),onRead:()=>roomUI.markChatRead(),onTyping:()=>{held.clear();keyboardControls.reset();},returnFocus:()=>ui.canvas.focus({preventScroll:true})});
 gameChat.sync(room.snapshot());
 singleUI=createSinglePlayerUI({storage:settingsStorage,unlockAudio:activateAudio,getSession:()=>({canResume:started&&!multiplayerProfile&&!room.occupied,settings:singleApplied}),onOpen:()=>roomUI.single(),onBack:()=>roomUI.modes(),onStart:async config=>{
@@ -451,47 +463,65 @@ protectTouchSurface(gameSurface,{mobile:mobileDevice});
 gameSurface.addEventListener('pointerdown',()=>{
   if(running && audioLoaded && !soundMuted && ctxAudio?.state!=='running')void activateAudio();
 },{capture:true});
-async function loadROM(file) {
-  // WASM can finish before the asynchronous GPU/shader initialization. Keep
-  // the selected file waiting for both, and retain a failed startup's cause.
+async function installROM(file){
+  const binary=new Uint8Array(await file.arrayBuffer());
+  try{wasm.FS.mkdir('/roms');}catch{}
+  const path='/roms/user_daytona.zip';
+  try{wasm.FS.unlink(path);}catch{}
+  wasm.FS.writeFile(path,binary);
+  audioLoaded=true;
+  if(!wasm.ccall('daytona_load','number',['string','number'],[path,Number(audioLoaded)])){
+    const error=Error(cString(wasm._daytona_error()));error.invalidROM=true;throw error;
+  }
+  renderer.reset();
+}
+function showVerifiedROM(file,message){
+  ui.metadata.textContent=`✓ ${file.name} · ROM verified · Ready to play`;
+  ui.start.disabled=false;ui.sound.disabled=!audioLoaded;
+  openMenu();roomUI.verified();ui.message.textContent=message;
+  setStatus('ROM ready',true);ui.fileLabel.textContent=file.name;
+}
+async function loadROM(file,{automatic=false}={}) {
+  // Selected and remembered files both wait for WASM AND graphics startup.
   if(!renderer){
     if(!engineStartupError)ui.metadata.textContent='Waiting for the graphics engine…';
     await engineReady;
   }
   if(engineStartupError||!wasm||!renderer){
     const message=engineStartupError||'The arcade engine could not finish starting. Reload the page to try again.';
-    failure(message);ui.metadata.textContent=message;return;
+    failure(message);ui.metadata.textContent=message;return {ok:false};
   }
-  if(!/\.zip$/i.test(file.name)){failure('Choose a Daytona USA Revision A (1994) ROM ZIP.');return;}
+  if(!/\.zip$/i.test(file.name)){
+    ui.message.textContent='Choose a Daytona USA Revision A (1994) ROM ZIP.';return {ok:false,invalid:true};
+  }
+  const previousROM=currentROM;saveNVRAM();
   room.leave();roomUI.loading();multiplayerProfile=false;singleApplied=null;
   rumble.stop();
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.close.hidden=true;ui.start.disabled=true;ui.startLabel.textContent='Enter arcade';
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
   await ctxAudio?.suspend();
-  ui.metadata.textContent=`Reading ${file.name} (${(file.size/1048576).toFixed(1)} MB)…`;
-  setStatus('Checking ROM…');
+  ui.metadata.textContent=`${automatic?'Restoring':'Reading'} ${file.name} (${(file.size/1048576).toFixed(1)} MB)…`;
+  setStatus(automatic?'Restoring saved ROM…':'Checking ROM…');
   try {
-    const binary=new Uint8Array(await file.arrayBuffer());
-    try{wasm.FS.mkdir('/roms');}catch{}
-    const path='/roms/user_daytona.zip';
-    try{wasm.FS.unlink(path);}catch{}
-    wasm.FS.writeFile(path,binary);
-    audioLoaded=true;
-    const loaded=wasm.ccall('daytona_load','number',['string','number'],[path,Number(audioLoaded)]);
-    if(!loaded)throw Error(cString(wasm._daytona_error()));
-    renderer.reset();
+    await installROM(file);
     let recoveryNotice='';
     restoreNVRAM(wasm,settingsStorage,recovery=>{
       recoveryNotice=recovery.backupPreserved?' Saved cabinet settings were repaired. Scores were preserved.':' Saved arcade memory was incomplete and has been recovered.';
     });
-    await applyDeluxeDefault();
-    saveNVRAM();
-    ui.metadata.textContent=`✓ ${file.name} · ROM verified · Ready to play`;
-    ui.start.disabled=false;ui.sound.disabled=!audioLoaded;
-    openMenu();roomUI.verified();ui.message.textContent='ROM verified. Choose Single Player or Multiplayer.'+recoveryNotice;
-    setStatus('ROM ready',true);
-    ui.fileLabel.textContent=file.name;
-  }catch(err){failure(err.message||String(err));ui.metadata.textContent=err.message||String(err);}
+    await applyDeluxeDefault();saveNVRAM();currentROM=file;
+    showVerifiedROM(file,'ROM verified. Choose Single Player or Multiplayer.'+recoveryNotice);
+    return {ok:true};
+  }catch(err){
+    if(previousROM){
+      try{
+        await installROM(previousROM);restoreNVRAM(wasm,settingsStorage);await applyDeluxeDefault();currentROM=previousROM;
+        showVerifiedROM(previousROM,'Could not load the new ROM. Your previous ROM is still ready to play.');
+        return {ok:false,invalid:!!err.invalidROM};
+      }catch(restoreError){console.warn('Could not restore the previous ROM',restoreError);}
+    }
+    currentROM=null;roomUI.loading();failure(err.message||String(err));ui.metadata.textContent=err.message||String(err);
+    return {ok:false,invalid:!!err.invalidROM};
+  }
 }
 async function applyDeluxeDefault(){
   let applied=false;try{applied=settingsStorage.getItem('daytona-deluxe-default-v1')==='1';}catch{}
@@ -499,10 +529,11 @@ async function applyDeluxeDefault(){
   await ensureDeluxeCabinet(wasm,reloadEngine);
   try{settingsStorage.setItem('daytona-deluxe-default-v1','1');}catch{}
 }
-ui.input.addEventListener('change',(event)=>{const f=event.target.files?.[0];if(f)loadROM(f);});
+$('changeROM').addEventListener('click',()=>ui.input.click());
+ui.input.addEventListener('change',(event)=>{const f=event.target.files?.[0];event.target.value='';if(f)void romMemory.select(f);});
 for(const name of ['dragenter','dragover'])ui.dropzone.addEventListener(name,e=>{e.preventDefault();ui.dropzone.classList.add('drag');});
 for(const name of ['dragleave','drop'])ui.dropzone.addEventListener(name,e=>{e.preventDefault();ui.dropzone.classList.remove('drag');});
-ui.dropzone.addEventListener('drop',(event)=>{const f=event.dataTransfer?.files?.[0];if(f)loadROM(f);});
+ui.dropzone.addEventListener('drop',(event)=>{const f=event.dataTransfer?.files?.[0];if(f)void romMemory.select(f);});
 function openMenu() {
   rumble.stop();
   wheelControls.resetEdges();controllerControls.resetEdges();controllerControls.cancel();
@@ -583,7 +614,7 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=52.5-race-options'});
+    wasm=await factory({locateFile:(path)=>path+'?v=52.8-arrival-alerts'});
     for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_set_race_options','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
@@ -594,6 +625,7 @@ async function main() {
   }catch(err){engineStartupError='Could not start the arcade engine: '+(err.message||String(err));failure(engineStartupError);}
 }
 engineReady=main();
+void engineReady.then(()=>{if(!engineStartupError&&renderer)return romMemory.restore();}).catch(error=>console.warn('Could not restore the local ROM',error));
 
 // Optional visit measurement runs after startup work, independently of the game.
 if(globalThis.requestIdleCallback)requestIdleCallback(()=>void startAnalytics(),{timeout:5000});else setTimeout(()=>void startAnalytics(),2500);
