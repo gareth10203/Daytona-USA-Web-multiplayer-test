@@ -1,3 +1,78 @@
+# 2026-10-21 — 52.5: reglas opcionales y ajustes paginados
+
+Versión separada multiplayer-race-options. La 52.4 queda preservada. La UI se mantiene en inglés. El panel Race settings se pagina mediante flechas y contador: Race setup (modo/dificultad/CPU/sentido) y Race rules (contactos/pits/liveries). Altura reservada por breakpoint, elección de página local y no reconstruida por heartbeats. Invitados y participantes en pista pueden consultar las páginas; sólo el host edita en lobby. No se mueve el foco al recibir estado.
+
+## Integración nativa
+
+Tres bits de configuración, validados y distribuidos al iniciar cada sesión. Máscara cero por defecto; se limpia al cargar/cerrar/desactivar enlace. Desactivar contactos humanos interviene exclusivamente en la prueba de elegibilidad previa al solver: presenta una separación vertical sólo a esa lectura, sin escribir posiciones. No se anula la rutina general de tráfico. Pit stops Off borra el bit de entrada sólo para el predicado original que decide entrar al servicio; no se cierra el carril ni se falsea vuelta/reloj. Las liveries CPU desvían cinco selectores desde la fila común multijugador a la tabla original individual por ID nativo; humanos conservan su fila original. No se cambia identidad física, IA ni red.
+
+El motor se enlaza contra el mismo conjunto de objetos que la 52.4 publicada (race-authority/build/race-time), recompilando únicamente m2_board.cpp y daytona_web.cpp. La primera prueba local detectó un conjunto de objetos antiguo incompatible al recargar cabinas; se corrigió la base de enlace y se repitió la matriz de seis carreras/reinicios. No se distribuye aquel binario fallido. Se conserva O2 de enlace y el resto del motor publicado, incluyendo autoridad temporal. No se eliminan exports antiguos.
+
+## Evidencia y alcance
+
+- 270 pruebas Node: tipos estrictos y valores originales, las ocho máscaras, ocho participantes simulados recibiendo las mismas reglas, Ready reiniciado, huésped sin permiso y edición bloqueada en pista.
+- build/rules-validation/ui.json: DOM real, dos páginas, ida/vuelta sin saltos de altura, valores conservados, re-render de sala conserva página, permisos, CPU Off deshabilita liveries, preferencia SP de pits y sin desbordamiento horizontal. Lobby completo cabe en escritorio 1440×900 y 1280×720; móvil admite scroll vertical. No constituye certificación de Safari físico.
+- build/rules-validation/native.json: dos WASM reales conectados mediante HostDistributor local determinista; Beginner, Advanced y Expert, normal e inverso, CPU On y máscara 7. Ambas cabinas alcanzan control original y completan la primera vuelta en cada caso. Se verifican los cinco selectores de todos los bots y predicados acotados de contacto/pits. Prueba Endurance/Easy con conducción acelerada de laboratorio: no es una medición WAN ni una validación de clasificación final Normal.
+- build/rules-validation/contacts-pits.json: fixtures explícitos con las rutinas originales recompiladas en un frame CPU aislado. Con contactos On, la pareja humana solapada ejecuta el solver y se separa; con Off, conserva exactamente ambas poses. La misma pareja CPU ejecuta una respuesta idéntica con On y Off. El predicado original de pits pasa al callback de servicio sólo con Pit stops On. Se repitió con los números de coche/asiento 6 y 3: los IDs nativos humanos siguen siendo 0 y 1, independientemente de las liveries elegidas. Son casos controlados de laboratorio, no cobertura de todas las geometrías ni conducción íntegra por el carril. Los primeros intentos del fixture no recorrían todas las unidades de código generado; se corrigió el bucle del instrumento privado antes de validar.
+- build/rules-validation/parity.json: comparación byte a byte contra la base 52.4 con reglas originales, RAM de trabajo y dos bancos de texturas, 18 muestras entre dos cargas. Abarca arranque/attract/selección y recarga; no se presenta como equivalencia de una carrera completa.
+- build/chat-polish/validation.json: regresión del chat y controles sobre el motor de producción, dos cabinas con WebRTC local y siete tamaños táctiles emulados.
+
+Queda recomendable una prueba manual de pits como atajo con entrada/salida y llegada en los seis trazados, múltiples carreras seguidas, daños/LOD de skins y contactos en condiciones WAN. No se afirma cobertura exhaustiva de ocho motores reales o de todos los ángulos de colisión. Los instrumentos, fixtures de RAM y código derivado de ROM se mantienen bajo build privado, fuera del ZIP.
+
+---
+
+## Investigación previa (histórica)
+
+# 2026-10-20 — Investigación: colisiones entre jugadores, pits como atajo y skins CPU
+
+Investigación estática sobre 52.4; no se implementan ajustes, no se recompila el motor y no se genera otro ZIP. El usuario aclara que pits debe seguir abierto precisamente para utilizarlo como atajo, evitando la parada y el control automático. No se propone cerrar el carril ni añadir barreras.
+
+## Hallazgos concretos (Revision A)
+
+1. **Colisiones entre jugadores.** El código original examina parejas de coches y entra en `0x14814` desde `0x147e0`/`0x147f4`. Las rutas siguientes separan posiciones (`0x15044`, `0x1511c`), intercambian velocidad/impulsos (`0x15200`) y escriben temporizadores de impacto (`0x158a4`). La propuesta es excluir únicamente parejas humano-humano antes de esos efectos; conservar contactos con CPU/muros, geometría, clasificación y rebufo. NO anular toda `0x1454c`: también prepara/actualiza tráfico y recorre el resto de candidatos. La identificación debe usar los IDs nativos y el roster real de la carrera, no colores, asientos visibles o índices locales. Punto identificado estáticamente, todavía sin prueba dinámica.
+
+2. **Pits como atajo.** `0xdf9c..0xe034` detecta una marca de carretera (bit 7), vuelta, orientación y estado del coche antes de sustituir su callback por `0xe288`. Ese estado pasa a `0xe384`, dirige el vehículo por una ruta propia, maneja grupos de seis entidades y acaba limpiando daño/restituyendo el controlador normal. Esto es consistente con la entrada y servicio de pits. La intervención propuesta es impedir sólo esa transición cuando Pit stops=Off, manteniendo el carril y conducción libre. NO simular que ya es la última vuelta ni congelar el estado por fotograma para evitar el pit: eso podría alterar llegada y checkpoints. Comprobar que recorrer el atajo registra meta/vueltas/tiempo en los tres circuitos y sentidos; aún no se certifica.
+
+3. **Skins CPU de single player en multiplayer.** `0xeb00..0xecac` separa la selección del vehículo propio, los humanos remotos y los bots. En configuración individual recurre a la tabla `0x281e3d4`, con paso 48 por ID; en enlazada usa otra tabla (`0x281ec14`) y para CPU deriva a una entrada común (`0x281ed94`). Copia selectores a `car+0x74/78/7c/80/88`. La propuesta es cambiar sólo la fuente de esa selección en bots enlazados a la tabla individual, conservando identidad, número de humanos, IA, ruta y físicas. Importante: NO usar `tabla_multiplayer + ID_CPU*48` como sustituto: es otra tabla. Hay que comprobar texturas residentes, niveles de detalle y coches dañados antes de confirmar que basta el cambio de selector. No se necesitan texturas externas si las originales se cargan correctamente desde la ROM del usuario.
+
+## Integración propuesta y validación pendiente
+
+Ajustes del host en Race settings: `Player collisions: On / Off`, `Pit stops: On / Off` y `CPU liveries: Multiplayer / Single player`. Valores originales por defecto. Compartir en la configuración validada de inicio y exigir la misma versión en todas las cabinas; cambios sólo en lobby y limpiar Ready como el resto de reglas. Reaplicar en cada arranque/reinicio, también carreras seguidas después de attract. No es una opción local de gráficos y no se debe inferir la condición de bot por la skin. En single player pueden tener sentido pits y skins; colisiones entre humanos no aplica.
+
+Matriz mínima antes de publicar: colisiones frente/lateral/solapamiento, CPU y muros aún sólidos, rebufo preservado; 2 y 8 humanos; pérdida/latencia; tres circuitos, normal e inverso; pits en vueltas intermedias y última, llegada y carrera inmediata siguiente; skins en las dos APIs, distancia clásica/ampliada, daño y cambio de cámaras. No prometer equivalencia por pruebas puramente visuales.
+
+Se consultaron los scripts públicos de [MikroMacaroni](https://raw.githubusercontent.com/MikroMacaroni/daytona-usa-script-utils/main/scripts/daytona.lua) y [SailorSat](https://raw.githubusercontent.com/SailorSat/daytona-utils/master/src/scripts/daytonas.lua), además del [proyecto original](https://github.com/alphanu1/daytona-arcade-recomp). Esos dos scripts concretos no aportan estos tres ajustes listos para integrar; no se concluye que no exista otro hack. La vía investigada es una regla nativa puntual sobre la recompilación, sin añadir un intérprete Lua.
+
+Evidencia privada en `build/room-rules-research/research.json`; el listado derivado del juego permanece bajo build ignorado y no se distribuye. Sólo se guarda documentación; web/, native/, dist/ y ZIP 52.4 se preservan.
+
+---
+
+# 2026-10-20 — 52.4: controles y UI del chat
+
+Base 52.3 preservada. Se mantienen motor nativo, APIs graficas, reloj, transporte, autoridad de carrera, salas publicas/privadas y espera. UI nueva en ingles. Sin cambios en Firebase o diagnosticos por defecto.
+
+## Causas y correcciones
+
+`inputs()` devolvia valores neutros para todos los dispositivos cuando el campo del chat tenia foco. Ademas onTyping limpiaba touch y reiniciaba los flancos del mando. Ahora solo se neutraliza el aporte del teclado mientras se escribe; mando, volante/pedales y tactil se siguen leyendo con sus perfiles. El foco del texto no cambia asignaciones ni reanuda botones mantenidos como pulsaciones nuevas. Al minimizar se restaura el foco al canvas.
+
+El scrollbar heredaba color-scheme dark. Se aplica light y thumb gris/ivory, gutter estable y estilos compatibles para el log del juego y del lobby. La prueba anterior confirma dark; la actual exige light.
+
+El boton flotante New messages del lobby usaba translateX(-50%), que la regla compartida de hover sustituia por transform:none. La medicion anterior arroja +62.49 px al apuntarlo. Ambos botones de mensajes nuevos ahora viven en un contenedor absoluto centrado con flex, sin transform de centrado; pointerdown evita el desplazamiento automatico del contenedor por foco. Se comprueban hover, pulsacion y clic con coordenadas reales.
+
+El chat tambien hacia latest() al recibir snapshots sin mensajes nuevos si estaba cerca del final. Se reprodujo un desplazamiento de 9.6 px tras cinco refrescos identicos. Ahora la actualizacion del historial usa sus secuencias y solo sigue mensajes realmente nuevos; conserva una linea visible al recortar el limite de 60 mensajes. El aviso no cambia de posicion bajo el puntero y seguir leyendo mensajes antiguos no se deshace por un heartbeat.
+
+En movil, CHAT minimizado se coloca a la izquierda sobre direccion, con icono/texto menores y ancho aproximado 76 px sin pendientes. La zona tactil mantiene minimo 44 px. No abre el teclado virtual automaticamente al desplegar el historial con puntero. El panel expandido deja libre toda la zona de cambios/pedales: abajo-derecha en vertical y a la izquierda en horizontal, con medidas segun escala tactil.
+
+## Evidencia
+
+268 tests Node PASS. `tests/chat-polish-browser.cjs` compara DOM anterior/actual para scroll, esquema y hover. Comprueba siete tamanos/orientaciones/escalas: 390x844, 320x568, 844x390, 568x320 y tres casos al 140%, incluido 480x320. Rectangulos del boton y panel sin interseccion con cambios, pedales ni direccion. Las capturas touch-layout/lobby-button son fixtures de UI; linked-touch-chat/linked-lobby corresponden a motores enlazados reales.
+
+Dos WASM de produccion y PeerJS real en Chrome visible/WebGL2 Classic. Mando de navegador emulado en host con eje personalizado y shiftUp en boton 10; volante y pedales separados/calibrados emulados en invitado. Con foco y texto, mando conserva steer 40/accel 65; volante conserva steer -54/accel 80/brake 18. Se valida enviar, flanco de cambio mantenido sin duplicacion, GAS tactil mantenido durante foco (100) y liberacion al pedal calibrado, teclado sin fugas y recuperacion al minimizar. Inicio nativo real en escena 22 sigue ocultando/deshabilitando chat. Retorno al lobby comprueba formulario dentro de chatPanel.
+
+Firebase/Analytics solo se sustituyen dentro del fixture local para evitar escrituras externas. No se certifica hardware fisico o Safari real. Informe, hashes y capturas finales en build/chat-polish. Packaging valida web/dist, hashes de los archivos probados, mismo motor/17 fuentes nativas y ZIP 52.3 conservado. Sin cambios de cadencia ni promesas nuevas de rendimiento.
+
+---
+
 # 2026-10-20 — 52.3: asientos de espera durante la partida
 
 52.3 parte de 52.2, cuyo ZIP y carpeta se conservan. No incorpora 53. UI del juego en ingles.

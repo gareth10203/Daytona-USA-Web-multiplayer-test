@@ -1,8 +1,4 @@
-DAYTONA USA WEB 52.3 - WAITING SEATS
-Based on 52.2. Native engine and movement transport preserved.
-Late public entry: waiting chat/seat, automatic admission at lobby return.
-Late private entry: waiting chat/seat, host reviews in the lobby.
-Existing native roster stays fixed during the current arcade session.
-Eight total active/waiting/pending seats. No spectators or hot native join.
-Diagnostics remain manual. Existing Firebase rules apply unchanged.
-Read INVESTIGACIONES.md for validation and limits.
+DAYTONA USA WEB 52.5 - PAGED RACE SETTINGS
+Original race rules are the default. Optional human contacts, automatic pit service and original single-player CPU liveries.
+Shared by all cabinets; host edits only in lobby. Original movement transport, timing and rendering preserved.
+Private instrumentation and ROM are not packaged. Read INVESTIGACIONES.md for validation limits.

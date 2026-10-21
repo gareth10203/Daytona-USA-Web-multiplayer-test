@@ -1,13 +1,13 @@
-import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=52.3-waiting-room';
-import {LatestFlow} from './latest-flow.js?v=52.3-waiting-room';
-import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=52.3-waiting-room';
-import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=52.3-waiting-room';
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=52.3-waiting-room';
-import {SnapshotFlow} from './snapshot-flow.js?v=52.3-waiting-room';
-import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=52.3-waiting-room';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=52.3-waiting-room';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=52.3-waiting-room';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=52.3-waiting-room';
+import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=52.5-race-options';
+import {LatestFlow} from './latest-flow.js?v=52.5-race-options';
+import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=52.5-race-options';
+import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=52.5-race-options';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=52.5-race-options';
+import {SnapshotFlow} from './snapshot-flow.js?v=52.5-race-options';
+import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=52.5-race-options';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=52.5-race-options';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=52.5-race-options';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=52.5-race-options';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -27,7 +27,7 @@ export class Multiplayer {
  constructor({onChange=()=>{},onPrepare=async()=>{},onStart=()=>{},onStop=()=>{},onBytes=()=>{},onRaceOrder=()=>{},isVisible=()=>true,readHealth=()=>({}),readPerformance=()=>null,movementMode='adaptive'}={}){
   Object.assign(this,{onChange,onPrepare,onStart,onStop,onBytes,onRaceOrder,isVisible,readHealth,readPerformance});this.movementMode=movementMode==='reliable'?'reliable':'adaptive';this.motionTimer=null;this.motionDue=0;this.performanceCaptureEnabled=false;this.hostDiagnosticsEnabled=false;this.reset();
  }
- reset(){this.waiters=new Map();this.waitEpoch='';this.remotePhase='';this.chatScenes=new Map();this.chatLocked=new Set();this.raceHistory=new Map();this.raceAuthority=null;this.raceInbox=null;this.raceDeliveries=new Map();this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.swaps=new Map();this.swapNotice='';this.visibility='private';this.roomName='';this.settings={mode:0,difficulty:0,region:'Export',cpuCars:true,reverse:false};this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
+ reset(){this.waiters=new Map();this.waitEpoch='';this.remotePhase='';this.chatScenes=new Map();this.chatLocked=new Set();this.raceHistory=new Map();this.raceAuthority=null;this.raceInbox=null;this.raceDeliveries=new Map();this.diagnosticsRevision=0;this.receivedDiagnosticsRevision=-1;this.setPerformanceCapture(this.hostDiagnosticsEnabled);this.distributor=null;this.stateSequence=0;this.awaitingStop=false;this.endedEpoch='';this.progressFrames=0;this.progressAt=0;this.networkStats=new Map();this.payloadSent=0;this.payloadReceived=0;this.chat=[];this.chatSequence=0;this.chatRate=new Map();this.lastChatSent=-Infinity;this.sentTiming=packetTiming();this.receivedTiming=packetTiming();this.peer=null;this.server=null;this.connections=new Map();this.members=[];this.pending=new Map();this.phase='idle';this.isHost=false;this.id='';this.host='';this.secret='';this.epoch='';this.revision=0;this.swaps=new Map();this.swapNotice='';this.visibility='private';this.roomName='';this.settings=validateSettings({mode:0,difficulty:0,region:'Export'});this.error='';this.signaling=true;this.prepared=new Set();this.timer=null;this.generation=(this.generation||0)+1;this.initRecovery();}
  snapshot(){return {visibility:this.visibility,roomName:this.roomName,diagnosticsEnabled:this.performanceCaptureEnabled,phase:this.phase,isHost:this.isHost,id:this.id,host:this.host,code:this.host&&this.secret?invitation(this.host,this.secret):'',members:this.members.map(x=>({...x})),waiting:[...this.waiters.values()].map(x=>({...x})),waitingForRace:this.waiters.has(this.id),remotePhase:this.remotePhase,pending:[...this.pending.values(),...(this.isHost?[...this.waiters.values()].filter(w=>w.needsApproval):[])].map(x=>({...x})),settings:{...this.settings},error:this.error,signaling:this.signaling,awaitingStop:this.awaitingStop,chat:this.chat.map(x=>({...x})),chatAvailable:this.chatAllowed(this.id),reconnectUntil:this.reconnectUntil,confirming:this.commands.size,readyPending:[...this.commands.values()].some(c=>c.data.type==='ready'),seatPending:[...this.commands.values()].find(c=>c.data.type==='move-seat')?.data.cabinet??null,seatActionPending:[...this.commands.values()].some(c=>['move-seat','swap-request','swap-answer','swap-cancel'].includes(c.data.type)),swaps:this.swapState(),swapNotice:this.swapNotice,lastAck:this.lastAck};}
  changed(){this.onChange(this.snapshot());}
  recordConnectionEvent(kind,conn=null,detail={}){

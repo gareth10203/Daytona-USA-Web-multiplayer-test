@@ -1,7 +1,6 @@
-VERSION 52.3 - SALA DE ESPERA DURANTE PARTIDA
-Publicar el contenido del ZIP, con index.html en la raiz.
-En publicas se entra a esperar directamente. En privadas el host admite al volver al lobby.
-Usar Return all to room para incorporar cabinas a la siguiente sesion.
-Todos deben usar 52.3. Reglas Firebase sin cambios. Diagnosticos manuales.
-Sin ROM ni instrumentos privados.
-Local: node scripts/serve.js dist 8128
+VERSION 52.5 - AJUSTES DE CARRERA PAGINADOS
+Publicar el contenido del ZIP, con index.html en la raiz. Todos deben usar 52.5.
+Race settings: flechas para Race setup / Race rules, sin saltos de altura.
+Reglas originales por defecto. Pits Off permite el carril como atajo sin parada automatica.
+Sin cambios en Firebase. Diagnosticos manuales. Sin ROM ni instrumentos privados.
+Local: node scripts/serve.js dist 8130

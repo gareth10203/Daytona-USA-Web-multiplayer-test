@@ -1,3 +1,45 @@
+# Daytona USA Web — 52.5: paged race settings and optional race rules
+
+Based on 52.4, preserved in its original folder and ZIP. All room participants must use 52.5.
+
+The lobby's **Race settings** panel now has Previous/Next buttons and a page counter. **Race setup** contains mode, difficulty, CPU cars and direction; **Race rules** contains player collisions, pit stops and CPU liveries. Changing pages keeps the panel height and selected values stable. The page choice is local and survives room updates; guests can browse both pages. Only the host can edit settings, while in the lobby. Rule changes clear Ready and are applied to every cabinet on session start.
+
+Original behavior remains the default: contacts On, pit service On, multiplayer CPU liveries. Optional rules:
+
+- **Player collisions Off:** skip human–human contact response. CPU contacts and walls stay solid. Car poses, traffic ordering and slipstream routines are not disabled.
+- **Pit stops Off:** prevent the original automatic pit entry/service transition. The lane stays open to drive through as a shortcut. Also available in the Single Player setup and saved on that device.
+- **CPU liveries Single player:** use original single-player appearance selectors for bots in a linked game. Human colors, IDs, AI and physics are retained. This selector is disabled when CPU cars are Off.
+
+No changes to the movement channel, network pacing, frame clock, renderer, Firebase rules, App Check or Analytics. Diagnostics remain off by default. The new rules are native, scoped read predicates in the existing recompiled engine; no Lua runtime or per-frame teleporting is added.
+
+Validation: 270 Node tests; the paged panel tested at 1440×900, 1280×720 and mobile 390×844; two real native engines completed a lap on all three courses in both directions with the rules enabled. Original CPU appearance selectors were checked for every bot. Default-rule RAM/texture parity covers boot, attract, selection and reload. See INVESTIGACIONES.md for exact evidence and limits. Local tests do not certify all WAN conditions, physical controllers, iPhone Safari, every collision geometry or a full pit-lane finish on each course.
+
+Publish the ZIP contents with `index.html` at the root. Local: `node scripts/serve.js dist 8130`. No ROM, generated game listing or private diagnostic bindings are packaged.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 52.4: chat controls and layout
+
+Based on 52.3, preserved in its original folder and ZIP. All room participants should use 52.4.
+
+Typing in the in-game chat suppresses keyboard driving only. The selected controller, calibrated wheel, separate pedals and held touch controls continue to be polled. Opening or sending chat does not clear physical device edges or remap buttons. Minimize restores canvas focus; keyboard driving resumes normally after leaving the field.
+
+The scrollbars use the light ivory/grey room palette. New-message buttons are centered by their own anchor in both game and lobby, so shared hover/pressed transforms cannot displace them. Room heartbeats do not repeatedly scroll unchanged history. When the bounded history trims old messages, the surviving line being read stays anchored.
+
+On touch screens the smaller CHAT button sits on the left, above steering, with a 44 px minimum target. Opening history by touch does not automatically open the software keyboard. The expanded panel leaves gear/pedal controls clear and adjusts to portrait, landscape and control sizes through 140%.
+
+The waiting-seat policy, reliable chat protocol, native engine, movement transport, race authority, graphics and frame clock are unchanged. Chat still hides and locks at native start and returns in attract. Firebase rules/configuration are unchanged; diagnostics stay off by default.
+
+Validation: 268 Node tests and `build/chat-polish/validation.json` (real DOM checks, seven emulated mobile layouts and two production WASM engines with browser-emulated controller/wheel/pedals). This does not certify physical devices or iPhone Safari. Private test bindings and ROM are not packaged.
+
+Publish the ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8129`.
+
+---
+
+## Previous release behavior
+
 # Daytona USA Web — 52.3: waiting seats during a session
 
 Based on 52.2. All players must use 52.3. The previous release remains in its original folder and ZIP.

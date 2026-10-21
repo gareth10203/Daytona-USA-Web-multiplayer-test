@@ -1,5 +1,5 @@
 // Public web configuration. Database ownership is enforced by server rules.
-import {createAppCheckGate} from './firebase-security.js?v=52.3-waiting-room';
+import {createAppCheckGate} from './firebase-security.js?v=52.5-race-options';
 export const FIREBASE_CONFIG={
  apiKey:'AIzaSyDdISDv02wMhfd17CDVI8FQkk_mWBHlpms',
  authDomain:'daytona-usa-web.firebaseapp.com',

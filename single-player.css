@@ -26,3 +26,5 @@
 @media(max-width:360px){.single-race-options{gap:8px}.single-race-option{padding:10px 8px}.single-heading h2{font-size:20px}}
 @media(min-width:761px) and (max-height:740px){.single-heading p{display:none}}
 @media(prefers-reduced-motion:reduce){.single-view{animation:none}}
+
+@media(min-width:761px){.single-race-options{grid-template-columns:repeat(3,minmax(0,1fr))}.single-race-option p{min-height:33px}}

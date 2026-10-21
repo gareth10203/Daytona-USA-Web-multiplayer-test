@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="host-console.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="controller-settings.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="input-settings.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="single-player.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="ui-consistency.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="menu-gamepad.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="race-standings.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="public-rooms.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="waiting-room.css?v=52.3-waiting-room">
-  <link rel="stylesheet" href="game-chat.css?v=52.3-waiting-room">
+  <link rel="stylesheet" href="style.css?v=52.5-race-options">
+  <link rel="stylesheet" href="host-console.css?v=52.5-race-options">
+  <link rel="stylesheet" href="controller-settings.css?v=52.5-race-options">
+  <link rel="stylesheet" href="input-settings.css?v=52.5-race-options">
+  <link rel="stylesheet" href="single-player.css?v=52.5-race-options">
+  <link rel="stylesheet" href="ui-consistency.css?v=52.5-race-options">
+  <link rel="stylesheet" href="menu-gamepad.css?v=52.5-race-options">
+  <link rel="stylesheet" href="race-standings.css?v=52.5-race-options">
+  <link rel="stylesheet" href="public-rooms.css?v=52.5-race-options">
+  <link rel="stylesheet" href="waiting-room.css?v=52.5-race-options">
+  <link rel="stylesheet" href="game-chat.css?v=52.5-race-options">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -42,7 +42,7 @@
     <aside id="gameChat" class="game-chat" hidden aria-label="Room chat">
       <button id="gameChatToggle" class="game-chat-toggle" type="button" aria-controls="gameChatPanel" aria-expanded="true" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg><span>CHAT</span><span id="gameChatUnread" class="unread-badge" hidden>0</span></button>
       <section id="gameChatPanel" class="game-chat-panel" aria-labelledby="gameChatTitle"><header class="chat-heading"><h2 id="gameChatTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>ROOM CHAT</h2><button id="gameChatHide" class="game-chat-hide" type="button" aria-label="Hide chat" title="Hide chat"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button></header>
-      <div class="game-chat-scroll"><ol id="gameChatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Room messages" tabindex="0"></ol><p id="gameChatEmpty" class="chat-empty">Meet your grid.<br>Chat until the engines start.</p><button id="gameChatNew" class="game-chat-new" type="button" hidden>New messages ↓</button></div>
+      <div class="game-chat-scroll"><ol id="gameChatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Room messages" tabindex="0"></ol><p id="gameChatEmpty" class="chat-empty">Meet your grid.<br>Chat until the engines start.</p><div class="game-chat-new-anchor"><button id="gameChatNew" class="game-chat-new" type="button" hidden>New messages ↓</button></div></div>
       <form id="gameChatForm" class="chat-form"><label for="gameChatInput" class="sr-only">Message to your room</label><input id="gameChatInput" maxlength="240" autocomplete="off" enterkeyhint="send" placeholder="Message your friends…" aria-describedby="gameChatFeedback"><button id="gameChatSend" class="game-chat-send" type="submit" aria-label="Send message" disabled><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 9-18 9 4-9-4-9ZM7 12h14"/></svg></button></form><p id="gameChatFeedback" class="game-chat-feedback" role="status">Chat pauses during the race.</p></section>
     </aside>
   <aside id="waitingToast" class="waiting-toast" hidden role="status" aria-live="polite" aria-atomic="true"></aside>
@@ -77,6 +77,7 @@
               <div class="single-race-option"><label for="singleDifficulty"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16M5 16v-4h3v4M11 16V8h3v8M17 16V4h3v12"/></svg>Difficulty</label><select id="singleDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select><p>The arcade’s original difficulty setting.</p></div>
               <div class="single-race-option"><label for="singleDirection"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13a4 4 0 0 1 0 8H7M8 4 4 8l4 4M11 12l-4 4 4 4"/></svg>Direction</label><select id="singleDirection" aria-describedby="singleDirectionHelp"><option value="normal">Normal</option><option value="reverse">Reverse</option></select><p id="singleDirectionHelp">The original direction on all three circuits.</p></div>
               <div class="single-race-option"><label for="singleCpuCars"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 2-4h10l2 4M3 9h18v9H3V9ZM5 18v3M19 18v3M3 13h4M17 13h4M8 4l-1 5M16 4l1 5"/></svg>CPU cars</label><select id="singleCpuCars" aria-describedby="singleCpuHelp"><option value="true">On</option><option value="false">Off</option></select><p id="singleCpuHelp">Race against the original arcade grid.</p></div>
+              <div class="single-race-option"><label for="singlePitStops"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V4h14v16M9 20v-7h6v7M3 20h18M9 8h6"/></svg>Pit stops</label><select id="singlePitStops" aria-describedby="singlePitHelp"><option value="true">On · Original service</option><option value="false">Off · Drive through</option></select><p id="singlePitHelp">Off keeps the lane open as a shortcut, without automatic stops.</p></div>
             </div>
             <footer class="single-race-footer"><div><div class="single-cabinet-spec"><span>DELUXE</span><span>EXPORT</span><span>LOCAL PLAY</span></div><p id="singleSessionHint">Choose your circuit and transmission in the arcade.</p></div><button id="singleStart" type="submit" class="launch-btn ui-button ui-primary"><span id="singleStartLabel">ENTER ARCADE</span><span aria-hidden="true">→</span></button></footer>
             <p id="singleStatus" class="single-status" role="status" aria-live="polite"></p>
@@ -116,15 +117,22 @@
               <section id="seatSwap" class="seat-swap-notice" hidden aria-labelledby="seatSwapTitle"><h4 id="seatSwapTitle">Seat swap</h4><p id="seatSwapMessage" role="status" aria-live="polite"></p><div class="seat-swap-actions"><button id="seatSwapAccept" type="button" class="ui-button ui-primary">Accept swap</button><button id="seatSwapDecline" type="button" class="ui-button ui-secondary">Decline</button><button id="seatSwapCancel" type="button" class="ui-button ui-secondary">Cancel request</button></div></section>
               <p id="seatStatus" class="seat-status" role="status" aria-live="polite" hidden></p>
               <p id="openSeatCount" class="open-seats">Invite a friend to fill the grid.</p>
+
               <div id="pendingBlock" hidden><div class="section-label"><h3>JOIN REQUESTS</h3><div class="request-controls"><span id="pendingCount" aria-live="polite"></span></div></div><ul id="pendingList" class="room-pending"></ul></div>
             </section>
             <aside class="room-sidebar" aria-label="Room options">
-              <fieldset class="room-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label><label for="roomCpuCars" class="cpu-cars-setting">CPU cars<select id="roomCpuCars"><option value="true">On · Arcade grid</option><option value="false">Off · Players only</option></select></label><label for="roomDirection" class="direction-setting">Direction<select id="roomDirection" aria-describedby="roomSettingsHint"><option value="normal">Normal</option><option value="reverse">Reverse</option></select></label></div><p class="region-label">Region <strong>Export</strong></p><p id="roomSettingsHint" class="room-hint"></p></fieldset>
+              <fieldset class="room-settings paged-race-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend>
+                <div class="race-page-navigation"><span id="racePageTitle" role="status" aria-live="polite">Race setup <small>1 / 2</small></span><div><button id="racePagePrevious" type="button" class="ui-button ui-secondary" aria-label="Previous settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button id="racePageNext" type="button" class="ui-button ui-secondary" aria-label="Next settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
+                <div id="raceSettingsPages" class="race-settings-pages">
+                  <div id="raceSetupPage" class="race-settings-page" role="group" aria-label="Race setup"><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label><label for="roomCpuCars" class="cpu-cars-setting">CPU cars<select id="roomCpuCars"><option value="true">On · Arcade grid</option><option value="false">Off · Players only</option></select></label><label for="roomDirection" class="direction-setting">Direction<select id="roomDirection" aria-describedby="roomSettingsHint"><option value="normal">Normal</option><option value="reverse">Reverse</option></select></label></div><p class="region-label">Region <strong>Export</strong></p></div>
+                  <div id="raceRulesPage" class="race-settings-page" role="group" aria-label="Race rules" hidden><div class="race-selectors"><label for="roomPlayerCollisions">Player collisions<select id="roomPlayerCollisions" aria-describedby="roomContactHelp"><option value="true">On</option><option value="false">Off · No contact</option></select><span id="roomContactHelp" class="race-option-help">Bots and walls remain solid.</span></label><label for="roomPitStops">Pit stops<select id="roomPitStops" aria-describedby="roomPitHelp"><option value="true">On · Original service</option><option value="false">Off · Drive through</option></select><span id="roomPitHelp" class="race-option-help">Use the open lane as a shortcut.</span></label><label for="roomCpuLiveries" class="livery-setting">CPU liveries<select id="roomCpuLiveries"><option value="multiplayer">Multiplayer · Original</option><option value="single">Single player · Varied</option></select></label></div></div>
+                </div><p id="roomSettingsHint" class="room-hint"></p>
+              </fieldset>
               <div id="inviteBlock" class="invite-card" hidden><h3><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m10 14 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0"/></svg>INVITE FRIENDS</h3><label for="inviteLink" class="sr-only">Private invitation link</label><input id="inviteLink" readonly aria-describedby="inviteHint"><div class="invite-actions"><button id="copyRoom" type="button" class="ui-button ui-secondary">Copy link</button><button id="copyCode" type="button" class="quiet-btn ui-button ui-quiet">Copy code</button></div><span id="roomCode" hidden></span><p id="inviteHint" class="room-hint">Only admitted players can join the grid and chat.</p></div>
               <p id="roomConnection" class="room-connection" role="status" aria-live="polite"></p><p id="arcadeLinkStatus" class="room-hint" hidden></p>
             </aside>
             <section id="chatPanel" class="room-chat" aria-labelledby="chatTitle"><div class="chat-heading"><h3 id="chatTitle"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/></svg>LOBBY CHAT</h3><span id="chatUnread" class="unread-badge" hidden>0</span></div>
-              <div class="chat-scroll"><ol id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Lobby messages" tabindex="0"></ol><p id="chatEmpty" class="chat-empty">Meet your grid.<br><span>Say hello or coordinate the next race.</span></p><button id="newChatMessages" type="button" class="new-messages ui-button ui-secondary" hidden>New messages ↓</button></div>
+              <div class="chat-scroll"><ol id="chatLog" role="log" aria-live="polite" aria-relevant="additions" aria-label="Lobby messages" tabindex="0"></ol><p id="chatEmpty" class="chat-empty">Meet your grid.<br><span>Say hello or coordinate the next race.</span></p><div class="chat-new-anchor"><button id="newChatMessages" type="button" class="new-messages ui-button ui-secondary" hidden>New messages ↓</button></div></div>
               <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Message to the lobby</label><input id="chatInput" maxlength="240" autocomplete="off" enterkeyhint="send" placeholder="Message your friends…" aria-describedby="chatFeedback"><button id="chatSend" type="submit" aria-label="Send message" class="ui-button ui-secondary"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 9-18 9 4-9-4-9ZM7 12h14"/></svg></button></form>
               <div class="chat-footnote"><p id="chatFeedback" role="status" aria-live="polite">Only players in this room can read this chat.</p><span id="chatLength">0/240</span></div>
             </section>
@@ -228,8 +236,8 @@
       </section>
     </div>
   </div>
-  <small id="buildVersion" class="build-version"><span>v52.3</span> · <time datetime="2026-10-20">20.10.26</time></small>
+  <small id="buildVersion" class="build-version"><span>v52.5</span> · <time datetime="2026-10-21">21.10.26</time></small>
   <div id="menuGamepadHints" class="menu-gamepad-hints" role="status" aria-label="Controller menu controls" hidden></div>
-  <script src="vendor/peerjs.min.js?v=52.3-waiting-room" defer></script><script src="daytona_engine.js?v=52.3-waiting-room" defer></script><script type="module" src="main.js?v=52.3-waiting-room"></script>
+  <script src="vendor/peerjs.min.js?v=52.5-race-options" defer></script><script src="daytona_engine.js?v=52.5-race-options" defer></script><script type="module" src="main.js?v=52.5-race-options"></script>
 </body>
 </html>

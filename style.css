@@ -297,3 +297,24 @@
 @media(min-width:900px) and (max-height:780px){#menuDialog .room-panel.has-seat-swap .driver-card{min-height:44px;padding-top:4px;padding-bottom:4px;}#menuDialog .room-panel.has-seat-swap .driver-card.empty-slot{padding:0;}#menuDialog .room-panel.has-seat-swap .seat-move{padding-top:4px;padding-bottom:4px;}}
 
 #menuDialog .room-panel.has-seat-swap #readyRoom:disabled{background:#e9e9e3;border-color:#d1d1c8;color:#89897e;}
+
+/* Race settings page locally without changing the room or moving its layout. */
+.race-option-help{display:block;margin-top:5px;font-size:10px;font-weight:400;line-height:1.35;color:#68685e}
+.race-selectors .livery-setting{grid-column:1/-1}
+.race-page-navigation{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 12px;padding-bottom:9px;border-bottom:1px solid #d0d0c6}
+#racePageTitle{font-size:12px;font-weight:700}#racePageTitle small{font-size:10px;color:#77776b;font-weight:400;margin-left:7px;font-variant-numeric:tabular-nums}
+.race-page-navigation>div{display:flex;gap:6px}
+#menuDialog .race-page-navigation .ui-button{display:grid;place-items:center;min-width:32px;min-height:32px;width:32px;height:32px;padding:0;border-radius:3px}
+.race-page-navigation svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.race-settings-pages{height:184px}.paged-race-settings .race-selectors{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.paged-race-settings .room-hint{min-height:2.8em;margin-bottom:0}.race-settings-page select{width:100%;min-width:0}
+@media(min-width:761px) and (max-height:780px){.race-settings-pages{height:165px}.race-page-navigation{margin-bottom:8px;padding-bottom:6px}.paged-race-settings .race-selectors{gap:8px}.paged-race-settings .race-selectors select{min-height:34px}.paged-race-settings .race-option-help{font-size:9px}}
+@media(max-width:760px){.race-settings-pages{height:214px}.paged-race-settings .cpu-cars-setting,.paged-race-settings .direction-setting{grid-column:auto}#menuDialog .race-page-navigation .ui-button{min-width:44px;min-height:44px;width:44px;height:44px}.paged-race-settings .room-hint:not(:empty){display:block}}
+
+@media(min-width:981px) and (max-height:780px){
+ .race-settings-pages{height:148px}.paged-race-settings .room-hint{min-height:3em}
+ .room-heading{margin-bottom:8px;padding-top:2px}.room-heading h2{font-size:20px;margin-block:3px}
+ .room-panel .room-footer{margin-top:8px;padding-top:8px}.room-note{margin-top:5px}.mp-view #mainMenu>.rom-modal{padding-bottom:10px}
+}
+
+@media(min-width:981px) and (max-height:780px){.mp-view #mainMenu>.rom-modal{padding-top:58px;padding-bottom:6px}.paged-race-settings .room-hint{margin-top:4px}}

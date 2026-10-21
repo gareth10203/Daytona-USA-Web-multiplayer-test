@@ -1,17 +1,17 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=52.3-waiting-room';
-import {validateSettings} from './room-settings.js?v=52.3-waiting-room';
+import {DEFAULT_EEPROM} from './nvram.js?v=52.5-race-options';
+import {raceOptionsMask,validateSettings} from './room-settings.js?v=52.5-race-options';
 
 export const SINGLE_SETTINGS_ID='daytona-single-player-race-v1';
-export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,region:'Export'});
+export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,pitStops:true,region:'Export'});
 export function loadSingleSettings(storage){
  let saved;try{saved=JSON.parse(storage.getItem(SINGLE_SETTINGS_ID));}catch{}
  const value={...DEFAULT_SINGLE_SETTINGS};
  if(Number.isInteger(saved?.mode)&&saved.mode>=0&&saved.mode<=2)value.mode=saved.mode;
  if(Number.isInteger(saved?.difficulty)&&saved.difficulty>=0&&saved.difficulty<=3)value.difficulty=saved.difficulty;
- for(const key of ['cpuCars','reverse'])if(typeof saved?.[key]==='boolean')value[key]=saved[key];
+ for(const key of ['cpuCars','reverse','pitStops'])if(typeof saved?.[key]==='boolean')value[key]=saved[key];
  return value;
 }
-export function sameSingleSettings(a,b){return !!a&&!!b&&['mode','difficulty','cpuCars','reverse','region'].every(key=>a[key]===b[key]);}
+export function sameSingleSettings(a,b){return !!a&&!!b&&['mode','difficulty','cpuCars','reverse','pitStops','region'].every(key=>a[key]===b[key]);}
 export function singleConfigurationInputs(value){
  const {mode,difficulty}=validateSettings(value);
  // Keep LINK ID at SINGLE and CAR NUMBER at 1. The original service menu
@@ -33,6 +33,6 @@ export async function prepareSingleCabinet(wasm,reload,value,cancelled=()=>false
  const eeprom=wasm.HEAPU8.slice(wasm._daytona_eeprom_ptr(),wasm._daytona_eeprom_ptr()+wasm._daytona_eeprom_size());
  if(eeprom[11]!==0||eeprom[26]!==0)throw Error('The arcade did not confirm a standalone DELUXE cabinet.');
  reload();wasm.HEAPU8.set(eeprom,wasm._daytona_eeprom_ptr());wasm.HEAPU8.set(backup,wasm._daytona_backup_ptr());
- if(!wasm._daytona_link_enable(0)||!wasm._daytona_set_cpu_cars(Number(config.cpuCars))||!wasm._daytona_set_reverse_course(config.reverse?4:0))throw Error('Could not apply the single-player race options.');
+ if(!wasm._daytona_link_enable(0)||!wasm._daytona_set_race_options(raceOptionsMask(config))||!wasm._daytona_set_cpu_cars(Number(config.cpuCars))||!wasm._daytona_set_reverse_course(config.reverse?4:0))throw Error('Could not apply the single-player race options.');
  return config;
 }
