@@ -1,3 +1,7 @@
+# 52.8.1 — game menu backdrop
+
+Restore the previous dark overlay and 7px backdrop blur only when an existing game image is behind the menu. Keep the initial decorative background clear and slightly visible. CSS-only change using the existing playing class. Single-player production-engine browser checks cover initial menu, Escape, Settings and desktop/mobile viewports. No simulation, network or arrival-alert behavior changes.
+
 # Daytona USA Web — 52.8: lobby arrival alerts
 
 Based on 52.7, preserved in its original folder and ZIP. All participants must use 52.8.

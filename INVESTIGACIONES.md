@@ -1,3 +1,7 @@
+# 2026-10-21 — 52.8.1: fondo de menú sobre el juego
+
+Se restaura #050505ad y blur(7px) únicamente bajo .playing .launcher, incluyendo prefijo Safari. El fondo decorativo inicial conserva #05050570 sin desenfoque. Se utiliza la clase playing existente, sin nuevas lecturas por frame ni cambios de reloj/render/red. El desenfoque sólo actúa con el menú visible, como antes de 52.7. Comprobación build/menu-backdrop/validation.json con motor real single player: menú inicial, Escape sobre partida, Settings y dos tamaños móviles. Los demás archivos funcionales se verifican idénticos al ZIP 52.8 preservado; sin ROM ni instrumentos privados.
+
 # 2026-10-21 — 52.8: sonido de llegada y avisos del sistema
 
 Versión separada multiplayer-arrival-alerts; 52.7 y su ZIP preservados. UI y textos de notificación en inglés.

@@ -1,6 +1,3 @@
-DAYTONA USA WEB 52.8 - ARRIVAL ALERTS
-Distinct soft arrival sound. Host system notifications for public arrivals and private access requests.
-Create room can ask notification permission; denial does not block rooms.
-Notification-only service worker: no fetch handler, cache or Push subscription. Keep the host page open and connected.
-Native engine, network cadence, Firebase rules and ROM memory preserved from 52.7.
-Read INVESTIGACIONES.md for validation and platform limits. No ROM or private instruments included.
+DAYTONA USA WEB 52.8.1 - MENU BACKDROP
+Restore previous dark/blur treatment over actual game only. Initial decorative backdrop stays clear.
+52.8 arrival alerts and all other functional files preserved byte for byte. No ROM included.
