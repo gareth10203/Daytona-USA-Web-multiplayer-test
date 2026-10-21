@@ -1,5 +1,5 @@
 // WebGPU Model 2 polygons surrounded by GPU-composed System-24 layers.
-import {createGpuLayers} from './gpu-layers.js?v=52.8-arrival-alerts';
+import {createGpuLayers} from './gpu-layers.js?v=53.2-single-liveries';
 
 export async function createWebGPURenderer(canvas, onFailure) {
   if (!globalThis.isSecureContext || !navigator.gpu)
@@ -16,7 +16,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   if (!context) throw Error('Could not create the WebGPU context.');
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({device, format, alphaMode:'opaque'});
-  const response = await fetch(new URL('./model2.wgsl?v=52.8-arrival-alerts', import.meta.url));
+  const response = await fetch(new URL('./model2.wgsl?v=53.2-single-liveries', import.meta.url));
   if (!response.ok) throw Error('Could not load model2.wgsl.');
   const modelShader = device.createShaderModule({label:'Model 2',code:await response.text()});
   for (const shader of [modelShader]) {

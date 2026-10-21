@@ -1,5 +1,6 @@
-VERSION 52.8.1
-Fondo decorativo inicial claro. Menu sobre juego: oscurecimiento y desenfoque anteriores restaurados.
-Avisos de llegada de 52.8 conservados. Sin cambios de motor, red ni simulacion.
-Publicar contenido del ZIP en la raiz. Sin ROM ni instrumentos privados.
-Local: http://localhost:8133
+VERSION 53.2 - SKINS TAMBIEN EN SINGLE PLAYER
+Publicar contenido del ZIP con index.html en la raiz. Todos deben usar 53.2.
+Single Player > Your livery: Original y 39 skins CPU, con la misma barra de carga y cache local.
+La eleccion single player se guarda por separado. Cambiarla en una partida pausada requiere Apply & Restart.
+Los coches CPU, fisicas y progreso se conservan. No incluye ROM ni capturas estaticas de skins.
+Sin cambios en Firebase. Local: node scripts/serve.js dist 8136

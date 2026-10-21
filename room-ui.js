@@ -1,19 +1,22 @@
-import {mountRoomInvitation} from './room-invitation.js?v=52.8-arrival-alerts';
-import {mountWaitingToast} from './waiting-room.js?v=52.8-arrival-alerts';
-import {PublicRoomDirectory} from './public-rooms.js?v=52.8-arrival-alerts';
-import {createFirebaseDirectoryBackend} from './firebase-client.js?v=52.8-arrival-alerts';
-import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=52.8-arrival-alerts';
-import {carColor} from './car-colors.js?v=52.8-arrival-alerts';
-import {parseInvitation,invitation} from './room-settings.js?v=52.8-arrival-alerts';
-import {createLobbyNotifications} from './lobby-notifications.js?v=52.8-arrival-alerts';
+import {mountRoomInvitation} from './room-invitation.js?v=53.2-single-liveries';
+import {mountWaitingToast} from './waiting-room.js?v=53.2-single-liveries';
+import {PublicRoomDirectory} from './public-rooms.js?v=53.2-single-liveries';
+import {createFirebaseDirectoryBackend} from './firebase-client.js?v=53.2-single-liveries';
+import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=53.2-single-liveries';
+import {carColor} from './car-colors.js?v=53.2-single-liveries';
+import {parseInvitation,invitation} from './room-settings.js?v=53.2-single-liveries';
+import {createLobbyNotifications} from './lobby-notifications.js?v=53.2-single-liveries';
+import {mountPlayerSkins} from './player-skins-ui.js?v=53.2-single-liveries';
+import {PLAYER_SKINS} from './player-skins.js?v=53.2-single-liveries';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
-export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enableArrivalNotifications=()=>{},notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
+export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>false,enableArrivalNotifications=()=>{},notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry'),singlePanel=$('singlePlayerPanel');
  const invitationMenu=mountRoomInvitation({container:$('roomInvite'),trigger:$('inviteRoom'),content:$('inviteBlock'),closeButton:$('closeInvite'),initialFocus:$('copyRoom')});let invitePhase='';
  const directory=new PublicRoomDirectory({backend:createFirebaseDirectoryBackend});
  let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='';
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
+ const skinPicker=mountPlayerSkins({root:$('menuDialog'),room,previews});
  const toast=mountWaitingToast(document.getElementById('waitingToast'));
  const notifications=createLobbyNotifications({notifyChat,notifyReady,notifyConfirmed});
  let entryBusy=false;
@@ -22,7 +25,7 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
  try{const name=localStorage.getItem('daytona-driver-name-v1');if(name)$('driverName').value=name.slice(0,24);}catch{}
  function layout(active,showGuide=false){$('menuDialog').classList.remove('single-view');singlePanel.hidden=true;$('menuDialog').classList.toggle('mp-view',active);$('menuDialog').classList.toggle('mp-entry',active&&showGuide);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
  function navigation(next=view){
-  if(next!=='room')invitationMenu.close();
+  if(next!=='room'){invitationMenu.close();skinPicker.close(false);}
   view=next;
   choices.hidden=view!=='modes'||!verified;
   const resume=view==='modes'&&verified&&canResume();
@@ -118,8 +121,9 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
   for(const [seat,node] of emptySeats)if(!showSeats||occupied.has(seat)){node.remove();emptySeats.delete(seat);}
   const nodes=new Map();
   for(const m of roster){let c=cards.get(m.id);if(!c){const li=document.createElement('li'),number=document.createElement('span'),info=document.createElement('div'),name=document.createElement('strong'),role=document.createElement('small'),status=document.createElement('span'),remove=document.createElement('button'),swap=document.createElement('button');
-    li.className='driver-card';number.className='cabinet-number';info.className='driver-info';status.className='driver-status';remove.type='button';remove.className='remove-driver';remove.textContent='×';remove.onclick=()=>{if(room.kick(m.id))$('readyRoom').focus();};swap.type='button';swap.className='seat-swap';const action=document.createElement('span');action.className='seat-card-action';action.textContent='⇄ Request swap';swap.append(action);swap.onclick=()=>room.requestSwap(m.id);info.append(name,role);li.append(number,info,status,swap,remove);c={li,number,name,role,status,remove,swap};cards.set(m.id,c);}
-   const reconnecting=m.connection==='reconnecting',color=carColor(m.cabinet),reserved=(state.swaps||[]).some(o=>o.from===m.id||o.to===m.id);c.li.style.setProperty('--car-color',color.color);c.number.title=`Car ${m.cabinet} · ${color.name}`;c.swap.hidden=m.waiting||me?.waiting||m.id===state.id||state.phase!=='lobby';c.swap.disabled=reconnecting||reserved||!!state.seatActionPending||(state.swaps||[]).some(o=>o.from===state.id||o.to===state.id);c.swap.setAttribute('aria-label',`Request a swap with ${m.name}, car ${m.cabinet}`);c.swap.title=c.swap.disabled?'Seat reserved until the current request or reconnection ends.':`Request car ${m.cabinet} in exchange for yours`;c.li.dataset.seat=m.cabinet;c.li.classList.toggle('own-seat',m.id===state.id);c.li.classList.toggle('driver-waiting',!!m.waiting);c.li.classList.toggle('driver-ready',m.ready&&!reconnecting);c.li.classList.toggle('driver-reconnecting',reconnecting);c.number.textContent=String(m.cabinet).padStart(2,'0');c.name.textContent=m.name;c.name.title=m.name;c.role.textContent=`${m.id===state.id?'You · ':''}${m.waiting?'Next race':m.id===state.host?'Host':'Driver'}${reconnecting?' · Seat reserved':m.rtt==null?'':' · '+m.rtt+' ms'}`;c.role.title=m.rtt==null?'':`Connection round-trip estimate: ${m.rtt} ms`;c.status.textContent=reconnecting?'RETRY':m.waiting?(m.needsApproval?'REQUESTED':'WAITING'):m.ready?'READY':'WAIT';c.status.title=reconnecting?'Reconnecting. Seat reserved for up to 30 seconds.':'';c.remove.hidden=m.waiting||!state.isHost||state.phase!=='lobby'||m.id===state.id;c.remove.title=`Remove ${m.name}`;c.remove.setAttribute('aria-label',`Remove ${m.name} from the room`);
+    li.className='driver-card';number.className='cabinet-number';info.className='driver-info';status.className='driver-status';remove.type='button';remove.className='remove-driver';remove.textContent='×';remove.onclick=()=>{if(room.kick(m.id))$('readyRoom').focus();};swap.type='button';swap.className='seat-swap';const action=document.createElement('span');action.className='seat-card-action';action.textContent='⇄ Request swap';swap.append(action);swap.onclick=()=>room.requestSwap(m.id);const skin=document.createElement('button');skin.type='button';skin.className='seat-skin';skin.innerHTML='<span class="seat-card-action">Choose livery</span>';skin.onclick=()=>skinPicker.open(skin);li.append(skin);info.append(name,role);li.append(number,info,status,swap,remove);c={li,number,name,role,status,remove,swap,skin};cards.set(m.id,c);}
+   c.skin.hidden=m.id!==state.id||m.waiting||state.phase!=='lobby';c.skin.disabled=!!state.awaitingStop||m.connection==='reconnecting'||!!state.seatActionPending;c.skin.setAttribute('aria-label',`Choose your livery · ${PLAYER_SKINS[m.skin??0]?.name||'Original seat livery'}`);
+   const reconnecting=m.connection==='reconnecting',color=carColor(m.cabinet),reserved=(state.swaps||[]).some(o=>o.from===m.id||o.to===m.id);c.li.style.setProperty('--car-color',color.color);c.number.title=`Car ${m.cabinet} · ${color.name}`;c.swap.hidden=m.waiting||me?.waiting||m.id===state.id||state.phase!=='lobby';c.swap.disabled=reconnecting||reserved||!!state.seatActionPending||(state.swaps||[]).some(o=>o.from===state.id||o.to===state.id);c.swap.setAttribute('aria-label',`Request a swap with ${m.name}, car ${m.cabinet}`);c.swap.title=c.swap.disabled?'Seat reserved until the current request or reconnection ends.':`Request car ${m.cabinet} in exchange for yours`;c.li.dataset.seat=m.cabinet;c.li.classList.toggle('own-seat',m.id===state.id);c.li.classList.toggle('driver-waiting',!!m.waiting);c.li.classList.toggle('driver-ready',m.ready&&!reconnecting);c.li.classList.toggle('driver-reconnecting',reconnecting);c.number.textContent=String(m.cabinet).padStart(2,'0');c.name.textContent=m.name;c.name.title=m.name;c.li.dataset.skin=String(m.skin??0);c.role.textContent=`${m.id===state.id?'You · ':''}${m.waiting?'Next race':m.id===state.host?'Host':'Driver'}${reconnecting?' · Seat reserved':m.rtt==null?'':' · '+m.rtt+' ms'}`;if(m.skin)c.role.textContent+=' · '+PLAYER_SKINS[m.skin].name;c.role.title=m.rtt==null?'':`Connection round-trip estimate: ${m.rtt} ms`;c.status.textContent=reconnecting?'RETRY':m.waiting?(m.needsApproval?'REQUESTED':'WAITING'):m.ready?'READY':'WAIT';c.status.title=reconnecting?'Reconnecting. Seat reserved for up to 30 seconds.':'';c.remove.hidden=m.waiting||!state.isHost||state.phase!=='lobby'||m.id===state.id;c.remove.title=`Remove ${m.name}`;c.remove.setAttribute('aria-label',`Remove ${m.name} from the room`);
    nodes.set(m.cabinet,c.li);
   }
   if(showSeats)for(let seat=1;seat<=8;seat++)if(!occupied.has(seat)){
@@ -133,10 +137,10 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
   const status=$('seatStatus');status.hidden=!showSeats||!!me?.waiting||!!(state.swaps||[]).find(o=>o.from===state.id||o.to===state.id);
   if((state.lastAck?.action==='move-seat'||state.lastAck?.action.startsWith('swap-'))&&state.lastAck.command>lastSeatAck){lastSeatAck=state.lastAck.command;status.textContent=state.lastAck.accepted?(state.lastAck.action==='move-seat'?`Your car is ${me?.cabinet}. Confirm Ready again.`:state.swapNotice||'Seat request confirmed.'):state.lastAck.reason;}
   else if(state.seatPending)status.textContent=`Moving to car ${state.seatPending}…`;
-  else if(me&&previousSeat!==me.cabinet)status.textContent=`Your car: ${me.cabinet}. Choose a seat to move, or a driver to request a swap.`;
+  else if(me&&previousSeat!==me.cabinet)status.textContent=`Your car: ${me.cabinet}. Select your seat for liveries, an open seat to move, or a driver to swap.`;
   if(me&&previousSeat!==null&&previousSeat!==me.cabinet&&state.phase==='lobby')focusSeatReady=true;
   if(state.swapNotice&&!state.seatActionPending)status.textContent=state.swapNotice;
-  else if(me?.ready&&!state.seatPending)status.textContent=`Your car: ${me.cabinet}. Choose a seat to move, or a driver to request a swap.`;
+  else if(me?.ready&&!state.seatPending)status.textContent=`Your car: ${me.cabinet}. Select your seat for liveries, an open seat to move, or a driver to swap.`;
   previousSeat=me?.cabinet??null;
  }
  function renderSwap(state){
@@ -156,8 +160,8 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
   single(){directory.setBrowsing(false);layout(true,true);navigation('single');$('menuDialog').classList.add('single-view');singlePanel.hidden=false;entry.hidden=true;panel.hidden=true;$('menuDialog').setAttribute('aria-labelledby','singleTitle');},
   modes(){showModes();$('singlePlayer').focus();},
   opened(){navigation();},
-  backLabel(){if(invitationMenu.isOpen())return 'Close invite';const o=room.swapFor(room.id);return o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)?o.to===room.id?'Decline swap':'Cancel request':null;},
-  escape(){if(invitationMenu.close(true))return true;const o=room.swapFor(room.id);if(o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)){o.to===room.id?room.answerSwap(o.id,false):room.cancelSwap(o.id);return true;}if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
+  backLabel(){if(skinPicker.isOpen())return 'Close liveries';if(invitationMenu.isOpen())return 'Close invite';const o=room.swapFor(room.id);return o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)?o.to===room.id?'Decline swap':'Cancel request':null;},
+  escape(){if(skinPicker.close())return true;if(invitationMenu.close(true))return true;const o=room.swapFor(room.id);if(o&&!$('seatSwap').hidden&&$('seatSwap').contains(document.activeElement)){o.to===room.id?room.answerSwap(o.id,false):room.cancelSwap(o.id);return true;}if(entry.hidden)return false;showModes();$('multiplayerPlayer').focus();return true;},
   verified(){verified=true;$('startBtn').hidden=true;$('dropzone').hidden=true;syncInvitation();if(invitationFromURL(location.href))showEntry(false);else{showModes();$('singlePlayer').focus();}},
   loading(){directory.setBrowsing(false);layout(false);verified=false;navigation('loading');entry.hidden=true;panel.hidden=true;$('dropzone').hidden=false;},
   running(){invitationMenu.close();directory.setBrowsing(false);if(!room.occupied)layout(false);navigation(room.occupied?'room':'modes');singlePanel.hidden=true;entry.hidden=true;},
@@ -169,7 +173,7 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
    for(const name of ['networkStatus','arcadeLinkStatus'])if($(name).textContent!==text)$(name).textContent=text;
   },
   markChatRead:markRead,
-  render(state){
+  render(state){skinPicker.sync(state);
    toast.sync(state);directory.updateHost(state);if(state.phase!=='idle')directory.setBrowsing(false);
    notifications.update(state);
    $('networkStatus').hidden=state.phase!=='playing';$('arcadeLinkStatus').hidden=state.phase!=='playing';
@@ -187,7 +191,7 @@ export function createRoomUI(room,{single,unlockAudio,canResume=()=>false,enable
    $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverse?'reverse':'normal';$('roomPlayerCollisions').value=String(state.settings.playerCollisions??true);$('roomPitStops').value=String(state.settings.pitStops??true);$('roomCpuLiveries').value=state.settings.cpuLiveries??'multiplayer';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection','roomPlayerCollisions','roomPitStops','roomCpuLiveries'])$(id).disabled=!state.isHost||state.phase!=='lobby';$('roomCpuLiveries').disabled||=state.settings.cpuCars===false;
    $('roomSettingsHint').textContent=state.settings.reverse?'Choose any circuit. CPU cars follow this setting on all tracks.':state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
    $('readyCount').textContent=state.phase==='waiting'||state.phase==='playing'?`${state.members.length} on track${state.waiting?.length?' · '+state.waiting.length+' waiting':''}`:`${state.members.filter(x=>x.ready).length} ready`;
-   renderRoster(state);renderSwap(state);renderChat(state);
+   renderRoster(state);renderSwap(state);renderChat(state);skinPicker.sync(state);
 
    const stamp=state.phase+JSON.stringify(state.pending);if(stamp!==pendingStamp){pendingStamp=stamp;$('pendingList').replaceChildren(...state.pending.map(m=>{const li=document.createElement('li'),name=document.createElement('span'),accept=document.createElement('button'),decline=document.createElement('button');name.textContent=m.name+(m.connection==='reconnecting'?' · Reconnecting…':'');name.title=m.name;accept.textContent='Admit';accept.disabled=state.phase!=='lobby'||m.connection==='reconnecting';accept.type=decline.type='button';decline.textContent='×';decline.disabled=state.phase!=='lobby';accept.setAttribute('aria-label',`Admit ${m.name}`);decline.setAttribute('aria-label',`Decline ${m.name}`);accept.onclick=()=>room.approve(m.id);decline.onclick=()=>room.reject(m.id);li.append(name,accept,decline);return li;}));}
    $('pendingBlock').hidden=!state.isHost||!state.pending.length;$('pendingCount').textContent=String(state.pending.length);$('pendingJump').hidden=!state.isHost||!state.pending.length;$('pendingJump').textContent=`Requests · ${state.pending.length}`;

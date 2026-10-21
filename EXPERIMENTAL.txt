@@ -1,3 +1,4 @@
-DAYTONA USA WEB 52.8.1 - MENU BACKDROP
-Restore previous dark/blur treatment over actual game only. Initial decorative backdrop stays clear.
-52.8 arrival alerts and all other functional files preserved byte for byte. No ROM included.
+DAYTONA USA WEB 53.2 - SINGLE-PLAYER LIVERIES
+Single Player > Your livery: Original or 39 CPU appearances, with locally generated previews and real loading progress.
+Single choices are saved independently. Changing a paused session requires Apply & Restart.
+No ROM, livery screenshots or private test hooks included. Read README.md and INVESTIGACIONES.md.

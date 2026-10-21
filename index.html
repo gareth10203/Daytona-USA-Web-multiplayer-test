@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=52.8.1-menu-backdrop">
-  <link rel="stylesheet" href="host-console.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="controller-settings.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="input-settings.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="single-player.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="ui-consistency.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="menu-gamepad.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="race-standings.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="public-rooms.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="waiting-room.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="game-chat.css?v=52.8-arrival-alerts">
-  <link rel="stylesheet" href="lobby-layout.css?v=52.8-arrival-alerts">
+  <link rel="stylesheet" href="style.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="host-console.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="controller-settings.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="input-settings.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="single-player.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="ui-consistency.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="menu-gamepad.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="race-standings.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="public-rooms.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="waiting-room.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="game-chat.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="lobby-layout.css?v=53.2-single-liveries">
+  <link rel="stylesheet" href="player-skins.css?v=53.2-single-liveries">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -80,6 +81,7 @@
               <div class="single-race-option"><label for="singleDirection"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h13a4 4 0 0 1 0 8H7M8 4 4 8l4 4M11 12l-4 4 4 4"/></svg>Direction</label><select id="singleDirection" aria-describedby="singleDirectionHelp"><option value="normal">Normal</option><option value="reverse">Reverse</option></select><p id="singleDirectionHelp">The original direction on all three circuits.</p></div>
               <div class="single-race-option"><label for="singleCpuCars"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 2-4h10l2 4M3 9h18v9H3V9ZM5 18v3M19 18v3M3 13h4M17 13h4M8 4l-1 5M16 4l1 5"/></svg>CPU cars</label><select id="singleCpuCars" aria-describedby="singleCpuHelp"><option value="true">On</option><option value="false">Off</option></select><p id="singleCpuHelp">Race against the original arcade grid.</p></div>
               <div class="single-race-option"><label for="singlePitStops"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V4h14v16M9 20v-7h6v7M3 20h18M9 8h6"/></svg>Pit stops</label><select id="singlePitStops" aria-describedby="singlePitHelp"><option value="true">On · Original service</option><option value="false">Off · Drive through</option></select><p id="singlePitHelp">Off keeps the lane open as a shortcut, without automatic stops.</p></div>
+              <div class="single-race-option"><label for="singleLivery"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 2-4h10l2 4M3 9h18v9H3V9ZM5 18v3M19 18v3M3 13h4M17 13h4M8 4l-1 5M16 4l1 5"/></svg>Your livery</label><button id="singleLivery" type="button" class="single-livery-button ui-button ui-secondary" aria-haspopup="dialog" aria-describedby="singleLiveryHelp"><span id="singleLiveryName">Original seat livery</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button><p id="singleLiveryHelp">Preview and choose an original arcade appearance.</p></div>
             </div>
             <footer class="single-race-footer"><div><div class="single-cabinet-spec"><span>DELUXE</span><span>EXPORT</span><span>LOCAL PLAY</span></div><p id="singleSessionHint">Choose your circuit and transmission in the arcade.</p></div><button id="singleStart" type="submit" class="launch-btn ui-button ui-primary"><span id="singleStartLabel">ENTER ARCADE</span><span aria-hidden="true">→</span></button></footer>
             <p id="singleStatus" class="single-status" role="status" aria-live="polite"></p>
@@ -239,8 +241,9 @@
       </section>
     </div>
   </div>
-  <small id="buildVersion" class="build-version"><span>v52.8.1</span> · <time datetime="2026-10-21">21.10.26</time></small>
+  <small id="buildVersion" class="build-version"><span>v53.2</span> · <time datetime="2026-10-21">21.10.26</time></small>
   <div id="menuGamepadHints" class="menu-gamepad-hints" role="status" aria-label="Controller menu controls" hidden></div>
-  <script src="vendor/peerjs.min.js?v=52.8-arrival-alerts" defer></script><script src="daytona_engine.js?v=52.8-arrival-alerts" defer></script><script type="module" src="main.js?v=52.8-arrival-alerts"></script>
+  <script src="vendor/peerjs.min.js?v=53.2-single-liveries" defer></script><script src="daytona_engine.js?v=53.2-single-liveries" defer></script><script type="module" src="main.js?v=53.2-single-liveries"></script>
 </body>
 </html>
+

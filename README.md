@@ -1,3 +1,71 @@
+# Daytona USA Web — 53.2: single-player liveries
+
+**Single Player → Your livery** opens the same selector used in multiplayer: Original seat livery and 39 original CPU appearances. All forty previews prepare behind the same progress overlay, generated from the verified local ROM and reused from this browser's cache. The single-player Original is the normal red car of cabinet 1. The six setup cards retain a stable layout, including desktop 1280×720 and mobile widths.
+
+Single-player livery is saved with local race preferences, independently of multiplayer reservations. Choosing it only edits the next configuration. If a game is paused, an unchanged appearance resumes it; a changed appearance explicitly offers **Apply & Restart**. Original resets the override on that restart. Escape/B closes the livery selector before leaving setup. Skin selection does not change the player's number, CPU appearances or driving controls.
+
+The native extension adds a bounded standalone setter. It targets only the original local car pointer with player ID zero while no centralized link is active. It reuses the original livery selectors and model recovery hooks; multiplayer retains its existing link-ID mapping. Loading/closing/disabling a link clears both override scopes. Physics, progress, ranking and CPU policies remain intact. Preview WASM, graphics renderers, network transport and Firebase rules are preserved.
+
+Validation: **298 passing Node tests**; actual production single-player selection, loading, persistence, resume and Original restart; eight standalone native races including all three circuits in both directions and Time Attack; 39 catalog selector checks; original damage recovery; six multiplayer native races plus recovery/guest-only start; eighteen RAM/texture parity samples against the previous native engine with Original; multiplayer UI and two production cabinets. These are local Chrome checks, not a new WAN or physical mobile-Safari certification.
+
+Publish ZIP contents with index.html at the root. All players use 53.2. Local: `node scripts/serve.js dist 8136`. The prior 53.1.1 folder/ZIP remain unchanged. No ROM, generated car thumbnails, browser profiles or private native audit hooks are packaged.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 53.1.1: visible livery preparation
+
+Opening the livery selector now displays an overlay with a progress bar before selection becomes available. It prepares all **40 choices**: the current seat's Original appearance and the 39 CPU liveries. While the ROM/preview scene is being prepared, the bar is indeterminate; after the first image is ready it advances using the real decoded-image count, e.g. **10 of 40**. No invented timer or estimated percentage is used.
+
+The gallery and Use livery remain disabled until preparation finishes. Close, Cancel, Escape and standard gamepad B remain available throughout. If a preview fails, the overlay provides **Continue without previews**; it never silently unlocks an incomplete gallery. Closing, room/preparation changes and stale image completions retain the existing cancellation behavior. Cached views are reused locally. English UI, fixed dialog size, portrait/landscape layouts and reduced-motion support are preserved.
+
+Only the selector UI/styles and version cache identifiers changed. Main game engine JS/WASM, preview engine WASM, physics, network transport, reservations and Firebase rules remain unchanged. The 53.1 ZIP is preserved. Validation: 296 Node tests; controlled loading/progress/heartbeat/error/late-completion checks; keyboard/gamepad cancellation; four loading layouts and five selector layouts; real-ROM generation of the entire selector; two production cabinets selecting/starting/restoring Original. Local server remains `node scripts/serve.js dist 8135`.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 53.1: local ROM livery previews
+
+Based on 53.0, preserved in multiplayer-player-skins and its original ZIP. All participants must use 53.1.
+
+Open your own multiplayer lobby seat to choose **Original seat livery** or one of 39 CPU appearances. Original now has a real thumbnail matching your selected seat color, including all eight cabinet colors. Moving seats keeps a reserved CPU appearance; choosing Original restores that seat's normal appearance.
+
+The selector generates its thumbnails from the verified ROM already supplied on this browser. No livery screenshots are included in this release. A separate, short-lived worker with its own preview-only WASM engine renders a stationary car scene using the original software renderer. It needs no WebGPU/WebGL context and never touches the active game, its save data, audio or communications. Only the preview module can select its bounded livery/seat combinations; no arbitrary memory/debug hooks are exported. The primary game JS and WASM are byte-identical to 53.0.
+
+Generation is lazy: opening the selector requests Original, the selected appearance and visible cards; scrolling or focusing another card requests its preview. The first uncached view takes several seconds, depending on the device. The dialog remains usable throughout, with fixed image dimensions and placeholders. Closing it, hiding the page, leaving the lobby, starting preparation or changing ROM cancels pending work and terminates the worker. An idle worker is released after 30 seconds. Choosing and playing remain available if previews fail.
+
+Small PNG blobs are stored only in local IndexedDB, keyed by installation path, preview format, SHA-256 of the exact ROM ZIP and appearance. Original has a separate entry for each seat; CPU previews are shared across seats. Old ROM entries are pruned when opening previews. Cached views do not start a worker or load the preview WASM. A denied/full browser store still allows previews for the current visit; clearing/evicting browser storage requires regenerating them. Neither the ROM nor these images are uploaded, and this feature adds no Firebase fields/writes or skin movement messages.
+
+Validation: **296 passing Node tests**, all 39 CPU appearances and eight Original colors rendered/decoded in Chrome, IndexedDB reuse, fresh-service reuse, old-entry pruning, cancellation and zero network uploads from the preview pipeline. The full livery UI passes five viewport sizes, keyboard/gamepad/focus/reservations and a real-preview selector check. Two actual production engines pass selection/preparation, controller/wheel/pedals/touch/chat and a second session restoring Original. Desktop Chrome was tested; physical mobile Safari and all low-memory devices are not certified. The UI remains usable when the browser cannot render a preview.
+
+Publish ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8135`. Build frontend: `node scripts/build.mjs`; rebuild the isolated renderer with `scripts/build-skin-preview.py` after the referenced 53.0 native release objects are available. No ROM, generated livery image files, browser profiles or private test hooks are packaged. This release does not alter earlier folders, archives or published Git history.
+
+---
+
+## Previous release notes (historical)
+
+# Daytona USA Web — 53.0: player liveries
+
+Based on 52.8.1, preserved in multiplayer-arrival-alerts and its original ZIP. All participants must use 53.0.
+
+Select your own occupied seat in the multiplayer lobby to open **Choose your livery**. Choose **Original seat livery** or one of 39 original CPU appearances with in-game preview images. Confirm with **Use livery**. The dialog has stable dimensions, bounded gallery scrolling, keyboard focus containment, touch support and standard gamepad A/directions/B. Driving bindings are unchanged. A small Last used label remembers a prior choice locally; it does not reserve an appearance in another room automatically.
+
+A CPU livery is reserved to one admitted player in the room. Taken options identify their owner. Reservations survive car-number changes, swaps, a race ending and the existing reconnection grace; departure releases them. Original seat appearance remains available. The host validates requests for the requesting player's identity only, serializes competing claims and rejects stale or invalid choices. Changes reset Ready. Liveries cannot change during preparation or play.
+
+The confirmed roster carries catalog IDs over the existing reliable room channel. Each native engine installs the same link-ID-to-livery table before reporting prepared. Native link identity, selected car number and livery remain separate. The appearance changes original visual selectors and model/accessory restoration only. Physics, CPU behavior, positions, rank, finish authority, network motion and the simulation clock are preserved. The number painted on an original CPU model can differ from the cabinet/car number; the HUD names and player markers retain player identity. CPU exterior models retain their original geometry rather than gaining the Hornet's detailed deformation variants.
+
+Validation: 292 Node tests including eight-member reservation/preparation cases; two real linked native engines on all three circuits in both directions with sparse seats 6/3, all 39 selector rows, native model-recovery fixtures, and guest-only racing with host in attract. Defaults are compared against the previous engine using RAM and texture banks. Browser checks cover the livery dialog, gamepad, lobby viewports and the real production preparation/control/chat pipeline, including a second session restoring Original. See INVESTIGACIONES.md and private build reports for precise scope. These local checks do not certify all physical controllers, mobile Safari, every damage geometry or a new WAN stress scenario.
+
+The 39 static thumbnails are captures rendered from the original models by a private asset generator; its RAM-write fixtures are not in the product. There are no image uploads, custom texture downloads, per-frame skin messages or new Firebase fields/writes. Existing arrival notifications, menu backdrop, ROM memory, graphics APIs and manual diagnostics remain available.
+
+Publish ZIP contents with index.html at the root. Local: `node scripts/serve.js dist 8134`. No ROM, browser profiles or private test hooks are packaged.
+
+---
+
+## Previous release notes (historical)
+
 # 52.8.1 — game menu backdrop
 
 Restore the previous dark overlay and 7px backdrop blur only when an existing game image is behind the menu. Keep the initial decorative background clear and slightly visible. CSS-only change using the existing playing class. Single-player production-engine browser checks cover initial menu, Escape, Settings and desktop/mobile viewports. No simulation, network or arrival-alert behavior changes.

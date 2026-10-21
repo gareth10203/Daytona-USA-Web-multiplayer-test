@@ -1,13 +1,14 @@
-import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=52.8-arrival-alerts';
-import {LatestFlow} from './latest-flow.js?v=52.8-arrival-alerts';
-import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=52.8-arrival-alerts';
-import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=52.8-arrival-alerts';
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=52.8-arrival-alerts';
-import {SnapshotFlow} from './snapshot-flow.js?v=52.8-arrival-alerts';
-import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=52.8-arrival-alerts';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=52.8-arrival-alerts';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=52.8-arrival-alerts';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=52.8-arrival-alerts';
+import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=53.2-single-liveries';
+import {LatestFlow} from './latest-flow.js?v=53.2-single-liveries';
+import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=53.2-single-liveries';
+import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=53.2-single-liveries';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=53.2-single-liveries';
+import {SnapshotFlow} from './snapshot-flow.js?v=53.2-single-liveries';
+import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=53.2-single-liveries';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=53.2-single-liveries';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=53.2-single-liveries';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=53.2-single-liveries';
+import {validPlayerSkin,skinOwner,validateSkinRoster} from './player-skins.js?v=53.2-single-liveries';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -316,6 +317,26 @@ export class Multiplayer {
   }
  }
  // Car numbers are stable across departures; new admissions fill the first vacancy.
+ setSkin(skin){
+  if(this.phase!=='lobby'||this.awaitingStop||[...this.commands.values()].some(c=>c.data.type==='set-skin'))return false;
+  const reason=this.skinChangeError(this.id,skin,this.revision);if(reason){this.error=reason;this.changed();return false;}
+  if(this.isHost)this.assignSkin(this.members.find(m=>m.id===this.id),skin);
+  else this.command('set-skin',{skin,revision:this.revision});return true;
+ }
+ skinChangeError(id,skin,revision){
+  if(this.phase!=='lobby'||this.awaitingStop)return 'Liveries can only change in the lobby.';
+  const member=this.members.find(m=>m.id===id);
+  if(!member||member.connection==='reconnecting')return 'Reconnect before choosing a livery.';
+  if(!validPlayerSkin(skin))return 'Choose an original arcade livery.';
+  if(this.swapFor(id))return 'Finish your seat swap before choosing a livery.';
+  const owner=skinOwner(this.members,skin,id);if(owner)return `Reserved by ${owner.name}. Choose another livery.`;
+  if(revision!==this.revision)return 'The grid changed. Please confirm your choice again.';
+  return '';
+ }
+ assignSkin(member,skin){
+  if((member.skin??0)===skin)return;
+  member.skin=skin;this.revision++;this.error='';for(const m of this.members)m.ready=false;this.publish();
+ }
  firstOpenSeat(){return Array.from({length:8},(_,i)=>i+1).find(seat=>!this.members.some(m=>m.cabinet===seat)&&![...this.waiters.values()].some(m=>m.cabinet===seat));}
  moveSeat(cabinet){
   if(this.phase!=='lobby'||this.awaitingStop||this.snapshot().seatActionPending||!!this.swapFor(this.id))return false;
@@ -506,7 +527,7 @@ export class Multiplayer {
   }
  }
 
- validateMembers(members){if(!Array.isArray(members)||members.length<1||members.length>8||members.some(x=>!x)||new Set(members.map(x=>x.id)).size!==members.length||members[0].id!==this.host||members.some(x=>!x||typeof x.id!=='string'||!Number.isInteger(x.cabinet)||x.cabinet<1||x.cabinet>8)||new Set(members.map(x=>x.cabinet)).size!==members.length)throw Error('Invalid cabinet roster.');return members.map(x=>({id:x.id,name:cleanName(x.name),cabinet:x.cabinet,ready:!!x.ready,rtt:!this.isHost&&x.id===this.host&&this.server?.open&&Number.isFinite(this.server.measuredRttMs)?Math.round(this.server.measuredRttMs):Number.isFinite(x.rtt)?x.rtt:null,connection:x.connection==='reconnecting'?'reconnecting':'connected'}));}
+ validateMembers(members){if(!Array.isArray(members)||members.length<1||members.length>8||members.some(x=>!x)||new Set(members.map(x=>x.id)).size!==members.length||members[0].id!==this.host||members.some(x=>!x||typeof x.id!=='string'||!Number.isInteger(x.cabinet)||x.cabinet<1||x.cabinet>8)||new Set(members.map(x=>x.cabinet)).size!==members.length)throw Error('Invalid cabinet roster.');validateSkinRoster(members);return members.map(x=>({id:x.id,name:cleanName(x.name),cabinet:x.cabinet,skin:x.skin??0,ready:!!x.ready,rtt:!this.isHost&&x.id===this.host&&this.server?.open&&Number.isFinite(this.server.measuredRttMs)?Math.round(this.server.measuredRttMs):Number.isFinite(x.rtt)?x.rtt:null,connection:x.connection==='reconnecting'?'reconnecting':'connected'}));}
  handle(conn,data,incoming,motion=false){
   if(!data||typeof data.type!=='string')throw Error('Invalid room message.');
   if(['arcade-sample','arcade-state','arcade-ack'].includes(data.type)&&!!conn.raceMotion!==motion)return;
@@ -532,11 +553,12 @@ export class Multiplayer {
    if(this.connections.get(conn.peer)!==conn)return;
    if(data.type==='leave'){this.receivePerformance(conn,data);this.recordConnectionEvent('player-left',conn,{source:'action'});this.detach(conn,true,'The player left the room.',false,'player-left','action');conn.close();return;}
    const member=this.members.find(x=>x.id===conn.peer),waiter=this.waiters.get(conn.peer);if(!member&&!(waiter&&data.type==='chat-submit'))return;
-   if(['ready','chat-submit','move-seat','swap-request','swap-answer','swap-cancel'].includes(data.type)){
+   if(['ready','chat-submit','move-seat','swap-request','swap-answer','swap-cancel','set-skin'].includes(data.type)){
     const session=this.sessions.get(conn.peer),saved=session?.commands.get(data.command);if(saved){this.send(conn,saved);return;}
     if((data.command!==undefined||data.type.startsWith('swap-'))&&(!Number.isSafeInteger(data.command)||data.command<1))throw Error('Invalid lobby action.');
     if(data.command!==undefined&&data.command<=(session?.lastCommand||0)){this.acknowledge(conn,data,false,'This action has expired.');return;}
     if(data.type==='ready'){const valid=this.phase==='lobby'&&data.revision===this.revision&&!this.swapFor(conn.peer); if(valid){member.ready=!!data.value;this.publish();}this.acknowledge(conn,data,valid,valid?'':'Room settings changed. Please confirm Ready again.');if(!valid&&this.phase==='lobby')this.syncConnection(conn);}
+    else if(data.type==='set-skin'){const reason=this.skinChangeError(conn.peer,data.skin,data.revision);if(!reason)this.assignSkin(member,data.skin);this.acknowledge(conn,data,!reason,reason);if(reason&&this.phase==='lobby')this.syncConnection(conn);}
     else if(data.type==='move-seat'){const reason=this.seatChangeError(conn.peer,data.cabinet,data.revision);if(!reason)this.assignSeat(member,data.cabinet);this.acknowledge(conn,data,!reason,reason);if(reason&&this.phase==='lobby')this.syncConnection(conn);}
     else if(data.type.startsWith('swap-')){const reason=data.type==='swap-request'?this.createSwap(conn.peer,data.target,data.revision):data.type==='swap-answer'?this.acceptSwapAnswer(conn.peer,data.id,data.accept):this.acceptSwapCancel(conn.peer,data.id);this.acknowledge(conn,data,!reason,reason);if(reason&&this.phase==='lobby')this.syncConnection(conn);}
     else{const valid=(waiter?data.chatEpoch===this.epoch:!this.active||data.chatEpoch===this.epoch)&&this.acceptChat(conn.peer,data.text);this.acknowledge(conn,data,valid,valid?'':'Chat is paused during the race or the message could not be sent.');}

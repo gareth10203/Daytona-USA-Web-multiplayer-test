@@ -1,3 +1,147 @@
+# 2026-10-21 — 53.2: skins en single player
+
+Versión separada multiplayer-single-liveries, puerto 8136, basada en 53.1.1 preservada. Se añade Your livery como sexta tarjeta del formulario single, compartiendo el selector y su progreso real para cuarenta vistas. El contexto single tiene identificador/título de diálogo propios y copia específica: no afirma que haya un host o reserva en una sala. Ambos contextos usan la misma caché local de imágenes, sin compartir la elección aplicada. El selector mantiene cancelación, foco, inert, teclado y mando.
+
+## Preferencias y sesión
+
+skin se añade al objeto daytona-single-player-race-v1 con valor por defecto cero; las preferencias antiguas migran sin reiniciarse y los IDs inválidos vuelven a Original. sameSingleSettings trata un skin ausente como cero y exige coincidencia de apariencia para reanudar. Elegir sólo guarda la configuración local: no toca el motor pausado. El botón indica Apply & Restart al cambiarla. prepareSingleCabinet valida el ID antes de modificar el motor y lo instala después de deshabilitar el enlace, aplicar las opciones y restaurar la EEPROM/backup. Se conserva el número 1 y el preset standalone DELUXE.
+
+## Intervención nativa acotada
+
+El módulo añade daytona_set_single_skin(int 0..39), que requiere motor cargado y central_link_count==0. single_player_skin es independiente de la tabla de nueve entradas de multiplayer. reset_player_skins limpia ambos ámbitos al cargar/cerrar/deshabilitar enlace. El nuevo helper selected_car_skin mantiene la rama de enlace original para dos o más cabinas. En standalone exige car válido, ID cero y coincidencia exacta con el puntero local 0x501220. Este puntero se lee mediante dos read_word para evitar recursión del predicado read_dword. Ningún coche CPU recibe el override aunque use la misma apariencia elegida.
+
+Se reutilizan las cinco lecturas visuales originales 0xec64..0xec74 y las escrituras acotadas del modelo propio/LOD/accesorio y recuperación previamente usadas en multiplayer. No se alteran filas de IA, IDs, parrilla, física, posición, checkpoints, resultados o memoria arbitraria. No se exportan los probes de auditoría. El renderizador de miniaturas (JS/WASM) es byte-idéntico al de 53.1.1; tampoco se modifican renderizadores GPU, transporte, cadencia ni Firebase.
+
+## Pruebas
+
+- unit-tests.txt: 298/298, incluidos saneamiento/migración de preferencias, elección independiente, comparación para resume, rechazo antes de tocar el motor y orden de aplicación tras reset standalone.
+- build/single-liveries-browser/validation.json: cuatro tamaños de setup (1280×900, 1280×720, 390×844, 320×740); cuarenta vistas reales con gate; elección local sin escritura nativa prematura; arranque standalone con skin14; resume sin reinicio; cambio a Original con reinicio explícito; Escape y persistencia tras restaurar ROM recordada.
+- build/single-liveries-native/validation.json: seis carreras con bots, tres circuitos × dos direcciones, skin14 y verificación de que todos los bots conservan filas originales; 39 IDs resueltos; dos recuperaciones nativas conservando pose/progreso; dos arranques Time Attack con Original y skin39; setter rechaza enlaces centralizados e IDs fuera de rango. El contador de coches asignados no equivale a coches activos: Time Attack conserva estructuras inactivas; se comprueba el flag activo original.
+- build/player-skins-native/native.json: matriz previa de seis carreras multiplayer con asientos 6/3 y skins1/14, recuperaciones, catálogo39 e invitado solo mientras el host sigue en attract.
+- build/player-skins-parity/parity.json: dieciocho muestras de RAM de trabajo y bancos de texturas coinciden con el motor anterior al dejar Original, incluyendo recarga.
+- build/player-skins-ui/validation.json y build/player-skins-production/validation.json: gate, foco, reservas y arranque con dos motores de producción, controles y restauración Original.
+
+UI íntegramente en inglés. Se preserva el ZIP 53.1.1 SHA-256 8d5af1caf2f26118591e26b577e80a126f9b74ff193e972af51f47bfe82f9512. Las pruebas nativas usan exclusivamente build/rules-audit; el ZIP usa build/rules-release. No se añaden capturas de los modelos ni la ROM al producto. Límites: no es una nueva certificación de Safari físico, cada modo de daños/cámara o red WAN.
+
+---
+
+# 2026-10-21 — 53.1.1: espera explícita antes de seleccionar skins
+
+El selector superpone un aviso de preparación sobre la galería. Solicita las cuarenta vistas al abrir: Original del asiento actual y 39 CPU. El progreso permanece indeterminado durante la lectura/arranque; al completar la primera imagen pasa a la cuenta real cargada/decodificada de 40. No se usan porcentajes inventados ni tiempos estimados. El ancho del progreso nativo acompaña esa cuenta; la animación indeterminada respeta reduced-motion.
+
+La galería queda inert/aria-busy, todos sus botones deshabilitados y Use livery bloqueado. El diálogo conserva Cerrar/Cancelar/Escape/mando B. Una vez decodificadas las cuarenta vistas se retira la capa y devuelve foco a la selección si seguía en el aviso. Si falla alguna, aparece una explicación y Continue without previews como salida explícita. Cambiar de asiento reinicia la preparación de la vista Original; callbacks de generaciones anteriores se ignoran. Los snapshots/heartbeats no pueden desbloquear el gate. La caché y la cancelación del worker mantienen el comportamiento de 53.1.
+
+El tamaño del modal se conserva. El aviso compacto de landscape no invade el pie ni impide Cancelar. Se verificaron las dimensiones 1280×720, 390×844, 320×740 y 844×390 durante la carga, más las cinco vistas del selector previo. La captura preparing-liveries.png en build/player-skins-ui es una prueba controlada al completar diez vistas, no una imagen incluida en el producto.
+
+Evidencia nueva: tests/player-skins-ui.cjs prueba progreso indeterminado -> 10/40 -> desbloqueo, bloqueo bajo heartbeat, fallo + continuación explícita, cancelación con respuestas tardías y mando B durante la carga. REAL_PREVIEWS=1 ejecuta el selector con ROM/worker auténticos y todas las vistas. Se repiten los 296 tests Node y la regresión de dos motores de producción. main game JS/WASM y preview WASM no se recompilan ni modifican; no cambian reservas, física, temporización, datos de red o Firebase. Se conserva el ZIP 53.1 (SHA-256 f88cf53127b27ebd67daa02fe7604a94a3d27fa240d9209a80b021bb75e5689e). Nuevo paquete 53.1.1 y caché frontend diferenciada.
+
+---
+
+# 2026-10-21 — 53.1: previsualizaciones locales desde la ROM
+
+Versión separada `multiplayer-local-previews`, UI en inglés, puerto 8135. Sustituye las 39 capturas distribuidas por generación local y añade la vista Original para cada uno de los ocho asientos. Se preservan el directorio/ZIP 53.0. Las imágenes de auditoría viven sólo en build/, fuera de web/dist/ZIP.
+
+## Diseño y aislamiento
+
+`skin-previews.js` abre IndexedDB de forma diferida y calcula SHA-256 de la ROM verificada sólo cuando se solicita una vista. Clave: ruta de instalación + versión de formato + hash de ZIP + CPU ID u Original/asiento. Cola de generación serial, una instancia worker, blobs PNG pequeños y object URLs revocados al cerrar. El selector conserva cuarenta opciones, altura fija, imágenes con dimensiones estables, placeholder vectorial y estado de progreso. IntersectionObserver limita solicitudes a tarjetas cercanas; foco/mando también solicita la tarjeta activa. La reserva de skins, propiedad, Ready y mensajes fiables se conservan.
+
+`skin-preview-worker.js` recibe un File/Blob por clonación local. Carga su módulo ES/WASM sólo ante una vista no cacheada; usa un preset DELUXE standalone propio, sin audio ni enlace y sin leer/escribir las partidas guardadas. Arranca Expert, confirma la escena de conducción, estabiliza una cámara trasera y mantiene el coche frenado. No crea contexto GPU, canvas visible, conexión PeerJS ni Firebase. Devuelve únicamente 174×188 píxeles RGBA por solicitud acotada.
+
+`native/skin_preview.cpp` se enlaza exclusivamente en skin-preview-engine.wasm. Se reutiliza el renderizador software original; las 39 filas visuales CPU y las ocho filas Original proceden de la ROM cargada. Original aplica las cuatro entradas de la tabla de paleta propia 0x231a2c + asiento*16; el contador original vale cuatro, no cinco. Se seleccionan los campos visuales y se ejecutan seis pasos frenados para preparar los display lists antes del recorte. Las imágenes proceden de una escena real: pequeños cambios animados entre capturas no implican una alteración del modelo. Una prueba de color corporal comprueba la misma apariencia CPU antes/después de recorrer todas las paletas Original.
+
+No hay lectura/escritura arbitraria de RAM exportada. Las únicas entradas de selección son skin entero 0..39 y asiento entero 1..8, validadas en JS y nativo. El módulo principal daytona_engine.js/wasm y todos sus fuentes previos son byte-idénticos a 53.0. Se preservan las físicas, lógica de carreras, temporización, comunicaciones, mapas inversos y ajustes de bots.
+
+## Cancelación, caché y fallos
+
+Cerrar/Escape/B, ocultar la página, pagehide, preparar carrera, salir de sala o cambiar ROM cancela la generación y termina el worker. Las respuestas obsoletas no pueden reemplazar la miniatura Original de otro asiento. Timeout de inicialización de 120 s, de render de 20 s y liberación por inactividad a los 30 s. No hay generación durante la carrera. Al reabrir, las vistas cacheadas se recuperan sin otro motor. Se conservan como máximo 47 entradas anteriores durante la poda al abrir; cada contexto ROM contiene como máximo 47 variantes. La poda usa claves del índice, sin leer todos los blobs.
+
+Un fallo de caché no impide la vista temporal ni jugar; un fallo de Worker/WASM deja placeholder y aviso, sin bloquear selección/reserva. No se envían imágenes, ROM, hash o nuevos campos a Firebase/PeerJS. La solicitud del engine de previews es una descarga estática adicional sólo en el primer uso no cacheado.
+
+## Evidencia
+
+- `unit-tests.txt`: 296/296, sin fallos, incluidas claves por ROM/asiento, deduplicación de caché, cancelación antes de renderizar y proveedor bloqueado.
+- `build/local-preview-check/validation.json`: las 47 variantes se generan y decodifican, ocho Original distintas, caché persistente en una instancia nueva sin arrancar Worker, poda de cien entradas antiguas y cancelación durante preparación. Todas las solicitudes de la tubería son GET locales; no hay subida ni llamadas Firebase.
+- `tests/skin-preview-worker.cjs`: Original 1..8 y apariencia CPU antes/después; paleta corporal mantenida. Las capturas no se exigen pixel-idénticas porque la escena original anima reflejos/suspensión/fondo.
+- `build/player-skins-ui/validation.json`: cinco tamaños desktop/móvil, reservas que cambian en vivo, selección por invitado, cambios de asiento, Escape, foco contenido, mando A/direcciones/B y selector con miniaturas reales.
+- `build/player-skins-production/validation.json`: siete comprobaciones con dos motores reales, misma tabla de ocho skins antes de prepared, controles personalizados/volante/pedales/táctil, chat y segundo arranque Original.
+- SHA-256 del WASM principal conservado: `d3e91a8e8bc7ef36d15bab9a3821e1b82aa4c88aedcfc05d5849e71b5989ef19`.
+
+Las duraciones locales del primer recorte fueron aproximadamente 7–9 s y la recuperación de 47 vistas cacheadas 0,1–0,2 s; son observaciones de esta máquina, no un benchmark entre dispositivos. No se certifica Safari físico, equipos con memoria muy escasa ni una nueva matriz WAN: el motor de juego y transporte no se modificaron. Se evita cualquier garantía jurídica sobre imágenes o recursos ajenos al alcance de esta sustitución.
+
+---
+
+# 2026-10-21 — 53.0: skins CPU elegibles por los jugadores
+
+Versión separada multiplayer-player-skins basada en 52.8.1 preservada. UI íntegramente en inglés. No se altera el ZIP anterior.
+
+## Selección, reserva y sincronización
+
+El botón del asiento propio abre un diálogo nativo con Original seat livery y 39 filas CPU verificadas en la ROM Revision A. Las tarjetas usan miniaturas reales del motor, no colores o diseños inventados. Galería de altura acotada, tamaño estable, foco contenido, Escape/Cancelar y mando A/direcciones/B. Los demás asientos conservan sus acciones de movimiento/intercambio. La ayuda inferior explica cómo acceder. Se mantiene Last used en almacenamiento local como referencia, sin reservar automáticamente en otra sala.
+
+El host valida el tipo/rango del ID de catálogo, actor tomado de la conexión real, revisión vigente, estado lobby, conexión del usuario y ausencia de intercambio pendiente. Una apariencia CPU sólo puede reservarse a un miembro admitido; Original es el fallback sin reserva adicional. Peticiones fiables y acuses idempotentes usan el mecanismo de comandos existente. Concurrencia se resuelve en el host: la primera petición válida confirma la reserva y las posteriores reciben motivo; la UI actualiza opciones sin reconstruir el diálogo. El roster rechaza IDs de skin inválidos o duplicados no nulos. No se aceptan punteros ni imágenes enviados por clientes.
+
+La propiedad skin pertenece a la identidad del miembro, no al asiento o índice local. Mover/intercambiar número conserva la apariencia; elegir Original vuelve a la apariencia del asiento actual en el siguiente inicio. La reserva persiste hasta abandonar/expirar la reconexión según las reglas previas; se libera al retirar al miembro. Cambiar una skin reinicia Ready. Preparación y juego bloquean la edición.
+
+prepare comparte y valida el roster completo; cada motor recibe ocho entradas link ID -> skin antes de declarar prepared. Se usa linkIdForSeat sobre orden de admisión, nunca el número de coche elegible. El motor resuelve ID humano original -> enlace mediante 0x540028 + id; por ello también funciona si corren sólo invitados o si quedan asientos no consecutivos. No se cambia el formato de bloques de movimiento, ni hay mensajes de skin por frame o nuevos campos Firebase.
+
+## Intervención nativa
+
+player_skins.h contiene una tabla por instancia WASM de nueve bytes (índice 0 sin uso), rango validado 0..39 y flag de activación. daytona_set_player_skin recibe únicamente enlace/ID acotados. Carga, cierre y desactivación del enlace limpian la tabla.
+
+Las lecturas 0xec64/68/6c/70/74 usan la fila visual CPU elegida para humanos con enlace validado. Se mantienen g0 y la fila original del llamador: también abastecen datos de ruta/parrilla ajenos a la apariencia. Las cinco referencias incluyen los cuatro LOD originales y la pieza adicional correspondiente. La lectura interna utiliza read_word para evitar reentrar en su propio predicado read_dword; se exige la dirección de lectura original de cada PC.
+
+La rama propia necesita además sustituir el modelo exterior al crear/restaurar/recuperar daño y retirar el accesorio exterior específico del Hornet. Se acotan las escrituras a 0xec9c/0xd13c/0x17190/0x171d4 (car+0x14), 0xec1c/0xd15c/0x171bc/0x171f4 (car+0x258), y restauración de LOD en 0x17210..0x1721c. Se conserva el cockpit original de primera persona y el comportamiento físico/de daño; no se inventan variantes deformadas de una carrocería CPU que no las traiga. Sin skin seleccionada el flag evita la intervención. Los bots siguen su política previa y su identidad/IA no cambia. Los números pintados y color exterior de CPU son parte del modelo original; HUD, flechas, clasificación y número de cabina conservan la identidad del jugador.
+
+## Evidencia y límites
+
+- 292 pruebas Node: catálogo acotado, reservas y conflictos, actor autenticado, rechazo de revisiones obsoletas/rosters duplicados, movimiento de asiento, reconexión, fin de carrera, liberación y ocho participantes recibiendo la tabla antes de preparar.
+- build/player-skins-ui/validation.json: diálogo con 40 opciones, imágenes decodificadas, confirmación, reservas que aparecen mientras está abierto, Original del nuevo asiento, cinco viewports, invitado, cierre al preparar, foco y mando A/direcciones/B sin tocar bindings de conducción.
+- build/lobby-validation/validation.json: regresión de ocho asientos, invitación, solicitudes, chat, swaps y seis tamaños. No se modifica el tamaño ordinario del lobby.
+- build/player-skins-native/native.json: dos motores originales recompilados con HostDistributor local, tres circuitos y dos sentidos, coches 6/3 y skins 1/14. Comparación de cinco selectores propios y remotos, marcha posterior y coordenadas finitas. Auditoría de las 39 filas. Rutina original 0x17174 ejecutada en frame CPU aislado con argumentos 1 y 0x100 confirma restauración de apariencia y conserva pose/identidad/velocidad/progreso. Incluye invitado que corre solo mientras el host queda en attract.
+- build/player-skins-parity/parity.json: RAM de trabajo y dos bancos de texturas contra el motor anterior, dos cargas y 18 muestras con apariencia Original. No certifica equivalencia de una carrera completa.
+- build/player-skins-webgpu/native.json: comprobación adicional con WebGPU forzado, Expert normal y dos cabinas, comparación de apariencia, recuperación y caso de invitado solo. La matriz de seis trazados usa WebGL2.
+- build/player-skins-production/validation.json: dos webs y WASM de producción enlazados por WebRTC local, elecciones desde el asiento real y ocho llamadas de configuración nativa idénticas; regresión de chat/mando/volante/pedales/táctil; segunda sesión instala cero overrides al restaurar Original.
+- build/skin-catalog/native.json: 39 apariencias renderizadas para miniaturas con cámara estabilizada. El generador usa fixtures de RAM explícitos fuera de producción; no es un test de carrera de cada skin en todas las pistas. Los seis recorridos nativos no equivalen a ocho motores reales, prueba WAN ni cobertura de cada cámara/LOD/daño en todos los modelos. Safari/iPhone físico y mandos físicos siguen pendientes de validación manual.
+
+Se conservan reglas/App Check/Analytics, notificaciones, fondo de menú 52.8.1, memoria de ROM, APIs gráficas, reloj y diagnóstico manual. BUILD_ID/sufijos pasan a 53.0 para exigir cabinas compatibles. Paquete sólo dist, manifest SHA256 y CRC; no se incluyen ROM, perfiles, listado generado ni hooks de laboratorio.
+
+---
+
+## Investigaciones anteriores (históricas)
+
+# 2026-10-21 — Investigación: skins CPU seleccionables por jugadores
+
+Investigación sobre 52.8.1; sin cambios de web/, native/, dist/, protocolo, ejecutables o ZIP. No se recompiló ni se probó en ejecución una skin humana nueva. Los hallazgos estáticos se distinguen de la implementación propuesta.
+
+## Evidencia local
+
+La función original 0xeb00..0xecac distingue coche propio, humanos remotos y CPU. La regla existente SingleCpuLiveries sólo redirige bots enlazados en cinco lecturas 0xec64/68/6c/70/74 desde la fila común 0x281ed94 a la tabla individual 0x281e3d4 + id*48. Los cinco valores se guardan en car+0x74/78/7c/80/88. No basta ampliar su condición a todos los humanos: la rama propia 0xebf0..0xec60 también llama 0xecb0, escribe car+0x258 y configura 0x501488; el final usa ese selector global para car+0x14 y car+0x84. 0xecb0 copia bloques de datos a destinos que proceden de tablas. Es necesario identificar las variantes compatibles de modelo/textura y las piezas propias; no se certifica que los cinco valores por sí solos cubran el jugador local.
+
+Los humanos remotos reconstruyen su apariencia usando información del enlace y una tabla multijugador 0x281ec14. El juego no ofrece en la UI actual un campo de selección de skin CPU; la validación JS validateMembers construye explícitamente id/name/cabinet/ready/rtt/connection, descartando campos adicionales. Por tanto, añadir sólo una propiedad local o un selector visual no la comparte ni garantiza que el motor remoto la aplique.
+
+El transporte distingue orden de admisión/link de número de coche elegible. La selección debe pertenecer a la identidad del usuario y mapearse a su coche nativo en cada cabina; nunca usar índice del asiento o del array local como sustituto del ID original. No modificar car+4, el número de humanos, callbacks, posiciones, colisiones ni clasificación para imitar un bot.
+
+## Propuesta de integración
+
+1. Catálogo común cerrado y versionado de apariencias originales, con Default como fallback. Registrar variantes propias/remotas, niveles de detalle y piezas adicionales que se validen; no exponer direcciones RAM/modelos arbitrarios enviados por usuarios. La cantidad de filas de tabla o números pintados no demuestra la cantidad de skins distintas y compatibles.
+2. Elección local persistida. En el lobby, petición fiable al host para cambiar únicamente la skin de su propio usuario. Host valida contra el catálogo, publica el roster confirmado y limpia Ready al cambiar una apariencia de carrera. La skin acompaña al usuario al mover/intercambiar asiento; invitados en espera la aplican a su siguiente incorporación.
+3. Congelar y confirmar la tabla usuario/identidad nativa/skin dentro de prepare, igual que los ajustes de sesión. La cabina no declara prepared hasta instalarla en el motor. Conservarla durante la sesión y reaplicarla en cada creación original de coche, selección, nueva carrera, recuperación y cambio de LOD; no depender de que un paquete de movimiento contenga punteros de modelos. Limpiar overrides al salir/cargar otro perfil para que attract y single player recuperen sus valores correspondientes.
+4. Aplicación nativa acotada a selección visual original: cubrir coche propio y rivales con el mismo catálogo sin alterar físicas. Estudiar primero la copia original de texturas/piezas y comprobar daños, cámaras y compatibilidad entre skins simultáneas. No sustituir globalmente una textura compartida ni forzar una sola dirección de modelo cada frame, porque puede afectar bots/otros jugadores y romper LOD.
+
+Ejemplo: el host confirma que el usuario de coche 6 lleva npc-XX; todas las cabinas reciben esa selección fiable antes de GO. Cada una resuelve npc-XX desde su propia ROM y aplica el conjunto visual al coche nativo correcto. Sólo se transmite el ID de catálogo al cambiar/preparar/reconectar, sin enviar imágenes o la ROM, sin campos adicionales por fotograma ni almacenamiento Firebase para skins. Se conserva el número/identidad de carrera aunque la textura del bot tenga otro número pintado. Conviene mantener nombre e identificador de cabina inequívocos, ya que el color de la pintura deja de identificar por sí solo al jugador.
+
+## Fuentes y validación pendiente
+
+La documentación primaria de SailorSat incluye un catálogo parcial de modelos NPC y humanos, y su explicación indica varias versiones de cada coche según distancia. Su ejemplo de sustitución de modelo principal/secundario demuestra un antecedente de cambio visual; no demuestra sincronización multiplayer ni validez de esas direcciones para este ROM/port. La vía recomendada parte de nuestros selectores Revision A ya localizados.
+
+- https://github.com/SailorSat/daytona-utils/blob/master/src/daytona%20models.txt
+- https://forum.arcadecontrols.com/index.php?topic=137497.80 (respuestas 87 y 89).
+- Evidencia propia: native/m2_board.cpp, native/race_options.h, tests/race-options-native.cjs; listado privado previo multiplayer-chat-polish/build/room-rules-research/local-program.txt. El listado no se copia ni se distribuye.
+
+Antes de implementar una galería completa: prototipo con dos motores y una apariencia CPU, demostrar que ambos ven la misma skin en propio/remoto, conservar control y coincidencia de clasificación; después cámaras/LOD/daño/pits, tres pistas y sentidos, bots On/Off, carreras consecutivas, asientos no contiguos/intercambio, reconexión y ocho selecciones simultáneas. WebGPU y WebGL2 deben compartir el resultado. Confirmar llegada fiable de configuración con latencia/pérdida y mantener fallback si falta una variante. No hay nuevos tests dinámicos ni una promesa de compatibilidad de todas las skins en esta investigación.
+
+---
+
 # 2026-10-21 — 52.8.1: fondo de menú sobre el juego
 
 Se restaura #050505ad y blur(7px) únicamente bajo .playing .launcher, incluyendo prefijo Safari. El fondo decorativo inicial conserva #05050570 sin desenfoque. Se utiliza la clase playing existente, sin nuevas lecturas por frame ni cambios de reloj/render/red. El desenfoque sólo actúa con el menú visible, como antes de 52.7. Comprobación build/menu-backdrop/validation.json con motor real single player: menú inicial, Escape sobre partida, Settings y dos tamaños móviles. Los demás archivos funcionales se verifican idénticos al ZIP 52.8 preservado; sin ROM ni instrumentos privados.

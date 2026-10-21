@@ -1,4 +1,4 @@
-import {BUILD_ID,parseInvitation} from './room-settings.js?v=52.8-arrival-alerts';
+import {BUILD_ID,parseInvitation} from './room-settings.js?v=53.2-single-liveries';
 export const ROOM_TTL_MS=90000,ROOM_PULSE_MS=30000;
 export const DIRECTORY_IDLE_MS=5*60*1000;
 const states=new Set(['open','full','starting','racing','reconnecting']);

@@ -1,34 +1,35 @@
-import {createRoomArrivals} from './room-arrivals.js?v=52.8-arrival-alerts';
-import {createRoomSystemAlerts} from './room-system-alerts.js?v=52.8-arrival-alerts';
-import {createROMStore,createROMMemory} from './rom-memory.js?v=52.8-arrival-alerts';
-import {mountGameChat} from './game-chat.js?v=52.8-arrival-alerts';
-import {startAnalytics} from './firebase-client.js?v=52.8-arrival-alerts';
-import {LocalRaceReporter,applyNativeOrder} from './race-authority.js?v=52.8-arrival-alerts';
-import {mountRaceStandings} from './race-standings.js?v=52.8-arrival-alerts';
-import {createGamepadHome} from './gamepad-home.js?v=52.8-arrival-alerts';
-import {protectTouchSurface} from './touch-guard.js?v=52.8-arrival-alerts';
-import {createKeyboardControls} from './keyboard-controls.js?v=52.8-arrival-alerts';
-import {SimulationClock} from './simulation-clock.js?v=52.8-arrival-alerts';
-import {SourceTimeline,NativeStateInbox} from './link-timing.js?v=52.8-arrival-alerts';
-import {linkIdForSeat} from './central-link.js?v=52.8-arrival-alerts';
-import {createLobbySound} from './lobby-sound.js?v=52.8-arrival-alerts';
-import { mountDiagnostics } from './diagnostics.js?v=52.8-arrival-alerts';
-import { mountRoomDiagnostics } from './room-diagnostics.js?v=52.8-arrival-alerts';
-import {createControllerControls} from './controller-controls.js?v=52.8-arrival-alerts';
-import { createRenderer } from './renderer.js?v=52.8-arrival-alerts';
-import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=52.8-arrival-alerts';
-import {mountMenuGamepad} from './menu-gamepad.js?v=52.8-arrival-alerts';
-import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=52.8-arrival-alerts';
-import { createTouchControls } from './touch.js?v=52.8-arrival-alerts';
-import { createGamepadRumble } from './haptics.js?v=52.8-arrival-alerts';
-import { loadSettings, saveSettings } from './preferences.js?v=52.8-arrival-alerts';
-import { createWheelControls } from './wheel-controls.js?v=52.8-arrival-alerts';
-import { Multiplayer } from './multiplayer.js?v=52.8-arrival-alerts';
-import { createRoomUI } from './room-ui.js?v=52.8-arrival-alerts';
-import { mountHostConsole } from './host-console.js?v=52.8-arrival-alerts';
-import { raceOptionsMask,prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=52.8-arrival-alerts';
-import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=52.8-arrival-alerts';
-import {createSinglePlayerUI} from './single-player-ui.js?v=52.8-arrival-alerts';
+import {createRoomArrivals} from './room-arrivals.js?v=53.2-single-liveries';
+import {createSkinPreviews} from './skin-previews.js?v=53.2-single-liveries';
+import {createRoomSystemAlerts} from './room-system-alerts.js?v=53.2-single-liveries';
+import {createROMStore,createROMMemory} from './rom-memory.js?v=53.2-single-liveries';
+import {mountGameChat} from './game-chat.js?v=53.2-single-liveries';
+import {startAnalytics} from './firebase-client.js?v=53.2-single-liveries';
+import {LocalRaceReporter,applyNativeOrder} from './race-authority.js?v=53.2-single-liveries';
+import {mountRaceStandings} from './race-standings.js?v=53.2-single-liveries';
+import {createGamepadHome} from './gamepad-home.js?v=53.2-single-liveries';
+import {protectTouchSurface} from './touch-guard.js?v=53.2-single-liveries';
+import {createKeyboardControls} from './keyboard-controls.js?v=53.2-single-liveries';
+import {SimulationClock} from './simulation-clock.js?v=53.2-single-liveries';
+import {SourceTimeline,NativeStateInbox} from './link-timing.js?v=53.2-single-liveries';
+import {linkIdForSeat} from './central-link.js?v=53.2-single-liveries';
+import {createLobbySound} from './lobby-sound.js?v=53.2-single-liveries';
+import { mountDiagnostics } from './diagnostics.js?v=53.2-single-liveries';
+import { mountRoomDiagnostics } from './room-diagnostics.js?v=53.2-single-liveries';
+import {createControllerControls} from './controller-controls.js?v=53.2-single-liveries';
+import { createRenderer } from './renderer.js?v=53.2-single-liveries';
+import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=53.2-single-liveries';
+import {mountMenuGamepad} from './menu-gamepad.js?v=53.2-single-liveries';
+import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=53.2-single-liveries';
+import { createTouchControls } from './touch.js?v=53.2-single-liveries';
+import { createGamepadRumble } from './haptics.js?v=53.2-single-liveries';
+import { loadSettings, saveSettings } from './preferences.js?v=53.2-single-liveries';
+import { createWheelControls } from './wheel-controls.js?v=53.2-single-liveries';
+import { Multiplayer } from './multiplayer.js?v=53.2-single-liveries';
+import { createRoomUI } from './room-ui.js?v=53.2-single-liveries';
+import { mountHostConsole } from './host-console.js?v=53.2-single-liveries';
+import { raceOptionsMask,prepareCabinet,ensureDeluxeCabinet } from './room-settings.js?v=53.2-single-liveries';
+import {prepareSingleCabinet,sameSingleSettings} from './single-player-settings.js?v=53.2-single-liveries';
+import {createSinglePlayerUI} from './single-player-ui.js?v=53.2-single-liveries';
 // Daytona USA browser host. The wasm module is the original recomp game's
 // native game loop, not a JavaScript reconstruction of Daytona.
 const $ = (id) => document.getElementById(id);
@@ -61,6 +62,7 @@ let gameChat,roomUI,hostConsole,diagnostics,roomDiagnostics,singleUI,graphicsAPI
 let singleApplied=null,preparingSingle=false;
 let roomSystemAlerts,roomArrivals;
 let currentROM=null;
+const skinPreviews=createSkinPreviews({getROM:()=>currentROM});
 const romMemory=createROMMemory({store:createROMStore(),load:loadROM,canRestore:()=>!currentROM,
  onBusy:busy=>{ui.input.disabled=busy;$('changeROM').disabled=busy;ui.dropzone.setAttribute('aria-disabled',String(busy));},
  onWarning:error=>{console.warn('Could not remember the local ROM',error);if(currentROM&&!$('playerModes').hidden)ui.message.textContent='ROM ready. This browser could not remember it; choose it again next visit.';}
@@ -86,6 +88,7 @@ const room=new Multiplayer({
   setStatus('Preparing linked cabinet…',true);
   await prepareCabinet(wasm,reloadEngine,config,cancelled);
   if(!wasm._daytona_central_config(linkIdForSeat(room.members.findIndex(m=>m.id===room.id)+1,room.members.length),room.members.length))throw Error('Invalid centralized cabinet configuration.');
+  for(let link=1;link<=8;link++){const member=room.members.find((m,i)=>linkIdForSeat(i+1,room.members.length)===link);if(!wasm._daytona_set_player_skin(link,member?.skin??0))throw Error('Could not prepare the shared player liveries.');}
   if(!wasm._daytona_set_race_options(raceOptionsMask(config)))throw Error('Could not apply shared race rules.');
   if(!wasm._daytona_set_cpu_cars(Number(config.cpuCars)))throw Error('Could not apply the room CPU car setting.');
   if(!wasm._daytona_set_reverse_course(config.reverse?4:0))throw Error('Could not apply the circuit direction.');
@@ -208,10 +211,10 @@ function lobbySound(kind='request'){
 roomSystemAlerts=createRoomSystemAlerts({onClick:()=>{openMenu();if(room.phase==='lobby'&&!$('pendingJump').hidden)$('pendingJump').click();}});
 roomArrivals=createRoomArrivals({notify:event=>{if(event.sound)lobbySound(event.kind==='joined'?'arrival':'request');if(event.system)void roomSystemAlerts.show(event);}});
 roomSystemAlerts.sync(room.snapshot());roomArrivals.update(room.snapshot());
-roomUI=createRoomUI(room,{enableArrivalNotifications:()=>roomSystemAlerts.enable(),canResume:()=>started&&!multiplayerProfile&&!room.occupied,notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:()=>singleUI.open(),unlockAudio:activateAudio});
+roomUI=createRoomUI(room,{previews:skinPreviews,enableArrivalNotifications:()=>roomSystemAlerts.enable(),canResume:()=>started&&!multiplayerProfile&&!room.occupied,notifyRequest:lobbySound,notifyChat:()=>lobbySound('chat'),notifyReady:()=>lobbySound('ready'),notifyConfirmed:()=>lobbySound('confirmed'),single:()=>singleUI.open(),unlockAudio:activateAudio});
 gameChat=mountGameChat($('gameChat'),{room,storage:settingsStorage,gameShown:()=>started&&running&&ui.overlay.hidden,notify:()=>lobbySound('chat'),onRead:()=>roomUI.markChatRead(),onTyping:()=>{held.clear();keyboardControls.reset();},returnFocus:()=>ui.canvas.focus({preventScroll:true})});
 gameChat.sync(room.snapshot());
-singleUI=createSinglePlayerUI({storage:settingsStorage,unlockAudio:activateAudio,getSession:()=>({canResume:started&&!multiplayerProfile&&!room.occupied,settings:singleApplied}),onOpen:()=>roomUI.single(),onBack:()=>roomUI.modes(),onStart:async config=>{
+singleUI=createSinglePlayerUI({previews:skinPreviews,storage:settingsStorage,unlockAudio:activateAudio,getSession:()=>({canResume:started&&!multiplayerProfile&&!room.occupied,settings:singleApplied}),onOpen:()=>roomUI.single(),onBack:()=>roomUI.modes(),onStart:async config=>{
  if(started&&!multiplayerProfile&&sameSingleSettings(config,singleApplied)){ui.start.disabled=false;roomUI.running();void resumeGame();return;}
  saveNVRAM();preparingSingle=true;rumble.stop();simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.start.disabled=true;ui.close.hidden=true;
  for(const source of audioSources){try{source.stop();}catch{}}audioSources.clear();audioNext=0;
@@ -227,6 +230,7 @@ singleUI=createSinglePlayerUI({storage:settingsStorage,unlockAudio:activateAudio
 }});
 hostConsole=mountHostConsole(room);
 function menuBackLabel(){
+ if(singleUI.isChoosingLivery())return 'Close liveries';
  if(hostConsole.isOpen()||settingsOpen||singleUI.isOpen()||!$('multiplayerEntry').hidden)return 'Back';
  const swapLabel=roomUI.backLabel();if(swapLabel)return swapLabel;
  if(room.occupied)return room.active?'Return to game':'Leave room';
@@ -494,7 +498,7 @@ async function loadROM(file,{automatic=false}={}) {
   if(!/\.zip$/i.test(file.name)){
     ui.message.textContent='Choose a Daytona USA Revision A (1994) ROM ZIP.';return {ok:false,invalid:true};
   }
-  const previousROM=currentROM;saveNVRAM();
+  skinPreviews.stop();const previousROM=currentROM;saveNVRAM();
   room.leave();roomUI.loading();multiplayerProfile=false;singleApplied=null;
   rumble.stop();
   simulationClock?.stop();running=false;started=false;held.clear();keyboardControls.reset();touch.clear();ui.close.hidden=true;ui.start.disabled=true;ui.startLabel.textContent='Enter arcade';
@@ -614,8 +618,8 @@ async function main() {
     return;
   }
   try{
-    wasm=await factory({locateFile:(path)=>path+'?v=52.8-arrival-alerts'});
-    for(const name of ['_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_set_race_options','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
+    wasm=await factory({locateFile:(path)=>path+'?v=53.2-single-liveries'});
+    for(const name of ['_daytona_set_single_skin','_daytona_set_player_skin','_daytona_prepare_visual','_daytona_visual_updates','_daytona_tiles_ptr','_daytona_tiles_versions_ptr','_daytona_tiles_metadata_ptr','_daytona_set_display','_daytona_vertices_ptr','_daytona_vertices_count','_daytona_batches_ptr','_daytona_batches_count','_daytona_background_ptr','_daytona_foreground_ptr','_daytona_tex0_ptr','_daytona_tex1_ptr','_daytona_texture_generation','_daytona_luma_ptr','_daytona_xlat_ptr','_daytona_rumble_strong','_daytona_rumble_weak','_daytona_rumble_centring','_daytona_set_draw_distance','_daytona_draw_distance','_daytona_set_reverse_expert','_daytona_set_reverse_course','_daytona_set_cpu_cars','_daytona_set_race_options','_daytona_link_enable','_daytona_link_receive_ptr','_daytona_link_receive','_daytona_link_tx_ptr','_daytona_link_tx_size','_daytona_link_tx_pop','_daytona_link_state','_daytona_link_id','_daytona_link_count','_daytona_callback_slots','_daytona_link_pending_bytes']) {
       if(typeof wasm[name]!=='function')throw Error('Incomplete engine build: missing '+name+'. Run scripts/build_web.ps1 again.');
     }
     renderer=await createRenderer(ui.canvas,failure,{onStatus:label=>{$('experimentalGraphicsBackend').textContent=label;}});
