@@ -1,5 +1,5 @@
 // WebGPU Model 2 polygons surrounded by GPU-composed System-24 layers.
-import {createGpuLayers} from './gpu-layers.js?v=53.2-single-liveries';
+import {createGpuLayers} from './gpu-layers.js?v=53.5.2-actors';
 
 export async function createWebGPURenderer(canvas, onFailure) {
   if (!globalThis.isSecureContext || !navigator.gpu)
@@ -16,7 +16,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   if (!context) throw Error('Could not create the WebGPU context.');
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({device, format, alphaMode:'opaque'});
-  const response = await fetch(new URL('./model2.wgsl?v=53.2-single-liveries', import.meta.url));
+  const response = await fetch(new URL('./model2.wgsl?v=53.5.2-actors', import.meta.url));
   if (!response.ok) throw Error('Could not load model2.wgsl.');
   const modelShader = device.createShaderModule({label:'Model 2',code:await response.text()});
   for (const shader of [modelShader]) {
@@ -53,7 +53,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   let vertexSize=0,batchDraws=[];
   let inFlight=0;
   const screenValues=new Float32Array(8);
-  let enhanced=false,drawDistance=1,displayKey='';
+  let hudVisible=true,enhanced=false,drawDistance=1,displayKey='';
   function invalidate() {
     uploadedModule=null;uploadedFrame=-1;uploadedHeap=null;layoutKey='';
   }
@@ -74,6 +74,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   }
   return {
     backend:'webgpu',
+    setHUDVisible(on){hudVisible=!!on;},
     attach(target){const next=target.getContext('webgpu');if(!next)throw Error('Could not attach the WebGPU canvas.');next.configure({device,format,alphaMode:'opaque'});context.unconfigure();context=next;canvas=target;},
     dispose(){disposed=true;context.unconfigure();device.destroy();},
     reset() {textureGeneration=-1;displayKey='';layers.reset();invalidate();},
@@ -163,7 +164,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
           pass.draw(batchDraws[n+4],1,batchDraws[n+5]);
         }
       }
-      pass.setScissorRect(0,0,ow,oh);layers.front(pass);
+      pass.setScissorRect(0,0,ow,oh);if(hudVisible)layers.front(pass);
       pass.end();device.queue.submit([encoder.finish()]);inFlight++;
       device.queue.onSubmittedWorkDone().then(()=>{inFlight--;},error=>{inFlight--;onFailure('The graphics queue failed: '+error.message);});
       return true;

@@ -11,8 +11,8 @@ export function mountWaitingToast(root,{schedule=setTimeout,cancel=clearTimeout}
   if(!state.isHost||!['playing','preparing'].includes(state.phase)){hide();return;}
   if(!added.length)return;
   hide();const title=document.createElement('strong'),detail=document.createElement('span');
-  title.textContent=added.length===1?`${added[0].name} ${added[0].needsApproval?'requested to join':'joined the room'}`:`${added.length} drivers joined the waiting seats`;
-  detail.textContent=added.some(w=>w.needsApproval)?'Review the request when you return to the lobby.':'Waiting for the next race · seat reserved';
+  title.textContent=added.length===1?`${added[0].name} ${added[0].needsApproval?'requested to join':'joined the room'}`:added.some(w=>w.spectator)?`${added.length} people joined the room`:`${added.length} drivers joined the waiting seats`;
+  detail.textContent=added.some(w=>w.needsApproval)?'Review the request when you return to the lobby.':added.every(w=>w.spectator)?'Spectator · no driver seat reserved':'Waiting for the next race · seat reserved';
   root.replaceChildren(title,detail);root.hidden=false;timer=schedule(()=>{root.hidden=true;timer=null;},5500);
  },dispose(){hide();seen.clear();}};
 }

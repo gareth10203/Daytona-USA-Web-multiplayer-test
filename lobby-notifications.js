@@ -12,7 +12,7 @@ export function createLobbyNotifications({notifyChat=()=>{},notifyReady=()=>{},n
   update(next){
    state=next;const nextKey=(next.host||'')+':'+next.id;
    if(nextKey!==key){key=nextKey;baseline=false;lastChat=0;readyMembers.clear();stop();}
-   const admitted=next.members.some(m=>m.id===next.id),inLobby=(next.phase==='lobby'&&admitted||next.phase==='waiting');
+   const admitted=next.members.some(m=>m.id===next.id),inLobby=(next.phase==='lobby'&&(admitted||next.spectating)||next.phase==='waiting');
    const newest=Math.max(0,...(next.chat||[]).map(m=>m.seq));
    if(inLobby&&baseline&&next.members.some(m=>m.ready&&readyMembers.has(m.id)&&!readyMembers.get(m.id)))notifyConfirmed();
    readyMembers=new Map(next.members.map(m=>[m.id,!!m.ready]));

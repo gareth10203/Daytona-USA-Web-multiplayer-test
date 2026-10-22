@@ -1,5 +1,5 @@
-import {TransportProbe,attachDataChannelProbe} from './transport-probe.js?v=53.2-single-liveries';
-import {encodeMotion,decodeMotion} from './motion-codec.js?v=53.2-single-liveries';
+import {TransportProbe,attachDataChannelProbe} from './transport-probe.js?v=53.5.2-actors';
+import {encodeMotion,decodeMotion} from './motion-codec.js?v=53.5.2-actors';
 export const MOTION_VERSION=1,MOTION_LABEL='daytona-motion-v1';
 export function motionChannelId(conn){const maximum=conn.peerConnection?.sctp?.maxChannels??65535;for(const id of [16,17,2,3])if(id<maximum&&id!==conn.dataChannel?.id)return id;return null;}
 export class MotionChannel {

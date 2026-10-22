@@ -1,5 +1,5 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=53.2-single-liveries';
-export const BUILD_ID='daytona-rev-a-central-53.2-single-liveries';
+import {DEFAULT_EEPROM} from './nvram.js?v=53.5.2-actors';
+export const BUILD_ID='daytona-rev-a-central-53.5.2-actors';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];

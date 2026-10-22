@@ -4,12 +4,13 @@ const TILE_BYTES=0x94000+496*384,PAGE=4096,PAGES=Math.ceil(TILE_BYTES/PAGE);
 const SHADERS=['model2.vert.glsl','model2.frag.glsl','fullscreen.vert.glsl','system24.frag.glsl','tiles-present.frag.glsl'];
 export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}){
  const sources=await Promise.all(SHADERS.map(async name=>{
-  const response=await fetch(new URL(name+'?v=53.2-single-liveries',import.meta.url));
+  const response=await fetch(new URL(name+'?v=53.5.2-actors',import.meta.url));
   if(!response.ok)throw Error('Could not load '+name);return response.text();
  }));
  const gl=canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
  if(!gl)throw Error('No hardware-accelerated WebGL2 context was available.');
  let lost=false,disposed=false,lossTimer=null,resources=null;
+ let hudVisible=true;
  let width=0,height=0,ow=0,oh=0,enhanced=false,drawDistance=1,displayKey='';
  let uploadedModule=null,uploadedFrame=-1,uploadedHeap=null,textureModule=null,textureGeneration=-1,layoutKey='';
  let tileOwner=null,tileHeap=null,pending=true,vertexSize=0,vertexCount=0,currentSlot=0;
@@ -121,6 +122,7 @@ export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}
  canvas.addEventListener('webglcontextlost',contextLost);canvas.addEventListener('webglcontextrestored',contextRestored);
  return {
   backend:'webgl2',reset,
+  setHUDVisible(on){hudVisible=!!on;},
   dispose(){disposed=true;clearTimeout(lossTimer);canvas.removeEventListener('webglcontextlost',contextLost);canvas.removeEventListener('webglcontextrestored',contextRestored);if(!lost)destroy();},
   setEnhanced(on){enhanced=on;displayKey='';canvas.classList.toggle('enhanced',on);},
   setDrawDistance(level){drawDistance=level;enhanced=level>0;displayKey='';canvas.classList.toggle('enhanced',enhanced);},
@@ -169,7 +171,7 @@ export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}
     bindTexture(r.texram,1);bindTexture(r.luma,2);bindTexture(r.xlat,3);gl.bindVertexArray(r.slots[currentSlot].vao);
     for(let n=0;n<batchDraws.length;n+=6){gl.scissor(batchDraws[n],batchDraws[n+1],batchDraws[n+2],batchDraws[n+3]);gl.drawArrays(gl.TRIANGLES,batchDraws[n+5],batchDraws[n+4]);}
    }
-   gl.disable(gl.SCISSOR_TEST);gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.bindVertexArray(r.emptyVao);gl.useProgram(r.present.program);gl.uniform1i(loc(r.present,'uFront'),1);bindTexture(r.front,4);gl.drawArrays(gl.TRIANGLES,0,3);
+   gl.disable(gl.SCISSOR_TEST);gl.disable(gl.DEPTH_TEST);gl.depthMask(false);gl.bindVertexArray(r.emptyVao);gl.useProgram(r.present.program);gl.uniform1i(loc(r.present,'uFront'),1);bindTexture(r.front,4);if(hudVisible)gl.drawArrays(gl.TRIANGLES,0,3);
    gl.bindFramebuffer(gl.READ_FRAMEBUFFER,r.target);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,null);gl.blitFramebuffer(0,0,ow,oh,0,0,ow,oh,gl.COLOR_BUFFER_BIT,gl.NEAREST);
    const sync=gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE,0);if(!sync)throw Error('Could not fence the WebGL2 presentation.');flights.push({sync});gl.flush();return true;
   }
