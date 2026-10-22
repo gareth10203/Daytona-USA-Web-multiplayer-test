@@ -2,6 +2,7 @@ import {CONTROLLER_ACTIONS,ControllerInput,loadControllers,saveControllers,defau
 import {gamepadSteering} from './steering.js?v=53.5.2-actors';
 const $=(root,id)=>root.querySelector('#'+id);
 const clamp=v=>Math.max(-1,Math.min(1,Number.isFinite(v)?v:0));
+const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value;};
 const svgButton=(i,x,y,label,r=12)=>`<g data-pad-button="${i}"><circle cx="${x}" cy="${y}" r="${r}"/><text x="${x}" y="${y+4}">${label}</text></g>`;
 export function createControllerControls(root,{storage,reservedIds=()=>new Set(),wheelPad=()=>null,onChange=()=>{}}){
  const state=loadControllers(storage),input=new ControllerInput();let pads=[],signature='',pending=null,lastUpdate=-Infinity,wasVisible=false;
@@ -60,7 +61,7 @@ export function createControllerControls(root,{storage,reservedIds=()=>new Set()
   if(!visible&&pending)cancel();
   if(!visible&&now-lastUpdate<250)return;if(visible&&wasVisible&&now-lastUpdate<40)return;lastUpdate=now;wasVisible=visible;
   const nextSignature=available().map(p=>`${p.index}:${p.id}:${p.mapping}:${p.axes.length}:${p.buttons.length}`).join('|');if(nextSignature!==signature){signature=nextSignature;if(pending)cancel('Device list changed. Choose an action to try again.');renderDevices();}
-  const pad=getPad();if(visible&&!state.selected){const wheel=wheelPad();if(wheel){status.textContent='Wheel profile active · controller on standby';select.options[0].textContent=`Automatic · ${wheel.id}`;status.title='Select a controller explicitly to use it instead of the wheel.';}else{status.textContent=pad?`Connected · device ${pad.index+1}`:'Press a button to connect';status.title=pad?.id||'';select.options[0].textContent=pad?`Automatic · ${pad.id}`:'Automatic · first available controller';}}if(pending){
+  const pad=getPad();if(visible&&!state.selected){const wheel=wheelPad();if(wheel){setText(status,'Wheel profile active · controller on standby');setText(select.options[0],`Automatic · ${wheel.id}`);status.title='Turn off Enable wheel in gameplay to drive with a controller.';}else{setText(status,pad?`Connected · device ${pad.index+1}`:'Press a button to connect');status.title=pad?.id||'';setText(select.options[0],pad?`Automatic · ${pad.id}`:'Automatic · first available controller');}}if(pending){
    if(!pad||pending.key!==`${pad.index}:${pad.id}`)cancel('Controller disconnected. Your mapping is unchanged.');
    else if(now-pending.started>12000)cancel('No button detected. Choose an action to try again.');
    else {const next=new Set(pad.buttons.map((_,i)=>i).filter(i=>buttonPressed(pad,i))),index=[...next].find(i=>!pending.previous.has(i));if(index!==undefined){const action=pending.action,p=profile(),other=assignControllerButton(p,action,index);cancel('');persist();renderBindings();announce(`${CONTROLLER_ACTIONS[action]} → ${controllerButtonName(index,pad.mapping==='standard',pad.id)}.${other?' Swapped with '+CONTROLLER_ACTIONS[other]+'.':''}`);rows.get(action).focus();}else pending.previous=next;}

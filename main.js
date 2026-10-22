@@ -17,7 +17,7 @@ import {linkIdForSeat} from './central-link.js?v=53.5.2-actors';
 import {createLobbySound} from './lobby-sound.js?v=53.5.2-actors';
 import { mountDiagnostics } from './diagnostics.js?v=53.5.2-actors';
 import { mountRoomDiagnostics } from './room-diagnostics.js?v=53.5.2-actors';
-import {createControllerControls} from './controller-controls.js?v=53.5.2-actors';
+import {createControllerControls} from './controller-controls.js?v=53.5.2-wheel-setup';
 import { createRenderer } from './renderer.js?v=53.5.2-actors';
 import {mountGraphicsAPISettings} from './graphics-api-settings.js?v=53.5.2-actors';
 import {mountMenuGamepad} from './menu-gamepad.js?v=53.5.2-actors';
@@ -25,7 +25,7 @@ import { restoreNVRAM, STORAGE_ID,usableCabinetEEPROM } from './nvram.js?v=53.5.
 import { createTouchControls } from './touch.js?v=53.5.2-actors';
 import { createGamepadRumble } from './haptics.js?v=53.5.2-actors';
 import { loadSettings, saveSettings } from './preferences.js?v=53.5.2-actors';
-import { createWheelControls } from './wheel-controls.js?v=53.5.2-actors';
+import { createWheelControls } from './wheel-controls.js?v=53.5.2-wheel-setup';
 import { Multiplayer } from './multiplayer.js?v=53.5.2-actors';
 import { createRoomUI } from './room-ui.js?v=53.5.2-actors';
 import { mountHostConsole } from './host-console.js?v=53.5.2-actors';
@@ -197,7 +197,9 @@ $('settingsBtn').addEventListener('click',()=>{
 });
 $('settingsBack').addEventListener('click',()=>showMainMenu());
 function connectedGamepad(){return controllerControls.getPad();}
-function feedbackGamepad(){return controllerControls.hasExplicitSelection()?connectedGamepad():wheelControls.feedbackPad() || connectedGamepad();}
+// Enabling a calibrated wheel is the explicit input choice. Controllers stay
+// available as a fallback when that wheel is disabled or disconnected.
+function feedbackGamepad(){return wheelControls.feedbackPad() || connectedGamepad();}
 const touch=createTouchControls($('touchControls'),{
   isRunning:()=>running,
   shift:amount=>{currentGear=Math.max(1,Math.min(4,currentGear+amount));$('touchGear').textContent=currentGear;},
@@ -298,7 +300,7 @@ function pollGamepad() {
 }
 function inputs() {
   if(!ui.overlay.hidden)return {steer:0,accel:0,brake:0,gear:currentGear,buttons:0};
-  const wheel=controllerControls.hasExplicitSelection()?{active:false}:wheelControls.read();
+  const wheel=wheelControls.read();
   let pad;
   if(wheel.active)pad=wheel;
   else if(menuControls?.blocksGameplay()){

@@ -23,6 +23,14 @@ function fakeDevices(){
   assert.equal(await page.locator('#wheelEnabled').isDisabled(),true);
   await page.click('#wheel-steering-learn');await page.evaluate(()=>testPads[0].axes[0]=0.4);
   await page.waitForFunction(()=>document.querySelector('#wheel-steering-binding').value.includes('"index":0'));
+  await page.evaluate(()=>testPads[0].axes[0]=-1);await page.click('#wheel-steering-center');
+  await page.evaluate(()=>testPads[0].axes[0]=0);await page.click('#wheel-steering-left');
+  await page.evaluate(()=>testPads[0].axes[0]=1);await page.click('#wheel-steering-right');
+  assert.match(await page.locator('#wheelAvailability').innerText(),/centre must be between full left and full right/);
+  await page.selectOption('#wheel-brake-binding',JSON.stringify({deviceId:'Test USB racing wheel',deviceIndex:0,type:'axis',index:1}));
+  await page.evaluate(()=>testPads[0].axes[1]=1);await page.click('#wheel-brake-rest');
+  await page.evaluate(()=>testPads[0].axes[1]=-1);await page.click('#wheel-brake-full');
+  await page.waitForFunction(()=>document.querySelector('#wheel-brake-value').textContent==='100%');
   await page.evaluate(()=>testPads[0].axes[0]=0);await page.click('#wheel-steering-center');
   await page.evaluate(()=>testPads[0].axes[0]=-0.8);await page.click('#wheel-steering-left');
   await page.evaluate(()=>testPads[0].axes[0]=0.6);await page.click('#wheel-steering-right');
@@ -60,6 +68,9 @@ function fakeDevices(){
   await page.click('#settingsBtn');await page.click('#experimentalTab');
   assert.equal(await page.locator('#wheelDevice').inputValue(),'Test USB racing wheel');
   assert.equal(await page.locator('#wheelEnabled').isChecked(),true);
+  await page.click('#controllerTab');
+  const controllerOptionMutations=await page.evaluate(()=>new Promise(resolve=>{let count=0;const option=document.querySelector('#controllerDevice option'),observer=new MutationObserver(records=>count+=records.length);observer.observe(option,{subtree:true,childList:true,characterData:true});setTimeout(()=>{observer.disconnect();resolve(count);},180);}));
+  assert.equal(controllerOptionMutations,0);await page.click('#experimentalTab');
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.querySelector('.launcher-content').scrollWidth<=document.querySelector('.launcher-content').clientWidth),true);
   await page.screenshot({path:'build/wheel-experimental-mobile.png'});
@@ -79,6 +90,11 @@ function fakeDevices(){
       engine._daytona_step=(...input)=>{frames++;hostInputs.push(input);if(hostInputs.length>300)hostInputs.shift();return 1;};return engine;
     };` }));
   await host.goto(url);await host.waitForFunction(()=>document.querySelector('#status').textContent==='Engine ready');
+  // A controller explicitly selected in Control must remain a fallback while
+  // the calibrated wheel is enabled. Previously this silently bypassed every
+  // wheel mapping before wheelControls.read() was called.
+  await host.click('#settingsBtn');await host.click('#controllerTab');await host.selectOption('#controllerDevice','5');
+  assert.equal(await host.locator('#controllerDevice').inputValue(),'5');await host.click('#settingsBack');
   await host.evaluate(()=>{document.querySelector('#startBtn').disabled=false;document.querySelector('#startBtn').hidden=false;});await host.click('#startBtn');
   await host.evaluate(()=>{testPads[0].axes[0]=0.6;testPads[1].axes=[-1,1];testPads[2].axes[0]=-1;});
   await host.waitForFunction(()=>hostInputs.some(input=>input[0]===100 && input[1]===100 && input[2]===100));
