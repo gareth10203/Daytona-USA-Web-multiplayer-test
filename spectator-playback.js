@@ -1,39 +1,47 @@
-import {BUILD_ID,validateSettings} from './room-settings.js?v=53.5.2-actors';
-import {DEFAULT_EEPROM} from './nvram.js?v=53.5.2-actors';
-import {linkIdForSeat} from './central-link.js?v=53.5.2-actors';
-import {createRenderer} from './renderer.js?v=53.5.2-actors';
-import {transformPacket} from './spectator-codec.js?v=53.5.2-actors';
-import {SPECTATOR_VERSION,SpectatorWorldBuffer,worldState} from './spectator-world.js?v=53.5.2-actors';
-import {ARCADE_STEP_MS} from './simulation-clock.js?v=53.5.2-actors';
-import {mountSpectatorHUD} from './spectator-hud.js?v=53.5.2-actors';
+import {mountSpectatorStatus} from './spectator-view.js?v=53.7.3-wheel';
+import {BUILD_ID,validateSettings} from './room-settings.js?v=53.7.3-wheel';
+import {DEFAULT_EEPROM} from './nvram.js?v=53.7.3-wheel';
+import {linkIdForSeat} from './central-link.js?v=53.7.3-wheel';
+import {createRenderer} from './renderer.js?v=53.7.3-wheel';
+import {transformPacket} from './spectator-codec.js?v=53.7.3-wheel';
+import {SPECTATOR_VERSION,SpectatorWorldBuffer,worldState} from './spectator-world.js?v=53.7.3-wheel';
+import {ARCADE_STEP_MS} from './simulation-clock.js?v=53.7.3-wheel';
+import {mountSpectatorHUD} from './spectator-hud.js?v=53.7.3-wheel';
+import {createSpectatorAudio} from './spectator-audio.js?v=53.7.3-wheel';
 
-export function createSpectatorPlayback({room,getROM,root,onStatus=()=>{}}){
+export function createSpectatorPlayback({room,getROM,getVolume=()=>1,root,onStatus=()=>{}}){
  const $=id=>root.querySelector('#'+id),hud=mountSpectatorHUD(root);
- const status=s=>{if($('spectatorStatus').textContent!==s)$('spectatorStatus').textContent=s;onStatus(s);};
+ const show=mountSpectatorStatus(root);let mode='offline',roomPhase='lobby';
+ const status=(s='',kind=mode)=>{mode=kind;show(kind,s);onStatus(s);};
  let wasm,renderer,ready,stream,epoch='',generation=0,disposed=false,visible=true,prepared=false,booting=false,initializedCourse=-1,
   members=[],donor=null,selected=null,latest=null,buffer=new SpectatorWorldBuffer(),raf,lastTick=0,debt=0,currentCamera=-1,
-  lastWire=0,metricsAt=performance.now(),packets=0,receivedBytes=0,boots=0,failure='';
+  lastWire=0,handshakeDeadline=0,feedConfigured=false,metricsAt=performance.now(),packets=0,receivedBytes=0,boots=0,failure='';
+ const audio=createSpectatorAudio({button:$('spectatorSound'),getWasm:()=>wasm,getVolume,ready:()=>prepared,onDemand:(on,target)=>{if(stream?.open&&feedConfigured&&members.some(m=>m.id===target))stream.send({type:'spectator-audio-select',target,on});}});
  const loading=(on,value=0)=>{$('spectatorLoading').hidden=!on;$('spectatorLoadProgress').value=value;};
  for(const o of $('spectatorCamera').options)o.disabled=Number(o.value)<0;$('spectatorCamera').value='2';
- $('spectatorSound').disabled=true;$('spectatorSound').textContent='Sound unavailable';$('spectatorSound').title='This prototype transmits current race states, without an audio stream.';
- $('spectatorViewHint').hidden=false;$('spectatorViewHint').textContent='Live race states · Short interpolation buffer · Audio not streamed.';
+ audio.refresh();
+ $('spectatorViewHint').hidden=false;$('spectatorViewHint').textContent='Original sound effects · Music off';
  async function ensureReady(){
   if(!ready)ready=(async()=>{
    const file=getROM();if(!file)throw Error('Choose a ROM before watching.');
    const next=await createDaytonaModule();if(disposed)return;wasm=next;
-   const draw=await createRenderer($('spectatorCanvas'),e=>stop(e),{});if(disposed){draw.dispose();return;}renderer=draw;
+   // A disposed WebGL/WebGPU renderer leaves context and compositor state on
+   // its canvas. A later spectator session owns a fresh graphics surface,
+   // rather than reinitializing a retired context on the previous canvas.
+   const previous=$('spectatorCanvas'),canvas=previous.cloneNode(false);previous.replaceWith(canvas);
+   const draw=await createRenderer(canvas,e=>stop(e),{});if(disposed){draw.dispose();return;}renderer=draw;
    try{wasm.FS.mkdir('/roms');}catch{}wasm.FS.writeFile('/roms/spectator.zip',new Uint8Array(await file.arrayBuffer()));
   })().catch(e=>{ready=null;throw e;});return ready;
  }
- function stop(message){failure=message;prepared=false;generation++;loading(false);$('spectatorStage').hidden=true;status(message);}
- function reset(message='Waiting for a race.'){generation++;stream?.close();stream=null;prepared=false;latest=null;buffer=new SpectatorWorldBuffer();hud.reset();loading(false);$('spectatorStage').hidden=true;status(message);}
+ function stop(message){audio.stop();failure=message;prepared=false;generation++;loading(false);status(message,'interrupted');}
+ function reset(message='Drivers are in the lobby.'){audio.stop();generation++;const previous=stream;stream=null;previous?.close();prepared=false;latest=null;failure='';lastWire=handshakeDeadline=0;feedConfigured=false;buffer=new SpectatorWorldBuffer();hud.reset();loading(false);status(message,'offline');}
  function configure(config){
   validateSettings(config.settings);const grid=config.members;
   if(config.epoch!==epoch||!Array.isArray(grid)||grid.length<2||grid.length>8||grid.some(m=>typeof m.id!=='string'||m.id.length>100||typeof m.name!=='string'||m.name.length>24||!Number.isInteger(m.cabinet)||m.cabinet<1||m.cabinet>8||!Number.isInteger(m.skin)||m.skin<0||m.skin>39)||new Set(grid.map(m=>m.id)).size!==grid.length||new Set(grid.map(m=>m.cabinet)).size!==grid.length)throw Error('Invalid spectator grid.');
   const relay=grid.find(m=>m.id===config.donor);if(!relay||relay.id===config.host)throw Error('Invalid spectator relay.');
-  members=grid;donor=relay;selected=members.find(m=>m.id===selected?.id)||donor;hud.reset(members);hud.select(selected.id);
-  $('spectatorDriver').replaceChildren(...members.map(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name+' · Car '+m.cabinet;return o;}));$('spectatorDriver').value=selected.id;
-  status('Connected · Waiting for a live race state.');
+  members=grid;donor=relay;selected=members.find(m=>m.id===selected?.id)||donor;hud.reset(members);hud.select(selected.id);audio.follow(selected.id);
+  $('spectatorDriver').replaceChildren(...members.map(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name+' · Car '+m.cabinet;return o;}));$('spectatorDriver').value=selected.id;$('spectatorDriver').disabled=false;$('spectatorFollowing').textContent=selected.name;
+  feedConfigured=true;handshakeDeadline=0;lastWire=performance.now();status('Waiting for drivers to enter a race.','waiting');
  }
  const race=s=>s&&s.count>0&&s.scene>=22&&s.scene<=29;
  function accept(s){
@@ -42,7 +50,7 @@ export function createSpectatorPlayback({room,getROM,root,onStatus=()=>{}}){
  }
  async function loadCourse(first){
   if(booting||disposed||!race(first))return;
-  booting=true;prepared=false;initializedCourse=-1;loading(true,0);$('spectatorStage').hidden=true;const ticket=generation,course=first.course;
+  booting=true;prepared=false;initializedCourse=-1;loading(true,0);status('Preparing your race view…','loading');const ticket=generation,course=first.course;
   const valid=()=>!disposed&&ticket===generation&&race(latest)&&latest.course===course;
   const step=async(n,buttons=0,gas=0)=>{
    let slice=performance.now();for(let i=0;i<n;i++){
@@ -52,7 +60,7 @@ export function createSpectatorPlayback({room,getROM,root,onStatus=()=>{}}){
    }return true;
   };
   try{
-   status('Loading the circuit from your ROM…');await ensureReady();if(!valid())return;
+   status('Preparing the circuit and textures…','loading');await ensureReady();if(!valid())return;
    wasm._daytona_central_config(0,0);wasm._daytona_delivery_mode(0);
    if(!wasm.ccall('daytona_load','number',['string','number'],['/roms/spectator.zip',0]))throw Error('Could not load the spectator arcade.');
    wasm.HEAPU8.set(DEFAULT_EEPROM,wasm._daytona_eeprom_ptr());
@@ -67,31 +75,32 @@ export function createSpectatorPlayback({room,getROM,root,onStatus=()=>{}}){
    if(!await step(700,64))return;loading(true,90);
    if((wasm._daytona_spectator_world_phase()>>>8)!==40)throw Error('The spectator actor grid was not initialized.');
    initializedCourse=course;renderer.reset();renderer.setDrawDistance(1);accept(buffer.sample()||latest);
-   boots++;prepared=true;currentCamera=-1;debt=0;lastTick=performance.now();loading(false);$('spectatorStage').hidden=false;status('Watching live · Current race state');
+   boots++;prepared=true;currentCamera=-1;debt=0;lastTick=performance.now();loading(false);status('',latest?.scene>=23?'finished':'live');
   }catch(e){if(ticket===generation)stop(e.message);}
   finally{booting=false;if(!disposed&&ticket===generation&&!prepared&&race(latest))setTimeout(()=>{void loadCourse(latest);},0);}
  }
  function receive(s,at){
   if(!buffer.accept(s,at))return;latest=s;lastWire=performance.now();
-  if(!race(s)){prepared=false;loading(false);$('spectatorStage').hidden=true;status('Waiting for the next race · No history is recorded.');return;}
+  if(!race(s)){if(prepared||audio.state().enabled)audio.stop();prepared=false;loading(false);status('Waiting for drivers to enter a race.','waiting');return;}
   if(booting)return;
   if(initializedCourse!==s.course){void loadCourse(s);return;}
-  if(!prepared){accept(s);prepared=true;lastTick=performance.now();debt=0;$('spectatorStage').hidden=false;status('Watching live · Current race state');}
+  if(!prepared){accept(s);prepared=true;lastTick=performance.now();debt=0;status('',s.scene>=23?'finished':'live');}
  }
  function connect(assignment){
   if(typeof assignment.relay!=='string'||assignment.relay.length>100||!/^[a-f0-9]{32}$/.test(assignment.ticket||'')||!/^[a-f0-9]{32}$/.test(assignment.epoch||''))throw Error('Invalid spectator assignment.');
-  reset('Connecting to a live race relay…');failure='';epoch=assignment.epoch;const ticket=generation;
+  reset('Connecting to a live race relay…');failure='';status('Connecting to the race feed…','connecting');epoch=assignment.epoch;const ticket=generation;handshakeDeadline=performance.now()+30000;
   const c=stream=room.peer.connect(assignment.relay,{reliable:true,serialization:'binary',metadata:{role:'spectator-stream',build:BUILD_ID,version:SPECTATOR_VERSION,epoch,ticket:assignment.ticket}});
+  c.on('open',()=>{if(c!==stream||ticket!==generation)return;if(!feedConfigured)handshakeDeadline=performance.now()+60000;status('Waiting for the player relay to finish preparing…','connecting');});
   let decoding=false,pending=null,configured=false;
   async function decode(){
    if(decoding)return;decoding=true;
-   try{while(pending&&c===stream&&ticket===generation){const {d,at}=pending;pending=null;const bytes=await transformPacket(d.bytes,d.format,true);if(c!==stream||ticket!==generation)return;receive(worldState(bytes,members.length),at);packets++;receivedBytes+=d.bytes.byteLength;}}
+   try{while(pending&&c===stream&&ticket===generation){const {d,at}=pending;pending=null;const bytes=await transformPacket(d.bytes,d.format,true);if(c!==stream||ticket!==generation)return;receive(worldState(bytes,members.length),at);if(d.audio)try{audio.offer(d.audio,at);}catch{audio.stop();}packets++;receivedBytes+=d.bytes.byteLength;}}
    catch(e){if(c===stream){stop(e.message);c.close();}}finally{decoding=false;}
   }
   c.on('data',d=>{
    if(c!==stream||ticket!==generation)return;
    if(d?.type==='spectator-begin'&&d.version===SPECTATOR_VERSION){try{configure(d.config);configured=true;}catch(e){stop(e.message);c.close();}return;}
-   if(d?.type==='spectator-wait'){stop(String(d.message||'Waiting for a race.').slice(0,160));return;}
+   if(d?.type==='spectator-wait'){reset(roomPhase==='lobby'?'Drivers are in the lobby.':'Waiting for the next session.');if(roomPhase!=='lobby')status('Waiting for drivers to enter a race.','waiting');return;}
    if(d?.type==='spectator-world'&&configured&&d.epoch===epoch){pending={d,at:performance.now()};void decode();}
   });
   c.on('close',()=>{if(c===stream&&!failure)stop('The spectator relay disconnected. Drivers are unaffected.');});c.on('error',()=>{if(c===stream&&!failure)stop('Could not reach the spectator relay.');});
@@ -103,22 +112,32 @@ export function createSpectatorPlayback({room,getROM,root,onStatus=()=>{}}){
    while(debt>=ARCADE_STEP_MS&&n++<4){
     const index=members.findIndex(m=>m.id===selected?.id);wasm._daytona_spectator_target(linkIdForSeat(Math.max(0,index)+1,members.length));
     const camera=Number($('spectatorCamera').value);if(!wasm._daytona_spectator_world_view(camera,selected.cabinet))throw Error('Could not select the spectator camera.');currentCamera=camera;
-    accept(buffer.sample(now)||latest);renderer.prepare(wasm);
-    if(!wasm._daytona_step(0,0,0,4,0))throw Error(wasm.ccall('daytona_error','string',[],[])||'The spectator renderer stopped.');debt-=ARCADE_STEP_MS;
+    accept(buffer.sample(now)||latest);audio.apply(now);renderer.prepare(wasm);
+    if(!wasm._daytona_step(0,0,0,4,0))throw Error(wasm.ccall('daytona_error','string',[],[])||'The spectator renderer stopped.');audio.push();debt-=ARCADE_STEP_MS;
    }
    if(visible){renderer.setHUDVisible(false);hud.update(wasm,now);renderer.draw(wasm);}
-   $('spectatorFollowing').textContent=latest.scene>=23?`Race ended · ${selected.name}`:`Following ${selected.name} · Car ${selected.cabinet}`;
-   if(now-lastWire>10000)stop('The spectator relay stopped sending. Drivers are unaffected.');
+   const following=selected.name;if($('spectatorFollowing').textContent!==following)$('spectatorFollowing').textContent=following;status('',latest.scene>=23?'finished':'live');
+
   }catch(e){stop(e.message);stream?.close();}
-  else lastTick=now;
+  else lastTick=now;audio.refresh();
+  if(!failure&&stream&&handshakeDeadline&&now>handshakeDeadline){stop(stream.open?'The player relay did not finish preparing. Return to the room and try again.':'Could not connect to the player relay. Return to the room and try again.');stream?.close();}
+  if(!failure&&roomPhase==='playing'&&stream?.open&&feedConfigured&&lastWire&&now-lastWire>10000)stop('The race feed stopped responding. Return to the room to reconnect.');
   if(now-metricsAt>=1000){$('spectatorMetrics').textContent=`${Math.round(packets*1000/(now-metricsAt))} states/s · ${Math.round(receivedBytes*1000/(now-metricsAt)/1024)} KiB/s · ${buffer.frames.length}/8 recent states · No history`;packets=receivedBytes=0;metricsAt=now;}
  }
- $('spectatorDriver').onchange=()=>{selected=members.find(m=>m.id===$('spectatorDriver').value)||donor;if(selected)hud.select(selected.id);};
- $('spectatorFullscreen').onclick=()=>document.fullscreenElement?document.exitFullscreen():root.requestFullscreen?.();
- raf=requestAnimationFrame(frame);
- return {message(d){if(disposed)return;if(d.type==='spectator-assignment'){try{connect(d);}catch(e){stop(e.message);}}else if(d.type==='spectator-status')status(String(d.message||'').slice(0,160));},
-  reset,warm(){void ensureReady().catch(e=>status(e.message));},visible(on){visible=!!on;},
-  state:()=>({prepared,booting,boots,course:initializedCourse,frame:wasm?._daytona_total_frames(),scene:latest?.scene,sourceFrame:latest?.frame,queued:buffer.frames.length,received:buffer.received,epoch,relay:donor?.id,target:selected?.id,camera:currentCamera,focus:wasm?._daytona_spectator_focus(),hud:hud.snapshot(),history:false,failure,localPhase:wasm?._daytona_spectator_world_phase()}),
-  dispose(){disposed=true;cancelAnimationFrame(raf);reset('');renderer?.dispose();renderer=null;wasm=null;}
+ $('spectatorDriver').onchange=()=>{selected=members.find(m=>m.id===$('spectatorDriver').value)||donor;if(selected){hud.select(selected.id);audio.follow(selected.id);}};
+ status('Drivers are in the lobby.','offline');raf=requestAnimationFrame(frame);
+ return {message(d){if(disposed)return;if(d.type==='spectator-assignment'){try{connect(d);}catch(e){stop(e.message);}}else if(d.type==='spectator-status'&&!prepared&&!booting)status(String(d.message||'').slice(0,160),roomPhase==='lobby'?'offline':'connecting');},
+  sync(state){
+   const previous=roomPhase;roomPhase=state.isHost?state.phase:state.phase==='waiting'?state.remotePhase:state.phase;
+   // A ticket for the next session may arrive while the last room snapshot
+   // still says lobby. Repainting that snapshot must not cancel the ticket.
+   if(roomPhase==='lobby'){if(previous==='preparing'||previous==='playing')reset();else if(!stream)status('Drivers are in the lobby.','offline');}
+   else if(roomPhase==='reconnecting'||state.phase==='reconnecting')status('Reconnecting to your room…','interrupted');
+   else if(roomPhase==='preparing'&&!prepared&&!booting)status('Starting the arcade cabinets…','connecting');
+   else if(roomPhase==='playing'){if(previous!=='playing'&&feedConfigured&&!latest)lastWire=performance.now();if(mode==='offline')status('Connecting to the race feed…','connecting');}
+  },
+  reset,warm(){void ensureReady().catch(e=>status(e.message));},visible(on){visible=!!on;audio.visible(visible);},
+  state:()=>({prepared,booting,boots,course:initializedCourse,frame:wasm?._daytona_total_frames(),scene:latest?.scene,sourceFrame:latest?.frame,queued:buffer.frames.length,received:buffer.received,epoch,relay:donor?.id,target:selected?.id,camera:currentCamera,focus:wasm?._daytona_spectator_focus(),hud:hud.snapshot(),history:false,viewState:mode,feedConfigured,audio:audio.state(),failure,localPhase:wasm?._daytona_spectator_world_phase()}),
+  dispose(){disposed=true;cancelAnimationFrame(raf);reset('');audio.dispose();renderer?.dispose();renderer=null;wasm=null;}
  };
 }

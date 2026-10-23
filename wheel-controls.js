@@ -1,5 +1,5 @@
 import {WHEEL_ACTIONS,newWheelProfile,loadWheelProfiles,saveWheelProfiles,sanitizeBinding,bindingDevice,rawInput,
-  steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=53.5.2-actors';
+  steeringCalibrated,pedalCalibrated,wheelSteering,wheelPedal,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js?v=53.7.3-wheel';
 
 export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const saved=loadWheelProfiles(storage),rows=new Map();
@@ -15,11 +15,11 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const deviceLabel=create('label','Wheel device');deviceLabel.htmlFor='wheelDevice';
   const device=create('select');device.id='wheelDevice';
   const enabledLabel=create('label','','setting-toggle');
-  const enabledText=create('span','Use configured wheel');enabledText.append(create('small','Calibrate steering first. Pedals and buttons are optional.'));
+  const enabledText=create('span','Enable wheel in gameplay');enabledText.append(create('small','Turn this on after calibrating steering. Pedals and buttons are optional.'));
   const enabled=create('input');enabled.type='checkbox';enabled.id='wheelEnabled';enabledLabel.append(enabledText,enabled);
   const availability=create('p','','device-status');availability.id='wheelAvailability';availability.setAttribute('role','status');
   connection.append(deviceLabel,device,enabledLabel,availability);root.append(connection);
-  const learnBar=create('div','','wheel-learn-bar'),message=create('p','Choose your wheel, then assign and calibrate its controls.');
+  const learnBar=create('div','','wheel-learn-bar'),message=create('p','Choose your wheel. Click Detect input, then move the control you want to use.');
   message.id='wheelMessage';message.setAttribute('role','status');
   const cancel=create('button','Cancel assignment');cancel.type='button';cancel.id='wheelCancel';cancel.hidden=true;
   learnBar.append(message,cancel);root.append(learnBar);
@@ -39,7 +39,7 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
       saved.profiles.push(newWheelProfile(pad.id,pad.index));
     }
     if(pad && profile())profile().deviceIndex=pad.index;
-    persist();render();announce(profile()?steeringCalibrated(profile().steering)?'Saved calibration loaded. Check the live inputs before playing.':'Assign steering and capture centre, left and right positions.':'Choose a wheel to configure.');
+    persist();render();announce(profile()?steeringCalibrated(profile().steering)?'Saved calibration loaded. Check the live inputs before playing.':'Click Detect input for steering, turn the wheel, then capture centre, full left and full right.':'Choose a wheel to configure.');
   }
   device.addEventListener('change',chooseDevice);
   enabled.addEventListener('change',()=>{
@@ -68,9 +68,9 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     announce(role==='steering'?'Turn the wheel noticeably. Keep other controls still.':role in WHEEL_ACTIONS?`Press the control for ${WHEEL_ACTIONS[role]}. Esc cancels.`:`Press the ${role==='accel'?'accelerator':'brake'} pedal. Keep other controls still.`);
   }
   function mappingRow(role,label,parent){
-    const node=create('div','','wheel-mapping-row'),title=create('label',label),select=create('select'),learn=create('button','Assign');
+    const node=create('div','','wheel-mapping-row'),title=create('label',label),select=create('select'),learn=create('button','Detect input');
     select.id=`wheel-${role}-binding`;title.htmlFor=select.id;learn.type='button';learn.id=`wheel-${role}-learn`;
-    learn.setAttribute('aria-label',`Assign ${label.toLowerCase()} from device input`);
+    learn.setAttribute('aria-label',`Detect ${label.toLowerCase()} from device input`);
     learn.addEventListener('click',()=>listen(role));
     select.addEventListener('change',()=>{
       cancelAssignment();let binding=null;try{binding=sanitizeBinding(JSON.parse(select.value));}catch{}
@@ -91,7 +91,8 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
         if(sample===null){announce('Assigned device is unavailable. Connect it and try again.');return;}
         config[role][key]=sample;persist();render();
         const ready=role==='steering'?steeringCalibrated(config[role]):pedalCalibrated(config[role]);
-        announce(`${label} captured.${ready?' Calibration complete.':role==='steering'?' Capture the other positions; left and right must be on opposite sides of centre.':' Capture both released and fully pressed positions.'}`);
+        const allSteering=role==='steering'&&['center','left','right'].every(name=>Number.isFinite(config[role][name]));
+        announce(`${label} captured.${ready?(role==='steering'?' Calibration complete. Turn on Enable wheel in gameplay above.':' Calibration complete.'):allSteering?' Calibration invalid: centre must be between full left and full right. Recapture the three positions.':role==='steering'?' Capture the other positions; left and right must be on opposite sides of centre.':' Capture both released and fully pressed positions.'}`);
       });
       item.append(button,value);group.append(item);captureButtons.push({role,key,button,value});
     }
@@ -109,12 +110,12 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   }
   const deadzone=slider('wheelDeadzone','Wheel dead zone',0,15,2,'Filters small movements around the captured centre.',(config,value)=>config.steering.deadzone=value);
   const sensitivity=slider('wheelSensitivity','Wheel response',25,175,100,'100% is linear across your calibrated steering range.',(config,value)=>config.steering.sensitivity=value);
-  const pedals=details('Pedals');pedals.append(create('p','Use the same axis for combined pedals, or assign pedals from separate devices. Capture each pedal released and fully pressed; reversed axes are handled automatically.','wheel-help'));
+  const pedals=details('Pedals');pedals.append(create('p','Click Detect input, then press one pedal. Capture it released and fully pressed. Combined pedals may share an axis; reversed axes are handled automatically.','wheel-help'));
   for(const [role,label] of [['accel','Accelerator'],['brake','Brake']]){
     const group=create('div','','wheel-pedal');mappingRow(role,label,group);calibration(role,group);pedals.append(group);
   }
   const buttons=details('Gears & buttons'),buttonGrid=create('div','','wheel-button-grid');
-  buttons.append(create('p','Release controls before clicking Assign. Press one button or hat direction. Use gear positions, paddles, or both.','wheel-help'),buttonGrid);
+  buttons.append(create('p','Release controls before clicking Detect input, then press one button or hat direction. Use gear positions, paddles, or both.','wheel-help'),buttonGrid);
   for(const [action,label] of Object.entries(WHEEL_ACTIONS))mappingRow(action,label,buttonGrid);
   const inspector=details('Live device inputs'),raw=create('pre');raw.id='wheelRawInputs';inspector.append(raw);
   const reset=create('button','Reset this wheel profile');reset.type='button';reset.id='wheelReset';reset.className='wheel-reset';root.append(reset);
@@ -185,10 +186,11 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     }
     if(now-lastUpdate<100)return;lastUpdate=now;
     const config=profile(),source=config?.steering.binding,connected=rawInput(source,pads)!==null;
-    const status=!pads.length?'No devices detected. Press a device button to make it visible.':!config?'Choose the wheel you want to configure.':!connected?'Steering input is unassigned or disconnected.':!steeringCalibrated(config.steering)?'Steering calibration incomplete. Wheel input is not active.':config.enabled?'Wheel input ready.':'Calibrated. Enable wheel input when ready.';
+    const steeringCaptured=!!config&&['center','left','right'].every(name=>Number.isFinite(config.steering[name]));
+    const status=!pads.length?'No devices detected. Press a device button to make it visible.':!config?'Choose the wheel you want to configure.':!connected?'Steering input is unassigned or disconnected.':!steeringCaptured?'Steering calibration incomplete: capture centre, full left and full right. Wheel input is not active.':!steeringCalibrated(config.steering)?'Steering calibration invalid: centre must be between full left and full right. Recapture the three positions.':config.enabled?'Wheel input ready.':'Calibrated. Turn on Enable wheel in gameplay above.';
     if(availability.textContent!==status)availability.textContent=status;
     if(!visible)return;
-    const value=readWheel(config?{...config,enabled:true}:null,pads);
+    const value={steer:wheelSteering(config?.steering,rawInput(config?.steering?.binding,pads)),accel:wheelPedal(config?.accel,rawInput(config?.accel?.binding,pads)),brake:wheelPedal(config?.brake,rawInput(config?.brake?.binding,pads))};
     for(const [role,key] of [['steering','steer'],['accel','accel'],['brake','brake']]){meters[role].meter.value=value[key];meters[role].value.textContent=`${value[key]}%`;}
     for(const [role,row] of rows)if(role in WHEEL_ACTIONS)row.indicator.classList.toggle('active',bindingPressed(config?.buttons[role],pads));
     raw.textContent=pads.map(pad=>`${pad.id} [${pad.index}]\nAxes: ${pad.axes.map((value,index)=>`${index}: ${value.toFixed(3)}`).join('  ')}\nButtons: ${pad.buttons.map((button,index)=>`${index}: ${(button.value ?? 0).toFixed(2)}`).join('  ')}`).join('\n\n') || 'No device inputs available.';
@@ -204,3 +206,4 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     feedbackPad(){const config=profile(),pads=getPads();return readWheel(config,pads).active?bindingDevice(config.steering.binding,pads):null;}
   };
 }
+

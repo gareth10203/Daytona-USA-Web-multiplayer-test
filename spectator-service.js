@@ -1,11 +1,12 @@
-import {BUILD_ID} from './room-settings.js?v=53.5.2-actors';
-import {SPECTATOR_VERSION,SPECTATOR_HZ} from './spectator-world.js?v=53.5.2-actors';
-import {transformPacket} from './spectator-codec.js?v=53.5.2-actors';
+import {BUILD_ID} from './room-settings.js?v=53.7.3-wheel';
+import {SPECTATOR_VERSION,SPECTATOR_HZ} from './spectator-world.js?v=53.7.3-wheel';
+import {transformPacket} from './spectator-codec.js?v=53.7.3-wheel';
+import {soundState} from './spectator-audio.js?v=53.7.3-wheel';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),v=>v.toString(16).padStart(2,'0')).join('');
 const name=v=>String(v||'Spectator').replace(/\s+/gu,' ').trim().slice(0,24)||'Spectator';
 const CAP=8,QUEUE=262144;
 export class SpectatorService {
- constructor(room,{getWasm=()=>null,onChange=()=>{},onMessage=()=>{}}={}){Object.assign(this,{room,getWasm,onChange,onMessage});this.viewers=new Map();this.tickets=new Map();this.streams=new Map();this.config=null;this.phase='';this.epoch='';this.frames=[];this.orders=[];this.frame=null;this.serial=0;this.busy=false;this.sending=false;this.timer=null;this.generation=0;this.reaper=null;}
+ constructor(room,{getWasm=()=>null,onChange=()=>{},onMessage=()=>{}}={}){Object.assign(this,{room,getWasm,onChange,onMessage});this.viewers=new Map();this.tickets=new Map();this.streams=new Map();this.config=null;this.phase='';this.epoch='';this.frames=[];this.orders=[];this.frame=null;this.serial=0;this.busy=false;this.sending=false;this.timer=null;this.generation=0;this.reaper=null;this.audioWatches=new Map();this.audioPolicies=new Map();this.audioLatest=new Map();this.audioCapture=false;this.audioSentAt=-Infinity;this.audioRates=new Map();this.audioBytes=0;}
  snapshot(){return {viewers:[...this.viewers.values()].filter(v=>v.conn.open).map(v=>({id:v.conn.peer,name:v.name,approved:v.approved,relay:v.relay,connected:v.conn.open})),streams:this.streams.size};}
  changed(){this.onChange(this.snapshot());}
  send(c,d){if(!c?.open||c.dataChannel?.bufferedAmount>QUEUE)return false;try{c.send(d);return true;}catch{return false;}}
@@ -24,7 +25,24 @@ export class SpectatorService {
  }
  expire(now=performance.now()){for(const v of [...this.viewers.values()])if(now-v.last>30000){this.viewers.delete(v.conn.peer);this.revoke(v);if(!v.integrated)v.conn.close();this.changed();}if(!this.viewers.size){clearInterval(this.reaper);this.reaper=null;}}
  approve(id,allow){const v=this.viewers.get(id);if(!this.room.isHost||!v)return;v.approved=!!allow;if(!allow){this.send(v.conn,{type:'spectator-status',message:'The host declined this spectator request.'});v.conn.close();this.viewers.delete(id);}else this.send(v.conn,{type:'spectator-status',message:'Approved. Waiting for a race.'});this.changed();}
- revoke(v){if(v.relay){const c=this.room.connections.get(v.relay);this.send(c,{type:'spectator-revoke',viewer:v.conn.peer});}v.relay=null;}
+ revoke(v){if(v.relay){const c=this.room.connections.get(v.relay);this.send(c,{type:'spectator-revoke',viewer:v.conn.peer});}this.audioWatches.delete(v.conn.peer);if(this.room.isHost)this.audioPolicy();v.relay=null;}
+ audioPolicy(){
+  if(!this.room.isHost)return;
+  const needed=new Set([...this.audioWatches.values()].map(w=>w.target));
+  for(const id of new Set([...this.audioPolicies.keys(),...needed])){
+   const on=needed.has(id)&&this.room.active;if(this.audioPolicies.get(id)===on)continue;
+   this.audioPolicies.set(id,on);if(id===this.room.id){this.audioCapture=on;this.getWasm()?._daytona_spectator_sound_capture?.(Number(on));}
+   else this.send(this.room.connections.get(id),{type:'spectator-audio-capture',epoch:this.room.epoch,on});
+  }
+ }
+ audioWatch(relay,viewer,target,on){
+  const v=this.viewers.get(viewer);if(!this.room.isHost||!v?.approved||v.relay!==relay||!this.room.active)return;
+  if(on&&this.room.members.some(m=>m.id===target))this.audioWatches.set(viewer,{relay,target});else this.audioWatches.delete(viewer);this.audioPolicy();
+ }
+ audioRoute(source,bytes){
+  const relays=new Set([...this.audioWatches.values()].filter(w=>w.target===source).map(w=>w.relay));
+  for(const id of relays){const c=this.room.connections.get(id);if((c?.dataChannel?.bufferedAmount||0)<8192)this.send(c,{type:'spectator-audio-relay',epoch:this.room.epoch,source,bytes});}
+ }
  sync(state){
   if(this.room.isHost&&this.room.waiters){
    const desired=new Map([...this.room.waiters.values()].filter(w=>w.spectator&&!w.needsApproval).map(w=>[w.id,w]));
@@ -53,10 +71,31 @@ export class SpectatorService {
    if(!relay){this.send(v.conn,{type:'spectator-status',message:'All spectator relays are busy. Waiting for a free relay.'});continue;}
    const ticket=token();loads.set(relay.id,(loads.get(relay.id)||0)+1);v.relay=relay.id;
    this.send(this.room.connections.get(relay.id),{type:'spectator-grant',epoch:this.room.epoch,viewer:v.conn.peer,ticket});
+   // Existing observers must learn the new room phase/epoch before their
+   // ticket on this same reliable host connection, not at the next heartbeat.
+   if(v.integrated&&v.conn.peer!==this.room.id)this.room.syncConnection?.(v.conn);
    this.send(v.conn,{type:'spectator-assignment',epoch:this.room.epoch,relay:relay.id,ticket,name:relay.name});
   }
  }
  handle(c,d){
+  if(d&&['spectator-audio-watch','spectator-audio-capture','spectator-audio-state','spectator-audio-relay'].includes(d.type)){
+   try{
+    const room=this.room;
+    if(room.isHost){
+     if(d.type==='spectator-audio-watch'&&d.epoch===room.epoch&&typeof d.on==='boolean')this.audioWatch(c.peer,d.viewer,d.target,d.on);
+     else if(d.type==='spectator-audio-state'&&room.active&&d.epoch===room.epoch&&this.audioPolicies.get(c.peer)){
+      const state=soundState(d.bytes),at=performance.now();if(state.actor!==room.members.findIndex(m=>m.id===c.peer)||at-(this.audioRates.get(c.peer)??-Infinity)<30)return true;this.audioRates.set(c.peer,at);this.audioRoute(c.peer,d.bytes);
+     }
+    }else if(c===room.server){
+     if(d.type==='spectator-audio-capture'&&typeof d.on==='boolean'&&(!d.on||room.active&&d.epoch===room.epoch)){
+      this.audioCapture=d.on;this.getWasm()?._daytona_spectator_sound_capture?.(Number(d.on));
+     }else if(d.type==='spectator-audio-relay'&&room.active&&d.epoch===room.epoch&&this.streams.size){
+      const state=soundState(d.bytes);if(state.actor===room.members.findIndex(m=>m.id===d.source))this.audioLatest.set(d.source,{bytes:d.bytes,at:performance.now()});
+     }
+    }
+   }catch{} // A malformed optional audio packet never interrupts racing peers.
+   return true;
+  }
   if(!d||!['spectator-grant','spectator-revoke','spectator-assignment','spectator-status'].includes(d.type))return false;
   if(this.room.isHost||c!==this.room.server)return true;
   if(['spectator-assignment','spectator-status'].includes(d.type)){if(this.room.waiters.get(this.room.id)?.spectator)this.onMessage(d);return true;}
@@ -67,9 +106,15 @@ export class SpectatorService {
  stream(c){
   const t=this.tickets.get(c.peer),m=c.metadata;
   if(this.room.isHost||!t||t.ticket!==m.ticket||t.epoch!==m.epoch||performance.now()>t.until||this.streams.size>=2){c.close();return;}
-  const s={conn:c,begun:false,epoch:m.epoch};this.streams.set(c.peer,s);
+  const s={conn:c,begun:false,epoch:m.epoch,audioTarget:'',audioOn:false};this.streams.set(c.peer,s);
   c.on('open',()=>{this.begin(s);this.ensureTimer();this.changed();});
-  c.on('data',()=>c.close());const close=()=>{if(this.streams.get(c.peer)===s){this.streams.delete(c.peer);if(!this.streams.size){clearInterval(this.timer);this.timer=null;}this.changed();}};c.on('close',close);c.on('error',()=>{close();c.close();});
+  c.on('data',d=>{
+   if(d?.type!=='spectator-audio-select'||typeof d.on!=='boolean'||typeof d.target!=='string'||!this.config?.members.some(m=>m.id===d.target)){c.close();return;}
+   s.audioTarget=d.target;s.audioOn=d.on;clearTimeout(s.audioWatchTimer);
+   const publish=()=>{s.audioWatchAt=performance.now();this.send(this.room.server,{type:'spectator-audio-watch',epoch:s.epoch,viewer:c.peer,target:s.audioTarget,on:s.audioOn});};
+   const delay=d.on?Math.max(0,100-(performance.now()-(s.audioWatchAt??-Infinity))):0;
+   if(delay)s.audioWatchTimer=setTimeout(publish,delay);else publish();
+  });const close=()=>{clearTimeout(s.audioWatchTimer);if(this.streams.get(c.peer)===s){this.send(this.room.server,{type:'spectator-audio-watch',epoch:s.epoch,viewer:c.peer,target:s.audioTarget,on:false});this.streams.delete(c.peer);if(!this.streams.size){clearInterval(this.timer);this.timer=null;}this.changed();}};c.on('close',close);c.on('error',()=>{close();c.close();});
  }
  prepared(config){
   this.config=config;this.frames=[];this.orders=[];this.serial=0;
@@ -81,7 +126,13 @@ export class SpectatorService {
  get capturing(){return false;}
  beginStep(){} // Racers no longer journal or copy their per-step inbox/inputs.
  order(){}
- endStep(){}
+ endStep(now=performance.now()){
+  const wasm=this.getWasm();wasm?._daytona_spectator_sound_capture?.(Number(this.audioCapture));
+  if(!this.audioCapture||!this.room.active||now-this.audioSentAt<65||!wasm?._daytona_spectator_sound_export)return;
+  this.audioSentAt=now;const ptr=wasm._daytona_spectator_sound_export(),size=wasm._daytona_spectator_sound_size();if(!ptr||!size)return;
+  const bytes=wasm.HEAPU8.slice(ptr,ptr+size).buffer;this.audioBytes+=size;
+  if(this.room.isHost)this.audioRoute(this.room.id,bytes);else if((this.room.server?.dataChannel?.bufferedAmount||0)<8192)this.send(this.room.server,{type:'spectator-audio-state',epoch:this.room.epoch,bytes});
+ }
  async flush(){
   if(this.room.isHost||this.busy||!this.room.active||!this.config||![...this.streams.values()].some(s=>s.begun&&s.conn.open))return;
   this.busy=true;const generation=this.generation;
@@ -89,10 +140,10 @@ export class SpectatorService {
    const wasm=this.getWasm(),ptr=wasm?._daytona_spectator_world_export();if(!ptr)return;
    const raw=wasm.HEAPU8.slice(ptr,ptr+wasm._daytona_spectator_world_size()).buffer,format=typeof CompressionStream==='function'?'deflate':'raw',bytes=await transformPacket(raw,format);
    if(generation!==this.generation)return;
-   for(const [id,s] of this.streams){if(!s.begun||!s.conn.open)continue;if(!this.send(s.conn,{type:'spectator-world',epoch:this.config.epoch,format,bytes})){this.streams.delete(id);s.conn.close();this.changed();}}
+   for(const [id,s] of this.streams){if(!s.begun||!s.conn.open)continue;const sound=this.audioLatest.get(s.audioTarget),audio=s.audioOn&&sound&&performance.now()-sound.at<2000?{source:s.audioTarget,bytes:sound.bytes}:null;if(!this.send(s.conn,{type:'spectator-world',epoch:this.config.epoch,format,bytes,...(audio?{audio}:{})})){this.streams.delete(id);s.conn.close();this.changed();}}
   }catch{this.stopStreams('The spectator relay stopped. Drivers are unaffected.');}finally{this.busy=false;}
  }
- stopStreams(message){this.generation++;clearInterval(this.timer);this.timer=null;this.sending=false;this.config=null;this.frames=[];this.orders=[];this.frame=null;this.getWasm()?._daytona_spectator_replay?.(0,0);for(const s of this.streams.values()){this.send(s.conn,{type:'spectator-wait',message});s.conn.close();}this.streams.clear();this.tickets.clear();this.changed();}
+ stopStreams(message){this.audioWatches.clear();if(this.room.isHost)this.audioPolicy();this.audioPolicies.clear();this.audioCapture=false;this.getWasm()?._daytona_spectator_sound_capture?.(0);this.audioLatest.clear();this.audioRates.clear();this.generation++;clearInterval(this.timer);this.timer=null;this.sending=false;this.config=null;this.frames=[];this.orders=[];this.frame=null;this.getWasm()?._daytona_spectator_replay?.(0,0);for(const s of this.streams.values()){this.send(s.conn,{type:'spectator-wait',message});s.conn.close();}this.streams.clear();this.tickets.clear();this.changed();}
  close(){clearInterval(this.reaper);this.reaper=null;this.stopStreams('The relay left the room. The race continues.');for(const v of this.viewers.values()){this.revoke(v);if(!v.integrated)v.conn.close();}this.viewers.clear();this.phase='';this.epoch='';this.changed();}
 }
 export function spectatorConfig(wasm,room,config){return {epoch:room.epoch,settings:config,members:room.members.map(m=>({id:m.id,name:m.name,cabinet:m.cabinet,skin:m.skin??0})),donor:room.id,host:room.host,eeprom:wasm.HEAPU8.slice(wasm._daytona_eeprom_ptr(),wasm._daytona_eeprom_ptr()+wasm._daytona_eeprom_size()).buffer,drawDistance:wasm._daytona_draw_distance()};}

@@ -1,5 +1,5 @@
-import {linkIdForSeat} from './central-link.js?v=53.5.2-actors';
-import {carColor} from './car-colors.js?v=53.5.2-actors';
+import {linkIdForSeat} from './central-link.js?v=53.7.3-wheel';
+import {carColor} from './car-colors.js?v=53.7.3-wheel';
 
 // Reads the spectator's local clone. Nothing here requests or sends network data.
 export function mountSpectatorHUD(root){

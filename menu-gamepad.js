@@ -29,7 +29,7 @@ export function mountMenuGamepad({root,hints,getPad,isOpen,isCapturing,back,back
  function startEditing(node){
   const popup=document.createElement('div'),title=document.createElement('div'),list=document.createElement('div');
   popup.className='gamepad-select-popup';title.className='gamepad-select-title';title.textContent='Choose an option · A confirm · B cancel';list.id='gamepad-select-options';list.setAttribute('role','listbox');list.setAttribute('aria-label',node.getAttribute('aria-label')||node.labels?.[0]?.childNodes[0]?.textContent?.trim()||'Options');
-  popup.append(title,list);document.body.append(popup);editing={node,draft:node.value,popup,list};node.classList.add('gamepad-editing');node.setAttribute('aria-expanded','true');node.setAttribute('aria-controls',list.id);renderPicker();
+  popup.append(title,list);(node.closest('#integratedSpectator[open]')?.querySelector('#spectatorShell')||document.body).append(popup);editing={node,draft:node.value,popup,list};node.classList.add('gamepad-editing');node.setAttribute('aria-expanded','true');node.setAttribute('aria-controls',list.id);renderPicker();
  }
  function stopEditing(cancel=false){
   if(!editing)return;const {node,draft,popup}=editing;editing=null;popup.remove();node.classList.remove('gamepad-editing');node.removeAttribute('aria-expanded');node.removeAttribute('aria-controls');node.removeAttribute('aria-activedescendant');
