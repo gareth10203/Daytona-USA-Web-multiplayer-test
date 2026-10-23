@@ -1,0 +1,8 @@
+# Local ROM and generated build trees. Never commit game data or generated programs.
+/daytona.zip
+/upstream/
+/tools/
+/dist/
+/build/
+/tmp/
+/node_modules/

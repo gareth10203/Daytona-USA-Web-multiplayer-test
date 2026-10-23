@@ -126,6 +126,15 @@ float daytona_rumble_weak() { return game ? drive.level(rt::DriveBoard::Effect::
 float daytona_rumble_centring() {
     return game ? webhaptics::centring(drive, game->board().io().inputs.steer) : 0.0f;
 }
+// Signed force for a real wheel. Unlike controller rumble, this preserves the
+// drive board's direction and evaluates its spring/uncentring effects at the
+// exact steering position delivered to the original I/O board.
+float daytona_wheel_force() {
+    return game ? webhaptics::direct_force(drive, game->board().io().inputs.steer) : 0.0f;
+}
+float daytona_wheel_resistance() {
+    return game ? webhaptics::resistance(drive) : 0.0f;
+}
 uintptr_t daytona_vertices_ptr() { return reinterpret_cast<uintptr_t>(gpu_frame.verts_.data()); }
 int daytona_vertices_count() { return int(gpu_frame.verts_.size()); }
 uintptr_t daytona_batches_ptr() { return reinterpret_cast<uintptr_t>(gpu_frame.batches_.data()); }

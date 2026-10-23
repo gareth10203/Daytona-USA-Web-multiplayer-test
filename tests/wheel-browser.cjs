@@ -6,6 +6,7 @@ function fakeDevices(){
  const make=(id,index,axes,mapping='')=>({id,index,axes,mapping,connected:true,buttons:Array.from({length:16},()=>({pressed:false,value:0}))});
  window.testPads=[make('Test USB racing wheel',0,[0,1]),make('Test separate USB pedals',2,[1,-1]),make('Test standard controller',5,[0,0],'standard')];
  Object.defineProperty(navigator,'getGamepads',{configurable:true,value:()=>testPads});
+ Object.defineProperty(navigator,'hid',{configurable:true,value:{getDevices:async()=>[],requestDevice:async()=>[],addEventListener(){},removeEventListener(){}}});
 }
 (async()=>{
  const browser=await chromium.launch({channel:'chrome',headless:true,args:['--enable-unsafe-webgpu']});
@@ -13,13 +14,20 @@ function fakeDevices(){
   const context=await browser.newContext({viewport:{width:1280,height:720}}),page=await context.newPage(),errors=[];
   page.on('pageerror',error=>errors.push(error.message));await page.addInitScript(fakeDevices);
   await page.goto(url);await page.waitForFunction(()=>document.querySelector('#status').textContent==='Engine ready');
-  await page.evaluate(async()=>window.arcadeState=(await import('/main.js')).getArcadeState);
+  await page.evaluate(async()=>window.arcadeState=(await import(document.querySelector('script[type="module"]').src)).getArcadeState);
   await page.click('#settingsBtn');await page.click('#experimentalTab');
   await page.locator('#experimentalTab').focus();await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(()=>document.activeElement.id),'wheelDevice');
-  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.tagName),'SUMMARY');
+  await page.keyboard.press('Tab');assert.equal(await page.evaluate(()=>document.activeElement.id),'wheelDetect');
+  assert.equal(await page.locator('#webhidInspect').isVisible(),true);
   await page.waitForFunction(()=>document.querySelector('#wheelDevice').options.length>=4);
-  await page.selectOption('#wheelDevice','Test USB racing wheel');
+  await page.click('#wheelDetect');assert.equal(await page.locator('#wheelDetect').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('#wheelDetect').innerText(),'Cancel');assert.equal(await page.locator('#wheelDetectionStatus').innerText(),'Move the wheel, press a pedal or press a wheel button.');assert.equal(await page.locator('#wheelDetectionStatus').evaluate(node=>node.classList.contains('is-waiting')),true);
+  await page.click('#wheelDetect');assert.equal(await page.locator('#wheelDetect').innerText(),'Detect');assert.equal(await page.locator('#wheelDetectionStatus').innerText(),'Cancelled');assert.equal(await page.locator('#wheelDetectionStatus').evaluate(node=>node.classList.contains('is-cancelled')),true);
+  await page.click('#wheelDetect');
+  await page.evaluate(()=>testPads[0].buttons[0]={pressed:true,value:1});await page.waitForFunction(()=>document.querySelector('#wheelDevice').value==='Test USB racing wheel');
+  await page.evaluate(()=>testPads[0].buttons[0]={pressed:false,value:0});assert.equal(await page.locator('#wheelDetect').getAttribute('aria-pressed'),'false');
+  assert.equal(await page.locator('#wheelDetectionStatus').innerText(),'Wheel detected');assert.equal(await page.locator('#wheelDetectionStatus').evaluate(node=>node.classList.contains('is-detected')),true);
   assert.equal(await page.locator('#wheelEnabled').isDisabled(),true);
   await page.click('#wheel-steering-learn');await page.evaluate(()=>testPads[0].axes[0]=0.4);
   await page.waitForFunction(()=>document.querySelector('#wheel-steering-binding').value.includes('"index":0'));
@@ -55,7 +63,7 @@ function fakeDevices(){
   await page.evaluate(()=>document.querySelector('#overlay').scrollTop=0);
   fs.mkdirSync('build',{recursive:true});await page.screenshot({path:'build/wheel-experimental-desktop.png'});
   await page.reload();await page.waitForFunction(()=>document.querySelector('#status').textContent==='Engine ready');
-  await page.evaluate(async()=>window.arcadeState=(await import('/main.js')).getArcadeState);
+  await page.evaluate(async()=>window.arcadeState=(await import(document.querySelector('script[type="module"]').src)).getArcadeState);
   assert.equal(await page.evaluate(()=>arcadeState().wheel.active),true);
   await page.click('#settingsBtn');await page.click('#experimentalTab');
   assert.equal(await page.locator('#wheelDevice').inputValue(),'Test USB racing wheel');
@@ -68,8 +76,8 @@ function fakeDevices(){
   // Spy on the WASM host boundary, with no ROM/physics simulation. Production
   // main.js and all wheel UI/normalisation code remain real in this page.
   const host=await page.context().newPage();await host.addInitScript(fakeDevices);
-  await host.route('**/renderer.js',route=>route.fulfill({contentType:'text/javascript',body:'export async function createRenderer(){return {prepare(){},draw(){},setDrawDistance(){},reset(){}};}'}));
-  await host.route('**/daytona_engine.js',route=>route.fulfill({contentType:'text/javascript',body:`
+  await host.route('**/renderer.js*',route=>route.fulfill({contentType:'text/javascript',body:'export async function createRenderer(){return {prepare(){},draw(){},setDrawDistance(){},reset(){}};}'}));
+  await host.route('**/daytona_engine.js*',route=>route.fulfill({contentType:'text/javascript',body:`
     window.hostInputs=[];window.createDaytonaModule=async()=>{
       let frames=0,distance=2;const engine={HEAPU8:new Uint8Array(1024)};
       for(const name of ['set_display','vertices_ptr','vertices_count','batches_ptr','batches_count','background_ptr','foreground_ptr','tex0_ptr','tex1_ptr','texture_generation','luma_ptr','xlat_ptr','rumble_strong','rumble_weak','rumble_centring','eeprom_dirty','eeprom_ptr','eeprom_size','backup_ptr','backup_size','link_enable','link_receive_ptr','link_receive','link_tx_ptr','link_tx_size','link_tx_pop','link_state','link_id','link_count'])engine['_daytona_'+name]=()=>0;
@@ -90,6 +98,8 @@ function fakeDevices(){
   await host.evaluate(()=>{hostInputs.length=0;testPads=testPads.filter(pad=>pad.index!==0);testPads[0].axes[0]=0;});
   await host.waitForFunction(()=>hostInputs.some(input=>input[0]===0 && input[1]===0 && input[2]===0 && input[4]===0));
   await host.close();
-  console.log('Wheel checks passed: live assignment, asymmetric calibration, separate/reversed pedals, hats/gears, Escape cancellation, saved profiles, mobile layout and production input routing into a WASM boundary spy. Devices and game boundary were simulated; no physical wheel/ROM was used.');
+  await page.bringToFront();await page.click('#wheelReset');
+  assert.equal(await page.locator('#wheelDevice').inputValue(),'');assert.equal(await page.locator('#wheelMaker').innerText(),'Not detected');assert.equal(await page.locator('#wheelModel').innerText(),'Not detected');assert.equal(await page.locator('#wheelFFBSupport').innerText(),'No');assert.equal(await page.locator('#wheelForceFeedback').isHidden(),true);
+  console.log('Wheel checks passed: live assignment, asymmetric calibration, separate/reversed pedals, hats/gears, Escape cancellation, saved and fully reset profiles, mobile layout and production input routing into a WASM boundary spy. Devices and game boundary were simulated; no physical wheel/ROM was used.');
  }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

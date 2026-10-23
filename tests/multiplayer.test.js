@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {Multiplayer} from '../web/multiplayer.js';
-import {parseInvitation,configurationInputs,validateSettings} from '../web/room-settings.js';
+import {parseInvitation,configurationInputs,singleConfigurationInputs,prepareSingleCabinet,validateSettings} from '../web/room-settings.js';
+import {DEFAULT_EEPROM} from '../web/nvram.js';
 const peers=new Map();
 class Connection extends EventEmitter{
  constructor(peer,metadata){super();this.peer=peer;this.metadata=metadata;this.open=false;this.dataChannel={ordered:true,maxRetransmits:null,maxPacketLifeTime:null,bufferedAmount:0};}
@@ -18,6 +19,21 @@ globalThis.Peer=FakePeer;
 const flush=()=>new Promise(resolve=>setTimeout(resolve,5));
 test('invitations keep the room key in the fragment; invalid codes and settings are rejected',()=>{
  const code='dt-1234567890.'+'a'.repeat(32);assert.equal(parseInvitation('https://example.com/game/#room='+code).host,'dt-1234567890');assert.throws(()=>parseInvitation('DAYTONA-1234'));assert.throws(()=>validateSettings({mode:9,difficulty:0,region:'Export'}));assert.throws(()=>configurationInputs({master:true,cabinet:9,mode:0,difficulty:0,region:'Export'}));
+});
+test('single-player preparation selects a standalone deluxe cabinet and preserves backup RAM',async()=>{
+ const memory=new Uint8Array(256);memory.fill(77,128);let reloads=0,linkSetting=null;
+ const engine={
+  HEAPU8:memory,
+  _daytona_eeprom_ptr:()=>0,_daytona_eeprom_size:()=>128,
+  _daytona_backup_ptr:()=>128,_daytona_backup_size:()=>128,
+  _daytona_step:()=>1,_daytona_link_enable:value=>(linkSetting=value,1)
+ };
+ assert.deepEqual(singleConfigurationInputs(),[4,8,8,2,...Array(8).fill(128),8,8,8,8,8,8,8,8,2,128,128,2]);
+ await prepareSingleCabinet(engine,()=>{reloads++;memory.fill(255);});
+ assert.equal(reloads,2);assert.equal(linkSetting,0);
+ assert.deepEqual(memory.slice(0,128),DEFAULT_EEPROM);
+ assert.ok(memory.slice(128).every(value=>value===77));
+ assert.equal(memory[11],0);assert.equal(memory[26],0);
 });
 test('host approval, shared readiness, original ring routing and disconnect restart',async()=>{
  const received=[[],[],[]],started=[0,0,0],stopped=[0,0,0],configs=[];

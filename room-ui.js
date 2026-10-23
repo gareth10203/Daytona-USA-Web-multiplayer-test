@@ -14,7 +14,7 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
  const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry'),singlePanel=$('singlePlayerPanel');
  const invitationMenu=mountRoomInvitation({container:$('roomInvite'),trigger:$('inviteRoom'),content:$('inviteBlock'),closeButton:$('closeInvite'),initialFocus:$('copyRoom')});let invitePhase='';
  const directory=new PublicRoomDirectory({backend:createFirebaseDirectoryBackend});
- let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='';
+ let verified=false,view='loading',pendingStamp='',lastPhase='',lastURL='',roomKey='',unread=0,lastChatSeq=0,lastAckCommand=0,lastSeatAck=0,previousSeat=null,focusSeatReady=false,swapStamp='',singleBusy=false;
  const cards=new Map(),emptySeats=new Map(),messages=new Map();
  const skinPicker=mountPlayerSkins({root:$('menuDialog'),room,previews});
  const toast=mountWaitingToast(document.getElementById('waitingToast'));
@@ -44,7 +44,7 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
   if(['idle','error'].includes(room.phase))showEntry(false);
  }
  function showEntry(sync=true){directory.setBrowsing(true);if(sync)syncInvitation();layout(true,true);navigation('entry');entry.hidden=false;panel.hidden=true;$('entryStatus').textContent='';$('message').textContent='Find a public room, or race privately with friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
- function showModes(){directory.setBrowsing(false);layout(false);entry.hidden=true;panel.hidden=true;navigation('modes');$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
+ function showModes(){singleBusy=false;$('singlePlayer').disabled=false;directory.setBrowsing(false);layout(false);entry.hidden=true;panel.hidden=true;navigation('modes');$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
  function action(fn){return async()=>{try{$('entryStatus').textContent='';await fn();}catch(e){$('entryStatus').textContent=e.message;$('roomMessage').textContent=e.message;$('message').textContent=e.message;}};}
  function rememberName(){try{localStorage.setItem('daytona-driver-name-v1',$('driverName').value.trim().slice(0,24));}catch{}}
  $('driverName').addEventListener('input',rememberName);
@@ -54,7 +54,7 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
  window.addEventListener('popstate',()=>syncInvitation(true));
  window.addEventListener('pageshow',()=>{syncInvitation(true);requestAnimationFrame(()=>syncInvitation(true));});
  syncInvitation();
- $('singlePlayer').onclick=action(async()=>{setURL('');room.leave();showModes();await single();});
+ $('singlePlayer').onclick=action(async()=>{if(singleBusy)return;setURL('');room.leave();showModes();singleBusy=true;$('singlePlayer').disabled=true;try{await single();}catch(error){singleBusy=false;$('singlePlayer').disabled=false;throw error;}});
  $('multiplayerPlayer').onclick=()=>showEntry();
  $('modeBack').onclick=()=>{setURL('');showModes();};
  $('createRoom').onclick=entryAction(async()=>{void unlockAudio();void enableArrivalNotifications();rememberName();const visibility=document.querySelector('input[name="roomVisibility"]:checked').value;if(visibility==='public'){await directory.prepare();if(view!=='entry'||entry.hidden)return;}setURL('');directory.setBrowsing(false);panel.hidden=false;entry.hidden=true;await room.create($('driverName').value,{visibility,roomName:$('publicRoomName').value});if(room.phase==='lobby')setURL(room.snapshot().code);});

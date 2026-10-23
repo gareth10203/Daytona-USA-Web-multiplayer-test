@@ -35,5 +35,16 @@ int main() {
     drive.command(0x47);assert(cue(0xe0) == 0); // Uncentring takes priority.
     drive.command(0x27);assert(cue(0xe0) == 0); // No invented resistance cue.
     drive.command(0x3b);drive.command(0x01);assert(cue(0xe0) == 0);
+    drive.command(0x07);drive.command(0x57);
+    assert(webhaptics::direct_force(drive, 0x80) > 0);
+    drive.command(0x67);assert(webhaptics::direct_force(drive, 0x80) < 0);
+    drive.command(0x37);
+    assert(webhaptics::direct_force(drive, 0xe0) < 0);
+    assert(webhaptics::direct_force(drive, 0x20) > 0);
+    drive.command(0x47);
+    assert(webhaptics::direct_force(drive, 0xe0) > 0);
+    drive.command(0x27);
+    assert(webhaptics::direct_force(drive, 0xe0) == 0);
+    assert(webhaptics::resistance(drive) > 0);
     std::puts("Centring bridge passed: progressive full-travel response, symmetry, real commanded strength, ADC dead zones, motor off and effect priority.");
 }

@@ -2,13 +2,25 @@
 #include "runtime/drive_board.h"
 
 namespace webhaptics {
+inline float wheel_position(uint8_t steering_adc) {
+    return std::clamp((int(steering_adc) - 0x80) / 96.0f, -1.0f, 1.0f);
+}
+
+inline float direct_force(const rt::DriveBoard &drive, uint8_t steering_adc) {
+    return drive.motor(wheel_position(steering_adc));
+}
+
+inline float resistance(const rt::DriveBoard &drive) {
+    return drive.level(rt::DriveBoard::Effect::Resistance);
+}
+
 // Use the arcade ADC position actually delivered to the I/O board, including
 // its quantisation, rather than the raw host joystick axis.
 inline float centring(const rt::DriveBoard &drive, uint8_t steering_adc) {
     using Effect = rt::DriveBoard::Effect;
     if (drive.effect != Effect::Centre && drive.effect != Effect::CentreDeadZone)
         return 0.0f;
-    const float wheel = std::clamp((int(steering_adc) - 0x80) / 96.0f, -1.0f, 1.0f);
+    const float wheel = wheel_position(steering_adc);
     // The arcade spring reaches its plateau very near the centre. Attenuate
     // that actual force across the remaining steering travel so its rumble
     // translation grows gradually, without altering the board's force model.

@@ -1,14 +1,14 @@
 import {parseInvitation} from './room-settings.js';
 const $=id=>document.getElementById(id);
 export function createRoomUI(room,{single,unlockAudio}){
- const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry');let verified=false,pendingStamp='',lastPhase='';
+ const panel=$('roomPanel'),choices=$('playerModes'),entry=$('multiplayerEntry');let verified=false,pendingStamp='',lastPhase='',singleBusy=false;
  const invite=new URLSearchParams(location.hash.slice(1)).get('room');if(invite)$('joinCode').value=invite;
  const utilities=document.querySelector('.menu-quick-controls'),utilitiesHome=utilities.parentElement;
  function layout(active){$('menuDialog').classList.toggle('mp-view',active);$('mpUtilities').hidden=!active;const target=active?$('mpUtilities'):utilitiesHome;if(utilities.parentElement!==target)target.append(utilities);}
  function showEntry(){layout(true);choices.hidden=true;entry.hidden=false;panel.hidden=true;$('message').textContent='Create a private room or join your friends.';$('menuDialog').setAttribute('aria-labelledby','entryTitle');$('driverName').focus();}
- function showModes(){layout(false);entry.hidden=true;panel.hidden=true;choices.hidden=!verified;$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
+ function showModes(){singleBusy=false;$('singlePlayer').disabled=false;layout(false);entry.hidden=true;panel.hidden=true;choices.hidden=!verified;$('menuDialog').setAttribute('aria-labelledby','gameTitle');if(verified)$('message').textContent='ROM verified. Choose Single Player or Multiplayer.';}
  function action(fn){return async()=>{try{await fn();}catch(e){$('roomMessage').textContent=e.message;document.querySelector('#message').textContent=e.message;}};}
- $('singlePlayer').onclick=action(async()=>{room.leave();showModes();await single();});
+ $('singlePlayer').onclick=action(async()=>{if(singleBusy)return;room.leave();showModes();singleBusy=true;$('singlePlayer').disabled=true;try{await single();}catch(error){singleBusy=false;$('singlePlayer').disabled=false;throw error;}});
  $('multiplayerPlayer').onclick=showEntry;
  $('modeBack').onclick=showModes;
  $('createRoom').onclick=action(async()=>{panel.hidden=false;entry.hidden=true;await room.create($('driverName').value);});

@@ -1,7 +1,7 @@
 import {WHEEL_ACTIONS,newWheelProfile,loadWheelProfiles,saveWheelProfiles,sanitizeBinding,bindingDevice,rawInput,
   steeringCalibrated,pedalCalibrated,readWheel,snapshotDevices,detectBinding,bindingPressed} from './wheel.js';
 
-export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
+export function createWheelControls(root,{storage,getPads,onChange=()=>{},onDevice=()=>{},onReset=()=>{},deviceActions=[],hardware=null}) {
   const saved=loadWheelProfiles(storage),rows=new Map();
   let pads=[],pending=null,lastUpdate=-Infinity,signature='',edges={armed:false,previous:new Set()};
   const profile=()=>saved.profiles.find(item=>item.deviceId===saved.selectedId) || null;
@@ -14,12 +14,14 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   const connection=create('div','','wheel-connection');
   const deviceLabel=create('label','Wheel device');deviceLabel.htmlFor='wheelDevice';
   const device=create('select');device.id='wheelDevice';
+  const deviceRow=create('div','','wheel-device-row'),detectDevice=create('button','Detect');detectDevice.type='button';detectDevice.id='wheelDetect';detectDevice.setAttribute('aria-pressed','false');
+  const detectionStatus=create('p','','wheel-detection-status');detectionStatus.id='wheelDetectionStatus';detectionStatus.setAttribute('role','status');
   const enabledLabel=create('label','','setting-toggle');
   const enabledText=create('span','Use configured wheel');enabledText.append(create('small','Calibrate steering first. Pedals and buttons are optional.'));
   const enabled=create('input');enabled.type='checkbox';enabled.id='wheelEnabled';enabledLabel.append(enabledText,enabled);
   const availability=create('p','','device-status');availability.id='wheelAvailability';availability.setAttribute('role','status');
-  connection.append(deviceLabel,device,enabledLabel,availability);root.append(connection);
-  const learnBar=create('div','','wheel-learn-bar'),message=create('p','Choose your wheel, then assign and calibrate its controls.');
+  deviceRow.append(device,detectDevice,...deviceActions);connection.append(deviceLabel,deviceRow,detectionStatus,enabledLabel,availability);root.append(connection);if(hardware)root.append(hardware);
+  const learnBar=create('div','','wheel-learn-bar'),message=create('p','Choose your wheel. Click Detect input, then move the control you want to use.');
   message.id='wheelMessage';message.setAttribute('role','status');
   const cancel=create('button','Cancel assignment');cancel.type='button';cancel.id='wheelCancel';cancel.hidden=true;
   learnBar.append(message,cancel);root.append(learnBar);
@@ -31,17 +33,22 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     value.id=`wheel-${role}-value`;item.append(name,value,meter);preview.append(item);meters[role]={meter,value};
   }
   root.append(preview);
-  function chooseDevice(){
-    cancelAssignment();saved.selectedId=device.value;
-    const pad=pads.find(item=>item.id===device.value);
+  function selectDevice(id){
+    cancelAssignment();saved.selectedId=id;
+    const pad=pads.find(item=>item.id===id);
     if(pad && !profile()){
       if(saved.profiles.length>=24)saved.profiles.shift();
       saved.profiles.push(newWheelProfile(pad.id,pad.index));
     }
     if(pad && profile())profile().deviceIndex=pad.index;
-    persist();render();announce(profile()?steeringCalibrated(profile().steering)?'Saved calibration loaded. Check the live inputs before playing.':'Assign steering and capture centre, left and right positions.':'Choose a wheel to configure.');
+    persist();render();announce(profile()?steeringCalibrated(profile().steering)?'Saved calibration loaded. Check the live inputs before playing.':'Click Detect input for steering, turn the wheel, then capture centre, full left and full right.':'Choose a wheel to configure.');
   }
-  device.addEventListener('change',chooseDevice);
+  device.addEventListener('change',()=>{setDeviceDetection('','');selectDevice(device.value);});
+  detectDevice.addEventListener('click',()=>{
+    if(pending?.role==='device'){cancelAssignment();setDeviceDetection('cancelled','Cancelled');announce('Wheel detection cancelled.');return;}
+    pads=getPads().filter(pad=>pad?.connected);pending={role:'device',baseline:snapshotDevices(pads)};cancel.hidden=true;setDeviceDetection('waiting','Move the wheel, press a pedal or press a wheel button.');renderDetection();
+    announce('Move the wheel, press a pedal or press a wheel button.');
+  });
   enabled.addEventListener('change',()=>{
     const config=profile();if(!config)return;
     const ready=steeringCalibrated(config.steering) && rawInput(config.steering.binding,pads)!==null;
@@ -57,20 +64,34 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     }
     persist();render();
   }
-  function cancelAssignment(){pending=null;cancel.hidden=true;}
+  function renderDetection(){
+    const detectingDevice=pending?.role==='device';detectDevice.classList.toggle('detecting',detectingDevice);detectDevice.setAttribute('aria-pressed',String(detectingDevice));
+    detectDevice.textContent=detectingDevice?'Cancel':'Detect';
+    for(const [role,row] of rows){
+      const active=pending?.role===role;
+      row.learn.classList.toggle('detecting',active);
+      row.learn.setAttribute('aria-pressed',String(active));
+    }
+  }
+  function setDeviceDetection(state,text){
+    detectionStatus.textContent=text;
+    for(const name of ['waiting','detected','cancelled'])detectionStatus.classList.toggle(`is-${name}`,state===name);
+  }
+  function cancelAssignment(){pending=null;cancel.hidden=true;renderDetection();}
   cancel.addEventListener('click',()=>{cancelAssignment();announce('Assignment cancelled. Existing mapping retained.');});
   root.addEventListener('keydown',event=>{
-    if(event.code==='Escape' && pending){event.preventDefault();event.stopPropagation();cancelAssignment();announce('Assignment cancelled.');}
+    if(event.code==='Escape' && pending){event.preventDefault();event.stopPropagation();const detectingDevice=pending.role==='device';cancelAssignment();if(detectingDevice)setDeviceDetection('cancelled','Cancelled');announce(detectingDevice?'Wheel detection cancelled.':'Assignment cancelled.');}
   });
   function listen(role){
     if(!profile())return;
-    pads=getPads();pending={role,baseline:snapshotDevices(pads),started:performance.now()};cancel.hidden=false;
+    pads=getPads();pending={role,baseline:snapshotDevices(pads)};cancel.hidden=false;renderDetection();
     announce(role==='steering'?'Turn the wheel noticeably. Keep other controls still.':role in WHEEL_ACTIONS?`Press the control for ${WHEEL_ACTIONS[role]}. Esc cancels.`:`Press the ${role==='accel'?'accelerator':'brake'} pedal. Keep other controls still.`);
   }
   function mappingRow(role,label,parent){
-    const node=create('div','','wheel-mapping-row'),title=create('label',label),select=create('select'),learn=create('button','Assign');
+    const node=create('div','','wheel-mapping-row'),title=create('label',label),select=create('select'),learn=create('button','Detect input');
     select.id=`wheel-${role}-binding`;title.htmlFor=select.id;learn.type='button';learn.id=`wheel-${role}-learn`;
-    learn.setAttribute('aria-label',`Assign ${label.toLowerCase()} from device input`);
+    learn.setAttribute('aria-label',`Detect ${label.toLowerCase()} from device input`);
+    learn.setAttribute('aria-pressed','false');
     learn.addEventListener('click',()=>listen(role));
     select.addEventListener('change',()=>{
       cancelAssignment();let binding=null;try{binding=sanitizeBinding(JSON.parse(select.value));}catch{}
@@ -109,19 +130,19 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
   }
   const deadzone=slider('wheelDeadzone','Wheel dead zone',0,15,2,'Filters small movements around the captured centre.',(config,value)=>config.steering.deadzone=value);
   const sensitivity=slider('wheelSensitivity','Wheel response',25,175,100,'100% is linear across your calibrated steering range.',(config,value)=>config.steering.sensitivity=value);
-  const pedals=details('Pedals');pedals.append(create('p','Use the same axis for combined pedals, or assign pedals from separate devices. Capture each pedal released and fully pressed; reversed axes are handled automatically.','wheel-help'));
+  const pedals=details('Pedals');pedals.append(create('p','Click Detect input, then press one pedal. Capture it released and fully pressed. Combined pedals may share an axis; reversed axes are handled automatically.','wheel-help'));
   for(const [role,label] of [['accel','Accelerator'],['brake','Brake']]){
     const group=create('div','','wheel-pedal');mappingRow(role,label,group);calibration(role,group);pedals.append(group);
   }
   const buttons=details('Gears & buttons'),buttonGrid=create('div','','wheel-button-grid');
-  buttons.append(create('p','Release controls before clicking Assign. Press one button or hat direction. Use gear positions, paddles, or both.','wheel-help'),buttonGrid);
+  buttons.append(create('p','Release controls before clicking Detect input, then press one button or hat direction. Use gear positions, paddles, or both.','wheel-help'),buttonGrid);
   for(const [action,label] of Object.entries(WHEEL_ACTIONS))mappingRow(action,label,buttonGrid);
   const inspector=details('Live device inputs'),raw=create('pre');raw.id='wheelRawInputs';inspector.append(raw);
   const reset=create('button','Reset this wheel profile');reset.type='button';reset.id='wheelReset';reset.className='wheel-reset';root.append(reset);
   reset.addEventListener('click',()=>{
     const config=profile();if(!config)return;
-    cancelAssignment();saved.profiles[saved.profiles.indexOf(config)]=newWheelProfile(config.deviceId,config.deviceIndex);
-    persist();render();announce('Mappings and calibration cleared for this wheel. Wheel input is off.');
+    cancelAssignment();setDeviceDetection('','');saved.profiles.splice(saved.profiles.indexOf(config),1);saved.selectedId='';
+    persist();render();onReset();announce('Wheel profile, device selection and force feedback cleared.');
   });
   function addOption(select,text,value){const option=create('option',text);option.value=value;select.append(option);}
   function renderOptions(){
@@ -165,6 +186,7 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     }
     deadzone.input.value=Math.round((config?.steering.deadzone ?? 0.02)*100);deadzone.value.textContent=`${deadzone.input.value}%`;deadzone.input.disabled=!config;
     sensitivity.input.value=Math.round((config?.steering.sensitivity ?? 1)*100);sensitivity.value.textContent=`${sensitivity.input.value}%`;sensitivity.input.disabled=!config;
+    onDevice(pads.find(item=>item.id===saved.selectedId)||(saved.selectedId?{id:saved.selectedId,index:config?.deviceIndex,connected:false}:null));
   }
   function update(nextPads,now,visible){
     pads=nextPads.filter(pad=>pad?.connected);
@@ -172,9 +194,9 @@ export function createWheelControls(root,{storage,getPads,onChange=()=>{}}) {
     const nextSignature=pads.map(pad=>`${pad.index}:${pad.id}:${pad.axes.length}:${pad.buttons.length}`).join('|');
     if(nextSignature!==signature){signature=nextSignature;render();}
     if(pending){
-      const binding=detectBinding(pending.baseline,pads,pending.role);
-      if(binding){const role=pending.role;cancelAssignment();assign(role,binding);rows.get(role).select.focus();announce(`${role in WHEEL_ACTIONS?WHEEL_ACTIONS[role]:role==='accel'?'Accelerator':role==='brake'?'Brake':'Steering'} assigned. ${role in WHEEL_ACTIONS?'Check its live indicator.':'Capture the calibration positions below.'}`);}
-      else if(now-pending.started>12000){cancelAssignment();announce('No input captured. Try again, or choose an input from the list.');}
+      const added=pending.role==='device'&&pads.find(pad=>!pending.baseline.some(sample=>sample.id===pad.id&&sample.index===pad.index));
+      const binding=added?{deviceId:added.id,deviceIndex:added.index}:detectBinding(pending.baseline,pads,pending.role);
+      if(binding){const role=pending.role;cancelAssignment();if(role==='device'){device.value=binding.deviceId;selectDevice(binding.deviceId);setDeviceDetection('detected','Wheel detected');device.focus();announce('Wheel detected. Map and calibrate its controls below.');}else{assign(role,binding);rows.get(role).select.focus();announce(`${role in WHEEL_ACTIONS?WHEEL_ACTIONS[role]:role==='accel'?'Accelerator':role==='brake'?'Brake':'Steering'} assigned. ${role in WHEEL_ACTIONS?'Check its live indicator.':'Capture the calibration positions below.'}`);}}
       else {
         for(const sample of pending.baseline){
           const pad=pads.find(item=>item.id===sample.id && item.index===sample.index);

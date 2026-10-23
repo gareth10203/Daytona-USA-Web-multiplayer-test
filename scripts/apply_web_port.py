@@ -61,5 +61,7 @@ for name in ("daytona_web.cmake", "daytona_web.cpp", "daytona_gpu.cpp", "daytona
 for name in ("index.html", "main.js", "style.css", "renderer.js", "model2.wgsl", "nvram.js", "touch.js", "haptics.js", "preferences.js", "steering.js", "wheel.js", "wheel-controls.js", "multiplayer.js", "diagnostics.js", "room-ui.js", "room-settings.js", "vendor/peerjs.min.js", "vendor/PEERJS-LICENSE.txt", "daytona-logo.png"):
     (out / name).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE / "web" / name, out / name)
+for name in ("wheel-force-feedback.js", "webhid-diagnostics.js"):
+    shutil.copy2(SOURCE / name, out / name)
 print("Web frontend instalado en", out)
 print("La compilación debe utilizar M2_ROMSET=daytona y los sources generados desde daytona (1994).")

@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import {DEFAULT_SETTINGS,SETTINGS_ID,loadSettings,saveSettings} from '../web/preferences.js';
 
 test('fresh settings choose desktop 2x or mobile 1x, retaining the established joystick response',()=>{
-  assert.deepEqual(loadSettings({getItem:()=>null}),{vibrationEnabled:true,rumble:1,centring:0.05,drawDistance:2,volume:1,joystickSensitivity:1});
+  assert.deepEqual(loadSettings({getItem:()=>null}),DEFAULT_SETTINGS);
   assert.deepEqual(loadSettings({getItem:()=>null},{mobile:true}),{...DEFAULT_SETTINGS,drawDistance:1});
 });
 test('off retains the player intensities and every category survives saving/reloading',()=>{
   let stored;
   const storage={setItem(key,value){assert.equal(key,SETTINGS_ID);stored=value;},getItem(){return stored;}};
-  const settings={vibrationEnabled:false,rumble:0.8,centring:0.1,drawDistance:2,volume:0.35,joystickSensitivity:0.5};
+  const settings={...DEFAULT_SETTINGS,vibrationEnabled:false,rumble:0.8,centring:0.1,forceFeedbackEnabled:true,forceFeedbackStrength:.35,forceFeedbackReverse:true,drawDistance:2,volume:0.35,joystickSensitivity:0.5};
   saveSettings(storage,settings);assert.deepEqual(loadSettings(storage),settings);
   assert.deepEqual(loadSettings(storage,{mobile:true}),settings);
 });
