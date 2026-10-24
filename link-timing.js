@@ -45,14 +45,19 @@ export class LinkClock {
   const uncertainty=Math.max(0,roundTrip)/2+1,offset=((t1-t0)+(t2-t3))/2;
   this.observations.push({at:t3,offset,uncertainty});this.observations=this.observations.filter(o=>t3-o.at<=30000).slice(-32);return true;
  }
- age(remoteTimestamp,now,maximumUncertainty=250){
+ localTime(remoteTimestamp,now,maximumUncertainty=250){
   if(!finite(maximumUncertainty)||maximumUncertainty<0||maximumUncertainty>1000)return null;
   if(!finite(remoteTimestamp)||!finite(now))return null;
   const candidates=this.observations.filter(o=>now>=o.at&&now-o.at<=30000).map(o=>({...o,uncertainty:o.uncertainty+(now-o.at)*.0002}));
   candidates.sort((a,b)=>a.uncertainty-b.uncertainty);const best=candidates[0];if(!best)return null;
-  const ageMs=now-(remoteTimestamp-best.offset);
-  if(ageMs < -best.uncertainty-5 || ageMs>10000 || best.uncertainty>maximumUncertainty)return null;
-  return {ageMs:Math.max(0,ageMs),uncertaintyMs:best.uncertainty};
+  if(best.uncertainty>maximumUncertainty)return null;
+  return {at:remoteTimestamp-best.offset,uncertaintyMs:best.uncertainty};
+ }
+ age(remoteTimestamp,now,maximumUncertainty=250){
+  const local=this.localTime(remoteTimestamp,now,maximumUncertainty);if(!local)return null;
+  const ageMs=now-local.at;
+  if(ageMs < -local.uncertaintyMs-5 || ageMs>10000 || local.uncertaintyMs>maximumUncertainty)return null;
+  return {ageMs:Math.max(0,ageMs),uncertaintyMs:local.uncertaintyMs};
  }
 }
 export function normalizeSlotTiming(value,count){

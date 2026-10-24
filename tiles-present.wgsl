@@ -5,6 +5,12 @@ struct Screen{size:vec2f,pad:vec2f,origin:vec2f,unused:vec2f}
 @group(0) @binding(2) var<storage,read> data:array<u32>;
 @group(0) @binding(3) var<uniform> screen:Screen;
 @group(0) @binding(4) var<uniform> control:vec4u; // margin, fill, relocated HUD, ABI
+struct Night { base:vec4f, shape:vec4f, world:vec4f, sky:vec4f, lamp:vec4f, direction:vec4f, right:vec4f, up:vec4f, beam:vec4f }
+@group(0) @binding(5) var<uniform> night:Night;
+fn night_sky(c:vec4f)->vec4f {
+ if(night.base.x<=0.0){return c;}
+ return mix(c,vec4f(c.rgb*night.sky.rgb*night.base.w,c.a),night.base.x);
+}
 @vertex fn vs(@builtin(vertex_index) id:u32)->@builtin(position) vec4f {
  let p=array<vec2f,3>(vec2f(-1,-1),vec2f(3,-1),vec2f(-1,3));return vec4f(p[id],0,1);
 }
@@ -21,14 +27,14 @@ fn native_at(p:vec2f)->vec2i {
   let ca=round(textureLoad(back,vec2i(a,at.y),0).rgb*255.0);
   let cb=round(textureLoad(back,vec2i(b,at.y),0).rgb*255.0);
   let c=ca*(1.0-f)+cb*f;
-  return vec4f(vec3f(vec3u(c+vec3f(0.5)))/255.0,1);
+  return night_sky(vec4f(vec3f(vec3u(c+vec3f(0.5)))/255.0,1));
  }
  var source=vec2i(x,at.y);
  if(x<0||x>=496){
   if(control.y==1u){source=vec2i(0);}
   else{source.x=select(495,0,x<0);}
  }
- return textureLoad(back,source,0);
+ return night_sky(textureLoad(back,source,0));
 }
 fn direction(x:i32,y:i32)->u32 {
  let index=u32(y)*496u+u32(x);

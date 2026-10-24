@@ -1,7 +1,7 @@
 export const SLOT_BYTES=0x1c0,SAMPLE_BYTES=SLOT_BYTES+5,STATE_BYTES=SLOT_BYTES*8+1+9*4;
 export const STATE_TAG=0xfd;
 export const COMPACT_STATE_TAG=0xfc;
-function checkedCount(count){if(!Number.isInteger(count)||count<2||count>8)throw Error('Invalid compact grid.');}
+function checkedCount(count){if(!Number.isInteger(count)||count<1||count>8)throw Error('Invalid compact grid.');}
 // A full snapshot repeats slots modulo the number of actual cabinets. Send
 // those distinct complete blocks once; reconstruct the exact native layout.
 export function compactState(full,count){
@@ -23,7 +23,7 @@ export function expandState(compact,count){
 export function linkIdForSeat(seat,count){return seat===1?1:count-seat+2;}
 export class HostDistributor {
  constructor(members){
-  if(!Array.isArray(members)||members.length<2||members.length>8||members.some(m=>!m)||new Set(members.map(m=>m.id)).size!==members.length||new Set(members.map(m=>m.cabinet)).size!==members.length||members.some(m=>typeof m.id!=='string'||!Number.isInteger(m.cabinet)||m.cabinet<1||m.cabinet>8))throw Error('Invalid centralized grid.');
+  if(!Array.isArray(members)||members.length<1||members.length>8||members.some(m=>!m)||new Set(members.map(m=>m.id)).size!==members.length||new Set(members.map(m=>m.cabinet)).size!==members.length||members.some(m=>typeof m.id!=='string'||!Number.isInteger(m.cabinet)||m.cabinet<1||m.cabinet>8))throw Error('Invalid centralized grid.');
   this.members=members.map(m=>({...m}));this.samples=new Map();this.sequence=0;this.discarded=0;
  }
  accept(id,frames,bytes,timing=null){

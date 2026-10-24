@@ -63,3 +63,5 @@
 @media(pointer:coarse){#menuDialog #pendingJump{min-height:44px}}
 
 .invite-feedback[data-state=error]{color:#a32c22}
+
+.room-panel .environment-setting{grid-column:1/-1}.room-panel .environment-help{font-size:11px;line-height:1.6;color:#68685e;margin:14px 0 0}.room-panel #raceEnvironmentPage .race-selectors{grid-template-columns:minmax(0,1fr)}

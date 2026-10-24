@@ -1,13 +1,13 @@
-import {mountRoomInvitation} from './room-invitation.js?v=53.7.3-wheel';
-import {mountWaitingToast} from './waiting-room.js?v=53.7.3-wheel';
-import {PublicRoomDirectory} from './public-rooms.js?v=53.7.3-wheel';
-import {createFirebaseDirectoryBackend} from './firebase-client.js?v=53.7.3-wheel';
-import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=53.7.3-wheel';
-import {carColor} from './car-colors.js?v=53.7.3-wheel';
-import {parseInvitation,invitation} from './room-settings.js?v=53.7.3-wheel';
-import {createLobbyNotifications} from './lobby-notifications.js?v=53.7.3-wheel';
-import {mountPlayerSkins} from './player-skins-ui.js?v=53.7.3-wheel';
-import {PLAYER_SKINS} from './player-skins.js?v=53.7.3-wheel';
+import {mountRoomInvitation} from './room-invitation.js?v=53.8.18';
+import {mountWaitingToast} from './waiting-room.js?v=53.8.18';
+import {PublicRoomDirectory} from './public-rooms.js?v=53.8.18';
+import {createFirebaseDirectoryBackend} from './firebase-client.js?v=53.8.18';
+import {mountPublicRoomBrowser} from './public-rooms-ui.js?v=53.8.18';
+import {carColor} from './car-colors.js?v=53.8.18';
+import {parseInvitation,invitation} from './room-settings.js?v=53.8.18';
+import {createLobbyNotifications} from './lobby-notifications.js?v=53.8.18';
+import {mountPlayerSkins} from './player-skins-ui.js?v=53.8.18';
+import {PLAYER_SKINS} from './player-skins.js?v=53.8.18';
 const $=id=>document.getElementById(id);
 export function invitationFromURL(href){return new URLSearchParams(new URL(href).hash.slice(1)).get('room')||'';}
 export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>false,enableArrivalNotifications=()=>{},notifyRequest=()=>{},notifyChat=()=>{},notifyReady=()=>{},notifyConfirmed=()=>{}}){
@@ -78,7 +78,7 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
  $('inviteLink').onclick=event=>event.target.select();
  $('returnRoomGame').onclick=()=>$('startBtn').click();
  // Page choice belongs to this browser; room updates must never steal it.
- const settingPages=[['raceSetupPage','Race setup'],['raceRulesPage','Race rules']];let settingPage=0;
+ const settingPages=[['raceSetupPage','Race setup'],['raceRulesPage','Race rules'],['raceEnvironmentPage','Environment']];let settingPage=0;
  function turnSettingsPage(direction){
   settingPage=(settingPage+direction+settingPages.length)%settingPages.length;
   settingPages.forEach(([id],i)=>{$(id).hidden=i!==settingPage;});
@@ -86,8 +86,8 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
   const count=document.createElement('small');count.textContent=`${settingPage+1} / ${settingPages.length}`;title.append(count);
  }
  $('racePagePrevious').onclick=()=>turnSettingsPage(-1);$('racePageNext').onclick=()=>turnSettingsPage(1);
- const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),cpuCars:$('roomCpuCars').value==='true',reverse:$('roomDirection').value==='reverse',playerCollisions:$('roomPlayerCollisions').value==='true',pitStops:$('roomPitStops').value==='true',cpuLiveries:$('roomCpuLiveries').value,region:'Export'});
- $('roomMode').onchange=change;$('roomDifficulty').onchange=change;$('roomCpuCars').onchange=change;$('roomDirection').onchange=change;$('roomPlayerCollisions').onchange=change;$('roomPitStops').onchange=change;$('roomCpuLiveries').onchange=change;
+ const change=()=>room.setSettings({mode:Number($('roomMode').value),difficulty:Number($('roomDifficulty').value),cpuCars:$('roomCpuCars').value==='true',reverse:$('roomDirection').value==='reverse',playerCollisions:$('roomPlayerCollisions').value==='true',pitStops:$('roomPitStops').value==='true',cpuLiveries:$('roomCpuLiveries').value,environment:$('roomEnvironment').value,region:'Export'});
+ $('roomMode').onchange=change;$('roomDifficulty').onchange=change;$('roomCpuCars').onchange=change;$('roomDirection').onchange=change;$('roomPlayerCollisions').onchange=change;$('roomPitStops').onchange=change;$('roomCpuLiveries').onchange=change;$('roomEnvironment').onchange=change;
  function markRead(){unread=0;for(const id of ['chatUnread','mobileChatUnread'])$(id).hidden=true;$('newChatMessages').hidden=true;}
  function scrollChat(){const log=$('chatLog');log.scrollTop=log.scrollHeight;markRead();}
   function mobileTab(tab){panel.dataset.mobileTab=tab;for(const [id,name] of [['roomGridTab','grid'],['roomChatTab','chat']]){$(id).setAttribute('aria-selected',String(tab===name));$(id).tabIndex=tab===name?0:-1;}if(tab==='chat')scrollChat();}
@@ -188,8 +188,8 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
    $('roomPhase').textContent=state.spectating?'SPECTATING':{lobby:'LOBBY',preparing:'PREPARING',playing:'ON TRACK',waiting:'NEXT RACE',pending:'WAITING',error:'OFFLINE',connecting:'CONNECTING',reconnecting:'RECONNECTING'}[state.phase]||'LOBBY';
    $('roomCount').textContent=state.phase==='pending'?'Awaiting host':`${state.members.length+(state.waiting||[]).filter(w=>!w.spectator).length} / 8 drivers`;
    const url=new URL(location.href);url.hash=new URLSearchParams({room:state.code}).toString();$('inviteLink').value=state.code?url.href:'';$('roomCode').textContent=state.code||'Connecting…';invitationMenu.setAvailable(state.isHost&&!!state.code&&['lobby','preparing','playing'].includes(state.phase));
-   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverse?'reverse':'normal';$('roomPlayerCollisions').value=String(state.settings.playerCollisions??true);$('roomPitStops').value=String(state.settings.pitStops??true);$('roomCpuLiveries').value=state.settings.cpuLiveries??'multiplayer';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection','roomPlayerCollisions','roomPitStops','roomCpuLiveries'])$(id).disabled=!state.isHost||state.phase!=='lobby';$('roomCpuLiveries').disabled||=state.settings.cpuCars===false;
-   $('roomSettingsHint').textContent=state.settings.reverse?'Choose any circuit. CPU cars follow this setting on all tracks.':state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
+   $('roomMode').value=state.settings.mode;$('roomDifficulty').value=state.settings.difficulty;$('roomCpuCars').value=String(state.settings.cpuCars??true);$('roomDirection').value=state.settings.reverse?'reverse':'normal';$('roomPlayerCollisions').value=String(state.settings.playerCollisions??true);$('roomPitStops').value=String(state.settings.pitStops??true);$('roomCpuLiveries').value=state.settings.cpuLiveries??'multiplayer';$('roomEnvironment').value=state.settings.environment??'day';for(const id of ['roomMode','roomDifficulty','roomCpuCars','roomDirection','roomPlayerCollisions','roomPitStops','roomCpuLiveries','roomEnvironment'])$(id).disabled=!state.isHost||state.phase!=='lobby';$('roomCpuLiveries').disabled||=state.settings.cpuCars===false;
+   $('roomEnvironmentHelp').textContent=state.settings.environment==='cycle'?'Shared race cycle · 1:00 day / night · 0:30 transitions. Starts with each race.':state.settings.environment==='night'?'Night on every circuit. Each car view uses its own light cone.':'Original daylight on all three circuits.';$('roomSettingsHint').textContent=state.settings.reverse?'Choose any circuit. CPU cars follow this setting on all tracks.':state.isHost?'Shared by the grid. Changes reset Ready.':'Your host chooses these for everyone.';
    $('readyCount').textContent=state.phase==='waiting'&&state.remotePhase!=='lobby'||state.phase==='playing'?`${state.members.length} on track${state.waiting?.filter(w=>!w.spectator).length?' · '+state.waiting.filter(w=>!w.spectator).length+' waiting':''}`:`${state.members.filter(x=>x.ready).length} ready`;
    renderRoster(state);renderSwap(state);renderChat(state);skinPicker.sync(state);
 
@@ -197,9 +197,10 @@ export function createRoomUI(room,{single,unlockAudio,previews,canResume=()=>fal
    $('pendingBlock').hidden=!state.isHost||!state.pending.length;$('pendingCount').textContent=String(state.pending.length);$('pendingJump').hidden=!state.isHost||!state.pending.length;$('pendingJump').textContent=`Requests · ${state.pending.length}`;
    const me=state.members.find(x=>x.id===state.id);$('readyRoom').disabled=!!state.awaitingStop||!!state.readyPending||!!state.seatActionPending||!!(state.swaps||[]).find(o=>o.from===state.id||o.to===state.id);$('readyRoom').hidden=state.phase!=='lobby'||!me;$('readyRoom').textContent=state.readyPending?'CONFIRMING…':me?.ready?'READY ✓':'I’M READY';$('readyRoom').setAttribute('aria-pressed',String(!!me?.ready));
    if(focusSeatReady&&!$('readyRoom').disabled){focusSeatReady=false;if(state.phase==='lobby'&&!$('overlay').hidden&&$('settingsModal').hidden&&$('hostConsole')?.hidden!==false){$('readyRoom').focus({preventScroll:true});if(document.documentElement.classList.contains('gamepad-navigation'))$('readyRoom').scrollIntoView({block:'nearest'});}}
-   $('startRoom').hidden=!state.isHost||state.phase!=='lobby';$('startRoom').disabled=state.members.length<2||(state.pending.length>0||(state.waiting||[]).some(w=>!w.spectator))||(state.swaps||[]).length>0||state.members.some(x=>!x.ready||x.connection==='reconnecting');$('stopRoom').hidden=!state.isHost||state.phase!=='playing';
+   const preparing=state.phase==='preparing',start=$('startRoom'),startLabel=$('startRoomLabel'),startText=preparing?'PREPARING CABINET…':'START GAME';
+   start.hidden=!(state.isHost&&state.phase==='lobby'||preparing&&(!!me||state.isHost));start.disabled=preparing||!state.isHost||state.phase!=='lobby'||state.members.length<1||(state.pending.length>0||(state.waiting||[]).some(w=>!w.spectator))||(state.swaps||[]).length>0||state.members.some(x=>!x.ready||x.connection==='reconnecting');start.setAttribute('aria-busy',String(preparing));if(startLabel.textContent!==startText)startLabel.textContent=startText;start.lastElementChild.hidden=preparing;$('stopRoom').hidden=!state.isHost||state.phase!=='playing';
    $('leaveRoom').textContent=state.phase==='playing'?'Leave game':state.phase==='error'?'← Back to rooms':'← Leave room';
-   const waiting=state.members.filter(x=>!x.ready).length,lobby=(state.swaps||[]).length?'A seat swap is awaiting a reply.':state.pending.length?'Review the requests to complete your grid.':state.waiting?.some(w=>!w.spectator)?'A waiting driver is reconnecting. Their seat is reserved for up to 30 seconds.':state.members.length<2?(state.visibility==='public'?'Your public room is open. Waiting for another driver.':'Copy your invitation and bring a friend.'):waiting?`${waiting} ${waiting===1?'driver is':'drivers are'} not ready yet.`:state.isHost?'Your grid is ready. Start when you are.':'Your grid is ready. Waiting for the host.';
+   const waiting=state.members.filter(x=>!x.ready).length,lobby=(state.swaps||[]).length?'A seat swap is awaiting a reply.':state.pending.length?'Review the requests to complete your grid.':state.waiting?.some(w=>!w.spectator)?'A waiting driver is reconnecting. Their seat is reserved for up to 30 seconds.':state.members.length===1?(waiting?'Mark Ready to start on your own. Others can join to watch.':state.isHost?'Ready to start. Others can join to watch.':'Your grid is ready. Waiting for the host.'):waiting?`${waiting} ${waiting===1?'driver is':'drivers are'} not ready yet.`:state.isHost?'Your grid is ready. Start when you are.':'Your grid is ready. Waiting for the host.';
    const waitingMe=(state.waiting||[]).find(w=>w.id===state.id);
    const labels={waiting:state.remotePhase==='lobby'?(waitingMe?.needsApproval?'Your host can now admit you. Your seat and chat stay available.':'Your seat is being confirmed for the next race.'):(waitingMe?.needsApproval?'Seat reserved. Chat while you wait; your host will review the request in the lobby.':'You are in. Your seat is reserved for the next race; chat is available while you wait.'),connecting:'Connecting to the room…',pending:state.visibility==='public'?'Confirming your seat with the host…':'Your host will admit you shortly.',lobby,preparing:'Setting up every cabinet. Please wait…',playing:'The race keeps running while this menu is open.',error:'Try another invitation.'};
    $('roomMessage').textContent=state.spectating?(state.remotePhase==='lobby'||state.isHost&&state.phase==='lobby'?'You are a spectator. Choose an open seat when you want to race.':'Watch this session, chat in the room, or reserve an open seat for the next race.') : ((state.phase==='waiting'?'':state.error)||labels[state.phase]||'')+(state.awaitingStop?' Waiting for the host to return to the room.':'');$('roomConnection').textContent=state.phase==='connecting'?'Connecting…':state.phase==='reconnecting'?'Reconnecting automatically · seat reserved':state.phase==='error'?'Disconnected':state.signaling?'● Room connected':'Room connected · invitation service reconnecting';$('roomConnection').dataset.state=state.phase==='error'?'offline':state.phase==='reconnecting'||!state.signaling?'recovering':'connected';

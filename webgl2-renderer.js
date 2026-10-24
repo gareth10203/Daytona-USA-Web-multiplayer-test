@@ -1,16 +1,20 @@
+import {packNight,updateNightPose} from './night-settings.js?v=53.8.18';
 // WebGL2 backend: integer RAM textures, GPU System-24 composition and bounded
 // non-blocking presentation. The native game and simulation clock are shared.
 const TILE_BYTES=0x94000+496*384,PAGE=4096,PAGES=Math.ceil(TILE_BYTES/PAGE);
 const SHADERS=['model2.vert.glsl','model2.frag.glsl','fullscreen.vert.glsl','system24.frag.glsl','tiles-present.frag.glsl'];
 export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}){
  const sources=await Promise.all(SHADERS.map(async name=>{
-  const response=await fetch(new URL(name+'?v=53.7.3-wheel',import.meta.url));
+  const response=await fetch(new URL(name+'?v=53.8.18',import.meta.url));
   if(!response.ok)throw Error('Could not load '+name);return response.text();
  }));
  const gl=canvas.getContext('webgl2',{alpha:false,antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false,powerPreference:'high-performance'});
  if(!gl)throw Error('No hardware-accelerated WebGL2 context was available.');
  let lost=false,disposed=false,lossTimer=null,resources=null;
  let hudVisible=true;
+ const nightValues=packNight(false);
+ const nightBeamParts=[16,20,24,28,32].map(i=>nightValues.subarray(i,i+4));
+ const nightBase=nightValues.subarray(0,4),nightShape=nightValues.subarray(4,8),nightWorld=nightValues.subarray(8,12),nightSky=nightValues.subarray(12,16);
  let width=0,height=0,ow=0,oh=0,enhanced=false,drawDistance=1,displayKey='';
  let uploadedModule=null,uploadedFrame=-1,uploadedHeap=null,textureModule=null,textureGeneration=-1,layoutKey='';
  let tileOwner=null,tileHeap=null,pending=true,vertexSize=0,vertexCount=0,currentSlot=0;
@@ -108,7 +112,7 @@ export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}
   }
   if(w!==width||h!==height){width=w;height=h;invalidate();}
  }
- function uniforms(p,top){gl.uniform4fv(loc(p,'uView'),view);gl.uniform1f(loc(p,'uTop'),top);gl.uniform1f(loc(p,'uOutputHeight'),oh);}
+ function uniforms(p,top){for(const [i,name] of ['uNightLamp','uNightDirection','uNightRight','uNightUp','uNightBeam'].entries())gl.uniform4fv(loc(p,name),nightBeamParts[i]);gl.uniform4fv(loc(p,'uNight'),nightBase);gl.uniform4fv(loc(p,'uNightShape'),nightShape);gl.uniform4fv(loc(p,'uNightWorld'),nightWorld);gl.uniform4fv(loc(p,'uNightSky'),nightSky);gl.uniform4fv(loc(p,'uView'),view);gl.uniform1f(loc(p,'uTop'),top);gl.uniform1f(loc(p,'uOutputHeight'),oh);}
  function destroy(){
   for(const [kind,remove] of [['programs','deleteProgram'],['textures','deleteTexture'],['buffers','deleteBuffer'],['vaos','deleteVertexArray'],['framebuffers','deleteFramebuffer']]){for(const value of allocated[kind])gl[remove](value);allocated[kind].clear();}
   for(const f of flights)gl.deleteSync(f.sync);flights=[];resources=null;
@@ -122,6 +126,7 @@ export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}
  canvas.addEventListener('webglcontextlost',contextLost);canvas.addEventListener('webglcontextrestored',contextRestored);
  return {
   backend:'webgl2',reset,
+  setNight(on,near=16,far=128,sky=0.12,options={}){const v=packNight(on,near,far,sky,options);if(v.some((x,i)=>x!==nightValues[i])){nightValues.set(v);invalidate();}},
   setHUDVisible(on){hudVisible=!!on;},
   dispose(){disposed=true;clearTimeout(lossTimer);canvas.removeEventListener('webglcontextlost',contextLost);canvas.removeEventListener('webglcontextrestored',contextRestored);if(!lost)destroy();},
   setEnhanced(on){enhanced=on;displayKey='';canvas.classList.toggle('enhanced',on);},
@@ -136,6 +141,7 @@ export async function createWebGL2Renderer(canvas,onFailure,{onStatus=()=>{}}={}
    const [outW,outH]=enhanced?extent():[wasm._daytona_width(),wasm._daytona_height()];
    if(flights.length&&wasm===uploadedModule&&frame===uploadedFrame&&mem.buffer===uploadedHeap&&outW===ow&&outH===oh)return false;
    if(!wasm._daytona_prepare_visual())throw Error('Could not prepare graphics for the latest game state.');
+   updateNightPose(wasm,nightValues);
    resize(wasm._daytona_width(),wasm._daytona_height(),outW,outH);
    const heap=wasm.HEAPU8,r=resources,scale=enhanced?Math.min(oh/height,ow/496):oh/height,viewWidth=ow/scale,offset=(width-viewWidth)/2,top=(oh-height*scale)/2;
    const key=`${width}:${height}:${ow}:${oh}:${enhanced}`,changed=wasm!==uploadedModule||frame!==uploadedFrame||heap.buffer!==uploadedHeap;

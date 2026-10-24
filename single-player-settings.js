@@ -1,9 +1,10 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=53.7.3-wheel';
-import {raceOptionsMask,validateSettings} from './room-settings.js?v=53.7.3-wheel';
-import {validPlayerSkin} from './player-skins.js?v=53.7.3-wheel';
+import {DEFAULT_EEPROM} from './nvram.js?v=53.8.18';
+import {raceOptionsMask,validateSettings} from './room-settings.js?v=53.8.18';
+import {validPlayerSkin} from './player-skins.js?v=53.8.18';
+import {validEnvironment} from './environment.js?v=53.8.18';
 
 export const SINGLE_SETTINGS_ID='daytona-single-player-race-v1';
-export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,pitStops:true,region:'Export',skin:0});
+export const DEFAULT_SINGLE_SETTINGS=Object.freeze({mode:0,difficulty:0,cpuCars:true,reverse:false,pitStops:true,region:'Export',skin:0,environment:'day'});
 export function loadSingleSettings(storage){
  let saved;try{saved=JSON.parse(storage.getItem(SINGLE_SETTINGS_ID));}catch{}
  const value={...DEFAULT_SINGLE_SETTINGS};
@@ -11,9 +12,10 @@ export function loadSingleSettings(storage){
  if(Number.isInteger(saved?.difficulty)&&saved.difficulty>=0&&saved.difficulty<=3)value.difficulty=saved.difficulty;
  for(const key of ['cpuCars','reverse','pitStops'])if(typeof saved?.[key]==='boolean')value[key]=saved[key];
  if(validPlayerSkin(saved?.skin))value.skin=saved.skin;
+ if(validEnvironment(saved?.environment))value.environment=saved.environment;
  return value;
 }
-export function sameSingleSettings(a,b){return !!a&&!!b&&['mode','difficulty','cpuCars','reverse','pitStops','region'].every(key=>a[key]===b[key])&&(a.skin??0)===(b.skin??0);}
+export function sameSingleSettings(a,b){return !!a&&!!b&&['mode','difficulty','cpuCars','reverse','pitStops','region'].every(key=>a[key]===b[key])&&(a.skin??0)===(b.skin??0)&&(a.environment??'day')===(b.environment??'day');}
 export function singleConfigurationInputs(value){
  const {mode,difficulty}=validateSettings(value);
  // Keep LINK ID at SINGLE and CAR NUMBER at 1. The original service menu

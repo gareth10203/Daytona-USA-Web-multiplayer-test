@@ -1,10 +1,10 @@
-import {linkIdForSeat,SAMPLE_BYTES,STATE_BYTES,STATE_TAG,SLOT_BYTES} from './central-link.js?v=53.7.3-wheel';
-import {carColor} from './car-colors.js?v=53.7.3-wheel';
+import {linkIdForSeat,SAMPLE_BYTES,STATE_BYTES,STATE_TAG,SLOT_BYTES} from './central-link.js?v=53.8.18';
+import {carColor} from './car-colors.js?v=53.8.18';
 
 // Original block: 00..07 = human ranks by race car ID; 0b = human count;
 // 0c..13 = link ID by race car ID. Race IDs are not selectable lobby seats.
 export function nativeStandings(bytes,members,localId){
- if(!(bytes instanceof Uint8Array)||bytes.length!==SAMPLE_BYTES||members.length<2||members.length>8)return null;
+ if(!(bytes instanceof Uint8Array)||bytes.length!==SAMPLE_BYTES||members.length<1||members.length>8)return null;
  const local=members.findIndex(m=>m.id===localId),count=bytes[1+0x0b];
  if(local<0||bytes[0]!==linkIdForSeat(local+1,members.length)||count<1||count>members.length)return null;
  const own=bytes[1+0x44];if(own>=count||bytes[1+0x0c+own]!==bytes[0])return null;
@@ -34,7 +34,7 @@ export class RaceStandings {
  store(link,header){let sample=this.sources.get(link);if(!sample){sample=new Uint8Array(SAMPLE_BYTES);sample[0]=link;this.sources.set(link,sample);}sample.set(header,1);}
  receive(bytes){
   if(!this.active||!(bytes instanceof Uint8Array)||bytes.length!==STATE_BYTES||bytes[0]!==STATE_TAG)return;
-  const count=this.members.length,local=this.members.findIndex(m=>m.id===this.id);if(local<0||count<2||count>8)return;
+  const count=this.members.length,local=this.members.findIndex(m=>m.id===this.id);if(local<0||count<1||count>8)return;
   for(let slot=0;slot<count;slot++){const source=(local-1-slot+count*8)%count,offset=1+slot*SLOT_BYTES;if(source!==local)this.store(linkIdForSeat(source+1,count),bytes.subarray(offset,offset+0x45));}
   this.apply();
  }

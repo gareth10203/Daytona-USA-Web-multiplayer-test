@@ -7,6 +7,59 @@ uniform usampler2D uTexram;
 uniform usampler2D uLuma;
 uniform usampler2D uXlat;
 uniform float uOutputHeight;
+uniform vec4 uNight;
+uniform vec4 uNightShape;
+uniform vec4 uNightWorld;
+uniform vec4 uNightLamp;
+uniform vec4 uNightDirection;
+uniform vec4 uNightRight;
+uniform vec4 uNightUp;
+uniform vec4 uNightBeam;
+uniform vec4 uView;
+uniform vec2 uOutput;
+uniform float uTop;
+float night_fade(float distance,float start,float end){
+ float compact=smoothstep(start,end,distance);
+ float extra=uNightShape.w;
+ if(extra<=0.0)return compact;
+ float t=max(0.0,distance-start)/max(end-start,0.0001);
+ float spread=1.0+extra;
+ float extended=1.0-exp2(-4.0*t*t/(spread*spread));
+ return mix(compact,extended,min(extra,1.0));
+}
+vec4 night_world(vec4 c,float oz){
+ if(uNight.x<=0.0)return c;
+ vec2 pixel=vec2(gl_FragCoord.x,uOutputHeight-gl_FragCoord.y);
+ vec2 ray=(pixel-vec2(0.0,uTop)-vec2(uOutput.x,uView.y*uView.w)*0.5)/(248.0*uView.w);
+ float depth=1.0/max(abs(oz),0.000001);
+
+ vec3 rgb=c.rgb*uNightWorld.rgb;
+ float luminance=dot(rgb,vec3(0.2126,0.7152,0.0722));
+ vec3 graded=max(vec3(0.0),mix(vec3(luminance),rgb,uNightShape.z));
+ if(uNightBeam.x>0.5){
+  vec3 point=vec3(ray.x,-ray.y,1.0)*depth;
+  vec3 delta=point-uNightLamp.xyz;
+  vec3 direction=uNightDirection.xyz*uNightRight.w+uNightUp.xyz*uNightDirection.w;
+  vec3 up=uNightUp.xyz*uNightRight.w-uNightDirection.xyz*uNightDirection.w;
+  float along=dot(delta,direction);
+  float reach=max(along,0.0);
+  vec2 radius=vec2(0.9,0.55)+reach*vec2(uNightBeam.w,uNightUp.w);
+  vec2 crossSection=vec2(dot(delta,uNightRight.xyz),dot(delta,up))/radius;
+  float edge=1.0-smoothstep(uNightBeam.z,1.0,length(crossSection));
+  float cone=edge*smoothstep(0.0,0.6,along)*(1.0-night_fade(reach,uNight.y,uNight.z))*uNightLamp.w;
+  float ambient=uNightBeam.y/(1.0+depth/max(uNight.z*2.0,1.0));
+  float visibility=ambient+(1.0-ambient)*cone;
+  return mix(c,vec4(mix(vec3(0.001,0.0015,0.003),graded,visibility),c.a),uNight.x);
+ }
+ float forward=night_fade(depth,uNight.y,uNight.z);
+ float side=night_fade(abs(ray.x)*depth,uNightShape.x*uNightShape.y,uNightShape.x);
+ float fog=1.0-(1.0-forward)*(1.0-side);
+ return mix(c,vec4(mix(graded,vec3(0.001,0.0015,0.003),fog),c.a),uNight.x);
+}
+vec4 night_hud(vec4 c,uint flags){
+ if((flags&(1u<<11u))==0u)return c;
+ return mix(c,vec4(max(c.rgb,vec3(0.4)),c.a),uNight.x);
+}
 in vec3 vOz;
 flat in vec4 vColor;
 flat in uvec4 vInfo;
@@ -65,10 +118,11 @@ uint fetch_texel(uvec4 info,int level,int uin,int vin,bool trans){
  if(trans){if(t0==240u)t0=t1&255u;if(t1==240u)t1=t0&255u;}
  return lerp8(t0,t1,vf);
 }
+
 void main(){
  uint flags=vInfo.x;
  if(((flags>>2u)&1u)!=0u){uvec2 p=uvec2(gl_FragCoord.x,uOutputHeight-gl_FragCoord.y);if(((p.x^p.y)&1u)==0u)discard;}
- uint renderer=flags&3u;if(renderer<2u){outColor=vColor;return;}
+ uint renderer=flags&3u;if(renderer<2u){outColor=(flags&(1u<<23u))!=0u?night_hud(vColor,flags):night_world(vColor,vOz.x);return;}
  bool trans=renderer==3u;int maxlevel=int((flags>>12u)&31u);
  float z=1.0/vOz.x;int mml=-int(vMore.x)+fast_log2(z),level=clamp(mml>>7,0,maxlevel);
  int u=to_s32(vOz.y*z*256.0),v=to_s32(vOz.z*z*256.0);
@@ -79,4 +133,6 @@ void main(){
  uint lb=vInfo.w&65535u,pl=vInfo.w>>16u;
  uint luma=min(((lumaram(lb+(t>>1u))&255u)*pl/256u)&255u,63u),c=vMore.y;
  outColor=vec4(float(xlat(((c&31u)<<8u)+luma)),float(xlat(0x2000u+(((c>>5u)&31u)<<8u)+luma)),float(xlat(0x4000u+(((c>>10u)&31u)<<8u)+luma)),255.0)/255.0;
+ if((flags&(1u<<23u))!=0u){outColor=night_hud(outColor,flags);return;}
+ outColor=night_world(outColor,vOz.x);
 }

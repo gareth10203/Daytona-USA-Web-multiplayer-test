@@ -1,5 +1,6 @@
-import {DEFAULT_EEPROM} from './nvram.js?v=53.7.3-wheel';
-export const BUILD_ID='daytona-rev-a-central-53.7.3-wheel';
+import {DEFAULT_EEPROM} from './nvram.js?v=53.8.18';
+import {validEnvironment} from './environment.js?v=53.8.18';
+export const BUILD_ID='daytona-rev-a-central-53.8.16';
 export const MODES=['Normal','Grand Prix','Endurance'];
 // Number of original MODE UP presses from the factory Normal setting.
 export const DIFFICULTIES=['Normal','Hard','Hardest','Easy'];
@@ -9,7 +10,8 @@ export function validateSettings(value){
  if(value.reverse!==undefined&&typeof value.reverse!=='boolean')throw Error('Unsupported circuit direction.');
  for(const key of ['playerCollisions','pitStops'])if(value[key]!==undefined&&typeof value[key]!=='boolean')throw Error('Unsupported race rule.');
  if(value.cpuLiveries!==undefined&&!['multiplayer','single'].includes(value.cpuLiveries))throw Error('Unsupported CPU livery setting.');
- return {mode:value.mode,difficulty:value.difficulty,region:'Export',cpuCars:value.cpuCars??true,reverse:value.reverse??false,playerCollisions:value.playerCollisions??true,pitStops:value.pitStops??true,cpuLiveries:value.cpuLiveries??'multiplayer'};
+ if(value.environment!==undefined&&!validEnvironment(value.environment))throw Error('Unsupported environment setting.');
+ return {mode:value.mode,difficulty:value.difficulty,region:'Export',cpuCars:value.cpuCars??true,reverse:value.reverse??false,playerCollisions:value.playerCollisions??true,pitStops:value.pitStops??true,cpuLiveries:value.cpuLiveries??'multiplayer',environment:value.environment??'day'};
 }
 export function raceOptionsMask(value){const s=validateSettings(value);return (s.playerCollisions?0:1)|(s.pitStops?0:2)|(s.cpuLiveries==='single'?4:0);}
 export function configurationInputs({master,cabinet,...settings}){

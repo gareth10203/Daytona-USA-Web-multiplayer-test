@@ -1,5 +1,6 @@
+import {packNight,updateNightPose} from './night-settings.js?v=53.8.18';
 // WebGPU Model 2 polygons surrounded by GPU-composed System-24 layers.
-import {createGpuLayers} from './gpu-layers.js?v=53.7.3-wheel';
+import {createGpuLayers} from './gpu-layers.js?v=53.8.18';
 
 export async function createWebGPURenderer(canvas, onFailure) {
   if (!globalThis.isSecureContext || !navigator.gpu)
@@ -16,7 +17,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   if (!context) throw Error('Could not create the WebGPU context.');
   const format = navigator.gpu.getPreferredCanvasFormat();
   context.configure({device, format, alphaMode:'opaque'});
-  const response = await fetch(new URL('./model2.wgsl?v=53.7.3-wheel', import.meta.url));
+  const response = await fetch(new URL('./model2.wgsl?v=53.8.18', import.meta.url));
   if (!response.ok) throw Error('Could not load model2.wgsl.');
   const modelShader = device.createShaderModule({label:'Model 2',code:await response.text()});
   for (const shader of [modelShader]) {
@@ -39,12 +40,14 @@ export async function createWebGPURenderer(canvas, onFailure) {
   });
   const buffer = (size,usage) => device.createBuffer({size,usage:usage|GPUBufferUsage.COPY_DST});
   const screen = buffer(32,GPUBufferUsage.UNIFORM);
-  const layers=await createGpuLayers(device,format,screen);
+  const night=buffer(144,GPUBufferUsage.UNIFORM);
+  const nightValues=packNight(false);device.queue.writeBuffer(night,0,nightValues);
+  const layers=await createGpuLayers(device,format,screen,night);
   const texram = buffer(0x400000,GPUBufferUsage.STORAGE);
   const luma = buffer(0x20000,GPUBufferUsage.STORAGE);
   const xlat = buffer(0x6000*4,GPUBufferUsage.STORAGE);
   const polyGroup = device.createBindGroup({layout:polyPipeline.getBindGroupLayout(0),entries:
-    [screen,texram,luma,xlat].map((b,binding)=>({binding,resource:{buffer:b}}))});
+    [screen,texram,luma,xlat,night].map((b,binding)=>({binding,resource:{buffer:b}}))});
   const validation=await device.popErrorScope();
   if(validation){disposed=true;device.destroy();throw Error('WebGPU initialization: '+validation.message);}
   let vertexBuffer=null, vertexCapacity=0, depth=null;
@@ -74,6 +77,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
   }
   return {
     backend:'webgpu',
+    setNight(on,near=16,far=128,sky=0.12,options={}){const v=packNight(on,near,far,sky,options);if(v.some((x,i)=>x!==nightValues[i])){nightValues.set(v);device.queue.writeBuffer(night,0,nightValues);invalidate();}},
     setHUDVisible(on){hudVisible=!!on;},
     attach(target){const next=target.getContext('webgpu');if(!next)throw Error('Could not attach the WebGPU canvas.');next.configure({device,format,alphaMode:'opaque'});context.unconfigure();context=next;canvas=target;},
     dispose(){disposed=true;context.unconfigure();device.destroy();},
@@ -103,6 +107,7 @@ export async function createWebGPURenderer(canvas, onFailure) {
         if(ow===outputWidth&&oh===outputHeight)return false;
       }
       if(!wasm._daytona_prepare_visual())throw Error('Could not prepare graphics for the latest game state.');
+      if(updateNightPose(wasm,nightValues))device.queue.writeBuffer(night,0,nightValues);
       const w=wasm._daytona_width(),h=wasm._daytona_height();
       const [ow,oh]=enhanced?extent():[w,h];resize(w,h,ow,oh);
       const scale=enhanced?Math.min(oh/h,ow/496):oh/h,viewWidth=ow/scale,offset=(w-viewWidth)/2;

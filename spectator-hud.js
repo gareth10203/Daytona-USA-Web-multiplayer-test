@@ -1,5 +1,5 @@
-import {linkIdForSeat} from './central-link.js?v=53.7.3-wheel';
-import {carColor} from './car-colors.js?v=53.7.3-wheel';
+import {linkIdForSeat} from './central-link.js?v=53.8.18';
+import {carColor} from './car-colors.js?v=53.8.18';
 
 // Reads the spectator's local clone. Nothing here requests or sends network data.
 export function mountSpectatorHUD(root){
@@ -27,7 +27,7 @@ export function mountSpectatorHUD(root){
    const ptr=wasm._daytona_spectator_status_ptr(),data=new Uint32Array(wasm.HEAPU8.buffer,ptr,56);
    scene=data[0];if(scene<=10){if(rows.length)reset(members);return;}
    if(scene<20){panel.hidden=true;return;}
-   if(data[2]>=2&&data[2]<=8){
+   if(data[2]>=1&&data[2]<=8){
     total=data[1];const fresh=[];
     for(let i=0;i<data[2];i++){
      const p=8+i*6,index=members.findIndex((_,n)=>linkIdForSeat(n+1,members.length)===data[p]);

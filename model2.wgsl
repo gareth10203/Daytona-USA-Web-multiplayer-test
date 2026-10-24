@@ -4,6 +4,54 @@ struct Screen { size: vec2f, pad: vec2f, origin: vec2f, unused: vec2f }
 @group(0) @binding(1) var<storage, read> texram: array<u32>;
 @group(0) @binding(2) var<storage, read> lumaram: array<u32>;
 @group(0) @binding(3) var<storage, read> xlat: array<u32>;
+struct Night { base:vec4f, shape:vec4f, world:vec4f, sky:vec4f, lamp:vec4f, direction:vec4f, right:vec4f, up:vec4f, beam:vec4f }
+@group(0) @binding(4) var<uniform> night:Night;
+// Keep the original fade through 100%; blend into a long, continuous tail above it.
+fn night_fade(distance:f32,start:f32,end:f32)->f32 {
+ let compact=smoothstep(start,end,distance);
+ let extra=night.shape.w;
+ if(extra<=0.0){return compact;}
+ let t=max(0.0,distance-start)/max(end-start,0.0001);
+ let spread=1.0+extra;
+ let extended=1.0-exp2(-4.0*t*t/(spread*spread));
+ return mix(compact,extended,min(extra,1.0));
+}
+fn night_world(c:vec4f,oz:f32,p:vec2f)->vec4f {
+ if(night.base.x<=0.0){return c;}
+ // Use original reciprocal camera depth, not the synthetic draw-order Z.
+ let ray=(p-screen.origin-screen.size*screen.pad.y*0.5)/(248.0*screen.pad.y);
+ let depth=1.0/max(abs(oz),0.000001);
+
+ let rgb=c.rgb*night.world.rgb;
+ let luminance=dot(rgb,vec3f(0.2126,0.7152,0.0722));
+ let graded=max(vec3f(0.0),mix(vec3f(luminance),rgb,night.shape.z));
+ if(night.beam.x>0.5){
+  let point=vec3f(ray.x,-ray.y,1.0)*depth;
+  let delta=point-night.lamp.xyz;
+  // Dip relative to the body, including pitch/roll on hills and banks.
+  let direction=night.direction.xyz*night.right.w+night.up.xyz*night.direction.w;
+  let up=night.up.xyz*night.right.w-night.direction.xyz*night.direction.w;
+  let along=dot(delta,direction);
+  let reach=max(along,0.0);
+  let radius=vec2f(0.9,0.55)+reach*vec2f(night.beam.w,night.up.w);
+  let cross=vec2f(dot(delta,night.right.xyz),dot(delta,up))/radius;
+  let edge=1.0-smoothstep(night.beam.z,1.0,length(cross));
+  let cone=edge*smoothstep(0.0,0.6,along)*(1.0-night_fade(reach,night.base.y,night.base.z))*night.lamp.w;
+  let ambient=night.beam.y/(1.0+depth/max(night.base.z*2.0,1.0));
+  let visibility=ambient+(1.0-ambient)*cone;
+  return mix(c,vec4f(mix(vec3f(0.001,0.0015,0.003),graded,visibility),c.a),night.base.x);
+ }
+ let forward=night_fade(depth,night.base.y,night.base.z);
+ let side=night_fade(abs(ray.x)*depth,night.shape.x*night.shape.y,night.shape.x);
+ let fog=1.0-(1.0-forward)*(1.0-side);
+ return mix(c,vec4f(mix(graded,vec3f(0.001,0.0015,0.003),fog),c.a),night.base.x);
+}
+// Only dedicated route meshes receive a neutral night contrast floor.
+// Markers keep their original colors; day and all world geometry stay intact.
+fn night_hud(c:vec4f,flags:u32)->vec4f {
+ if((flags&(1u<<11u))==0u){return c;}
+ return mix(c,vec4f(max(c.rgb,vec3f(0.4)),c.a),night.base.x);
+}
 struct In {
  @location(0) pos: vec2f, @location(1) depth: f32, @location(2) oz: vec3f,
  @location(3) color: vec4f, @location(4) info: vec4u, @location(5) more: vec2u
@@ -84,11 +132,12 @@ fn fetch_texel(info:vec4u,level:i32,uin:i32,vin:i32,trans:bool)->u32 {
  if(trans){if(t0==240u){t0=t1&255u;}if(t1==240u){t1=t0&255u;}}
  return lerp8(t0,t1,vf);
 }
+
 @fragment fn ps_poly(i:Out)->@location(0) vec4f {
  let flags=i.info.x;
  if(((flags>>2u)&1u)!=0u){let p=vec2u(i.pos.xy);if(((p.x^p.y)&1u)==0u){discard;}}
  let renderer=flags&3u;
- if(renderer<2u){return i.color;}
+ if(renderer<2u){if((flags&(1u<<23u))!=0u){return night_hud(i.color,flags);}return night_world(i.color,i.oz.x,i.pos.xy);}
  let trans=renderer==3u;let maxlevel=i32((flags>>12u)&31u);
  let z=1.0/i.oz.x;let mml= -bitcast<i32>(i.more.x)+fast_log2(z);
  let level=clamp(mml>>7u,0,maxlevel);
@@ -100,5 +149,7 @@ fn fetch_texel(info:vec4u,level:i32,uin:i32,vin:i32,trans:bool)->u32 {
  let lb=i.info.w&65535u;let pl=i.info.w>>16u;
  let luma=min(((lumaram[lb+(t>>1u)]&255u)*pl/256u)&255u,63u);
  let c=i.more.y;
- return vec4f(f32(xlat[((c&31u)<<8u)+luma]),f32(xlat[0x2000u+(((c>>5u)&31u)<<8u)+luma]),f32(xlat[0x4000u+(((c>>10u)&31u)<<8u)+luma]),255.0)/255.0;
+ let result=vec4f(f32(xlat[((c&31u)<<8u)+luma]),f32(xlat[0x2000u+(((c>>5u)&31u)<<8u)+luma]),f32(xlat[0x4000u+(((c>>10u)&31u)<<8u)+luma]),255.0)/255.0;
+ if((flags&(1u<<23u))!=0u){return night_hud(result,flags);}
+ return night_world(result,i.oz.x,i.pos.xy);
 }

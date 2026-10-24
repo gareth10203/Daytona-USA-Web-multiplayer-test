@@ -3,20 +3,21 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#05070b"><title>Daytona USA · Private Multiplayer</title>
-  <link rel="stylesheet" href="style.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="host-console.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="controller-settings.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="input-settings.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="single-player.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="ui-consistency.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="menu-gamepad.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="race-standings.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="public-rooms.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="waiting-room.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="game-chat.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="lobby-layout.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="player-skins.css?v=53.7.3-wheel">
-  <link rel="stylesheet" href="spectator-menu.css?v=53.7.3-wheel">
+  <link rel="stylesheet" href="style.css?v=53.8.18">
+  <link rel="stylesheet" href="host-console.css?v=53.8.18">
+  <link rel="stylesheet" href="controller-settings.css?v=53.8.18">
+  <link rel="stylesheet" href="input-settings.css?v=53.8.18">
+  <link rel="stylesheet" href="wheel-feedback.css?v=53.8.18">
+  <link rel="stylesheet" href="single-player.css?v=53.8.18">
+  <link rel="stylesheet" href="ui-consistency.css?v=53.8.18">
+  <link rel="stylesheet" href="menu-gamepad.css?v=53.8.18">
+  <link rel="stylesheet" href="race-standings.css?v=53.8.18">
+  <link rel="stylesheet" href="public-rooms.css?v=53.8.18">
+  <link rel="stylesheet" href="waiting-room.css?v=53.8.18">
+  <link rel="stylesheet" href="game-chat.css?v=53.8.18">
+  <link rel="stylesheet" href="lobby-layout.css?v=53.8.18">
+  <link rel="stylesheet" href="player-skins.css?v=53.8.18">
+  <link rel="stylesheet" href="spectator-menu.css?v=53.8.18">
 </head>
 <body>
   <main class="arcade" aria-label="Daytona USA arcade">
@@ -83,6 +84,7 @@
               <div class="single-race-option"><label for="singleCpuCars"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 2-4h10l2 4M3 9h18v9H3V9ZM5 18v3M19 18v3M3 13h4M17 13h4M8 4l-1 5M16 4l1 5"/></svg>CPU cars</label><select id="singleCpuCars" aria-describedby="singleCpuHelp"><option value="true">On</option><option value="false">Off</option></select><p id="singleCpuHelp">Race against the original arcade grid.</p></div>
               <div class="single-race-option"><label for="singlePitStops"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V4h14v16M9 20v-7h6v7M3 20h18M9 8h6"/></svg>Pit stops</label><select id="singlePitStops" aria-describedby="singlePitHelp"><option value="true">On · Original service</option><option value="false">Off · Drive through</option></select><p id="singlePitHelp">Off keeps the lane open as a shortcut, without automatic stops.</p></div>
               <div class="single-race-option"><label for="singleLivery"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 8 2-4h10l2 4M3 9h18v9H3V9ZM5 18v3M19 18v3M3 13h4M17 13h4M8 4l-1 5M16 4l1 5"/></svg>Your livery</label><button id="singleLivery" type="button" class="single-livery-button ui-button ui-secondary" aria-haspopup="dialog" aria-describedby="singleLiveryHelp"><span id="singleLiveryName">Original seat livery</span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button><p id="singleLiveryHelp">Preview and choose an original arcade appearance.</p></div>
+              <div class="single-race-option single-environment-option"><label for="singleEnvironment"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg>Environment</label><select id="singleEnvironment" aria-describedby="singleEnvironmentHelp"><option value="day">Day</option><option value="night">Night</option><option value="cycle">Day / night cycle</option></select><p id="singleEnvironmentHelp">Original daylight on all three circuits.</p></div>
             </div>
             <footer class="single-race-footer"><div><div class="single-cabinet-spec"><span>DELUXE</span><span>EXPORT</span><span>LOCAL PLAY</span></div><p id="singleSessionHint">Choose your circuit and transmission in the arcade.</p></div><button id="singleStart" type="submit" class="launch-btn ui-button ui-primary"><span id="singleStartLabel">ENTER ARCADE</span><span aria-hidden="true">→</span></button></footer>
             <p id="singleStatus" class="single-status" role="status" aria-live="polite"></p>
@@ -128,10 +130,11 @@
             </section>
             <aside class="room-sidebar" aria-label="Room options">
               <fieldset class="room-settings paged-race-settings"><legend><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16"/><circle cx="9" cy="5" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="8" cy="19" r="2"/></svg>RACE SETTINGS</legend>
-                <div class="race-page-navigation"><span id="racePageTitle" role="status" aria-live="polite">Race setup <small>1 / 2</small></span><div><button id="racePagePrevious" type="button" class="ui-button ui-secondary" aria-label="Previous settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button id="racePageNext" type="button" class="ui-button ui-secondary" aria-label="Next settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
+                <div class="race-page-navigation"><span id="racePageTitle" role="status" aria-live="polite">Race setup <small>1 / 3</small></span><div><button id="racePagePrevious" type="button" class="ui-button ui-secondary" aria-label="Previous settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><button id="racePageNext" type="button" class="ui-button ui-secondary" aria-label="Next settings page" aria-controls="raceSettingsPages"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button></div></div>
                 <div id="raceSettingsPages" class="race-settings-pages">
                   <div id="raceSetupPage" class="race-settings-page" role="group" aria-label="Race setup"><div class="race-selectors"><label for="roomMode">Mode<select id="roomMode"><option value="0">Normal</option><option value="1">Grand Prix</option><option value="2">Endurance</option></select></label><label for="roomDifficulty">Difficulty<select id="roomDifficulty"><option value="3">Easy</option><option value="0">Normal</option><option value="1">Hard</option><option value="2">Hardest</option></select></label><label for="roomCpuCars" class="cpu-cars-setting">CPU cars<select id="roomCpuCars"><option value="true">On · Arcade grid</option><option value="false">Off · Players only</option></select></label><label for="roomDirection" class="direction-setting">Direction<select id="roomDirection" aria-describedby="roomSettingsHint"><option value="normal">Normal</option><option value="reverse">Reverse</option></select></label></div><p class="region-label">Region <strong>Export</strong></p></div>
                   <div id="raceRulesPage" class="race-settings-page" role="group" aria-label="Race rules" hidden><div class="race-selectors"><label for="roomPlayerCollisions">Player collisions<select id="roomPlayerCollisions" aria-describedby="roomContactHelp"><option value="true">On</option><option value="false">Off · No contact</option></select><span id="roomContactHelp" class="race-option-help">Bots and walls remain solid.</span></label><label for="roomPitStops">Pit stops<select id="roomPitStops" aria-describedby="roomPitHelp"><option value="true">On · Original service</option><option value="false">Off · Drive through</option></select><span id="roomPitHelp" class="race-option-help">Use the open lane as a shortcut.</span></label><label for="roomCpuLiveries" class="livery-setting">CPU liveries<select id="roomCpuLiveries"><option value="multiplayer">Multiplayer · Original</option><option value="single">Single player · Varied</option></select></label></div></div>
+                  <div id="raceEnvironmentPage" class="race-settings-page" role="group" aria-label="Environment" hidden><div class="race-selectors"><label for="roomEnvironment" class="environment-setting">Time of day<select id="roomEnvironment" aria-describedby="roomEnvironmentHelp"><option value="day">Day</option><option value="night">Night</option><option value="cycle">Day / night cycle</option></select></label></div><p id="roomEnvironmentHelp" class="environment-help">Original daylight on all three circuits.</p></div>
                 </div><p id="roomSettingsHint" class="room-hint"></p>
               </fieldset>
 
@@ -143,7 +146,7 @@
               <div class="chat-footnote"><p id="chatFeedback" role="status" aria-live="polite">Only players in this room can read this chat.</p><span id="chatLength">0/240</span></div>
             </section>
           </div>
-          <footer class="room-footer"><div class="room-status-row"><p id="roomMessage" role="status" aria-live="polite"></p><p id="roomConnection" class="room-connection" role="status" aria-live="polite"></p></div><p id="arcadeLinkStatus" class="room-hint" hidden></p><div class="room-actions"><button id="leaveRoom" type="button" class="quiet-btn ui-button ui-quiet">← Leave room</button><button id="hostConsoleBtn" type="button" class="quiet-btn ui-button ui-quiet" aria-controls="hostConsole" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>Connections</button><span class="action-spacer"></span><button id="readyRoom" type="button" aria-pressed="false" class="ui-button ui-secondary">I’M READY</button><button id="startRoom" type="button" class="launch-btn ui-button ui-primary" disabled>START GAME <span aria-hidden="true">→</span></button><button id="stopRoom" type="button" hidden class="ui-button ui-secondary ui-danger">Return all to room</button><button id="returnRoomGame" type="button" class="launch-btn ui-button ui-primary" hidden>RETURN TO GAME <span aria-hidden="true">→</span></button></div></footer>
+          <footer class="room-footer"><div class="room-status-row"><p id="roomMessage" role="status" aria-live="polite"></p><p id="roomConnection" class="room-connection" role="status" aria-live="polite"></p></div><p id="arcadeLinkStatus" class="room-hint" hidden></p><div class="room-actions"><button id="leaveRoom" type="button" class="quiet-btn ui-button ui-quiet">← Leave room</button><button id="hostConsoleBtn" type="button" class="quiet-btn ui-button ui-quiet" aria-controls="hostConsole" hidden><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>Connections</button><span class="action-spacer"></span><button id="readyRoom" type="button" aria-pressed="false" class="ui-button ui-secondary">I’M READY</button><button id="startRoom" type="button" class="launch-btn ui-button ui-primary" disabled aria-busy="false"><span id="startRoomLabel">START GAME</span> <span aria-hidden="true">→</span></button><button id="stopRoom" type="button" hidden class="ui-button ui-secondary ui-danger">Return all to room</button><button id="returnRoomGame" type="button" class="launch-btn ui-button ui-primary" hidden>RETURN TO GAME <span aria-hidden="true">→</span></button></div></footer>
           <p class="room-note">Keep the game tab visible during a race. Game performance is shared with your room host for diagnostics.</p>
         </section>
         <p class="first-run">First visit: Single cabinet · Export region · Zero credits.<br>Let attract mode play, or insert a coin to race.</p>
@@ -208,8 +211,22 @@
         <section id="experimentalPanel" class="settings-panel" role="tabpanel" aria-labelledby="experimentalTab" hidden>
           <h2>Racing wheel setup <em class="experimental-badge">Experimental</em></h2>
           <p class="settings-intro">Choose your wheel. For each control, click Detect input and then move it. Capture the steering and pedal positions afterwards. Profiles save per device.</p>
-          <p class="wheel-help">If a device is missing, press one of its buttons, use PC mode and check its manufacturer's driver. Devices must be recognised by your browser. This setup handles inputs; manufacturer-specific wheel force feedback is not available.</p>
-          <div id="wheelControls"></div>
+          <p class="wheel-help">If a device is missing, press one of its buttons, use PC mode and check its manufacturer's driver. Devices must be recognised by your browser. Configure inputs first, then optionally pair a compatible force-feedback device.</p>
+          <div class="wheel-setup-grid">
+            <section class="wheel-input-section" aria-labelledby="wheelInputTitle"><h3 id="wheelInputTitle"><span class="wheel-step">1</span>Input &amp; calibration</h3><div id="wheelControls"></div></section>
+            <aside id="wheelFeedback" class="wheel-feedback-card" aria-labelledby="wheelForceTitle">
+              <header><h3 id="wheelForceTitle"><span class="wheel-step">2</span>Force feedback</h3><span id="wheelForceStatus" class="wheel-force-status" role="status">NOT CONNECTED</span></header>
+              <p class="wheel-feedback-intro">Optional steering forces from the arcade. Connect your wheel separately and start gently at 20%.</p>
+              <dl class="wheel-force-devices"><dt>Steering input</dt><dd id="wheelForceInput">Choose a wheel</dd><dt>Force device</dt><dd id="wheelForceDevice">Not paired</dd></dl>
+              <button id="wheelForceConnect" type="button" class="ui-button ui-primary">CONNECT FORCE FEEDBACK</button>
+              <label class="setting-toggle"><span>Use force feedback<small>Only while driving with this wheel.</small></span><input id="wheelForceEnabled" type="checkbox" disabled></label>
+              <div class="setting-slider"><div><label for="wheelForceStrength">Force gain</label><output id="wheelForceStrengthValue" for="wheelForceStrength">20%</output></div><input id="wheelForceStrength" type="range" min="0" max="100" step="5" value="20" disabled></div>
+              <label class="wheel-force-reverse"><input id="wheelForceReverse" type="checkbox" disabled>Reverse force direction</label>
+              <div class="wheel-force-actions"><button id="wheelForceTest" type="button" class="ui-button ui-secondary" disabled>Test left pull</button><button id="wheelForceStop" type="button" class="ui-button ui-secondary" disabled>Stop forces</button></div>
+              <p id="wheelForceHelp" role="status">Choose a wheel first.</p>
+              <details class="wheel-force-compat"><summary>Compatibility &amp; device report</summary><p id="wheelForceProvider"></p><button id="webhidInspect" type="button" class="ui-button ui-secondary">Download HID report</button><p id="webhidStatus" role="status"></p><p>Inspects device support without moving the wheel. No data is uploaded.</p></details>
+            </aside>
+          </div>
           <div class="experimental-display-settings" aria-labelledby="experimentalDisplayTitle">
             <h2 id="experimentalDisplayTitle">Rendering and performance</h2>
             <p class="device-status">Current API: <strong id="experimentalGraphicsBackend" role="status">Detecting…</strong></p>
@@ -242,9 +259,9 @@
       </section>
     </div>
   </div>
-  <small id="buildVersion" class="build-version"><span>v53.7.3</span> · <time datetime="2026-10-22">22.10.26</time></small>
+  <small id="buildVersion" class="build-version"><span>v53.8.18</span> · <time datetime="2026-10-23">23.10.26</time></small>
   <div id="menuGamepadHints" class="menu-gamepad-hints" role="status" aria-label="Controller menu controls" hidden></div>
-  <script src="vendor/peerjs.min.js?v=53.7.3-wheel" defer></script><script src="daytona_engine.js?v=53.7.3-wheel" defer></script><script type="module" src="main.js?v=53.7.3-wheel"></script>
+  <script src="vendor/peerjs.min.js?v=53.8.18" defer></script><script src="daytona_engine.js?v=53.8.18" defer></script><script type="module" src="main.js?v=53.8.18"></script>
 </body>
 </html>
 

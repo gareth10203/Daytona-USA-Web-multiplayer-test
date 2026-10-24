@@ -1,3 +1,11 @@
+# Daytona USA Web — 53.8.18: WebHID wheel feedback and updated runtime
+
+Release 53.8.18 includes the WebHID force-feedback providers, diagnostics, night settings, renderer and multiplayer fixes, and matching game JS/WASM. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for @gareth10203's PR #2 contribution and the existing LICENSE, NOTICE.md and THIRD_PARTY.md for notices.
+
+All players should use the same release. Publish the runtime files at the site root. The 53.8.18 ZIP has been hash-checked; browser/device compatibility and live multiplayer still require testing.
+
+---
+
 # Daytona USA Web — 53.2: single-player liveries
 
 **Single Player → Your livery** opens the same selector used in multiplayer: Original seat livery and 39 original CPU appearances. All forty previews prepare behind the same progress overlay, generated from the verified local ROM and reused from this browser's cache. The single-player Original is the normal red car of cabinet 1. The six setup cards retain a stable layout, including desktop 1280×720 and mobile widths.

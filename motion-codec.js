@@ -1,6 +1,6 @@
 // Self-contained snapshots only. Never encode room commands or final results here.
-import {SAMPLE_BYTES,COMPACT_STATE_TAG} from './central-link.js?v=53.7.3-wheel';
-import {normalizeSlotTiming} from './link-timing.js?v=53.7.3-wheel';
+import {SAMPLE_BYTES,COMPACT_STATE_TAG} from './central-link.js?v=53.8.18';
+import {normalizeSlotTiming} from './link-timing.js?v=53.8.18';
 const MAGIC=0x314d5444,HEADER=96,MAX_BYTES=4096;
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const finite=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0;
@@ -8,7 +8,7 @@ let cachedEpoch='',cachedBytes;
 function epochBytes(epoch){if(!/^[a-f0-9]{32}$/.test(epoch))throw Error('Invalid motion epoch.');if(epoch!==cachedEpoch){cachedEpoch=epoch;cachedBytes=Uint8Array.from(epoch.match(/../g),b=>parseInt(b,16));}return cachedBytes;}
 function readEpoch(bytes){if(cachedBytes&&cachedBytes.every((v,i)=>bytes[8+i]===v))return cachedEpoch;return Array.from(bytes.subarray(8,24),b=>b.toString(16).padStart(2,'0')).join('');}
 export function encodeMotion(data,count){
- if(!Number.isInteger(count)||count<2||count>8||!integer(data.delivery)||!data.delivery||!integer(data.frames)||!finite(data.sentAt))throw Error('Invalid motion envelope.');
+ if(!Number.isInteger(count)||count<1||count>8||!integer(data.delivery)||!data.delivery||!integer(data.frames)||!finite(data.sentAt))throw Error('Invalid motion envelope.');
  const sample=data.type==='arcade-sample',state=data.type==='arcade-state',ack=data.type==='motion-ack';
  if(!sample&&!state&&!ack)throw Error('Unsupported motion type.');
  if(ack&&!['arcade-sample','arcade-state'].includes(data.kind))throw Error('Invalid motion receipt kind.');
@@ -33,7 +33,7 @@ export function encodeMotion(data,count){
 export function decodeMotion(buffer){
  if(!(buffer instanceof ArrayBuffer)||buffer.byteLength<HEADER||buffer.byteLength>MAX_BYTES)throw Error('Invalid motion size.');
  const b=new Uint8Array(buffer),v=new DataView(buffer),type=b[4],count=b[5],flag=b[6],length=v.getUint32(72,true);
- if(v.getUint32(0,true)!==MAGIC||![1,2,3].includes(type)||!Number.isInteger(count)||count<2||count>8||b[7]||(type!==3&&(b[77]||b[78]||b[79]))||v.getUint32(92,true))throw Error('Invalid motion header.');
+ if(v.getUint32(0,true)!==MAGIC||![1,2,3].includes(type)||!Number.isInteger(count)||count<1||count>8||b[7]||(type!==3&&(b[77]||b[78]||b[79]))||v.getUint32(92,true))throw Error('Invalid motion header.');
  const sample=type===1,state=type===2,ack=type===3;
  if((ack?![1,2].includes(flag):![0,1].includes(flag))||length!==(ack?0:sample?SAMPLE_BYTES:5+count*452)||buffer.byteLength!==HEADER+length+(state&&flag?count*20:0)||(!ack&&(((!state||!flag)&&b[76])||(b[76]>>count)))||(ack&&!(v.getUint32(76,true)&1)))throw Error('Invalid motion layout.');
  const delivery=v.getFloat64(24,true),frames=v.getFloat64(32,true),sequence=v.getFloat64(40,true),sentAt=v.getFloat64(48,true),at=v.getFloat64(56,true),uncertainty=v.getFloat64(64,true);
