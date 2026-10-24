@@ -1,5 +1,5 @@
 // Public web configuration. Database ownership is enforced by server rules.
-import {createAppCheckGate} from './firebase-security.js?v=53.8.18';
+import {createAppCheckGate} from './firebase-security.js?v=53.8.21';
 export const FIREBASE_CONFIG={
  apiKey:'AIzaSyDdISDv02wMhfd17CDVI8FQkk_mWBHlpms',
  authDomain:'daytona-usa-web.firebaseapp.com',
@@ -12,13 +12,26 @@ const CDN='https://www.gstatic.com/firebasejs/13.0.0/';
 let appPromise;
 const app=()=>appPromise??=(async()=>{const sdk=await import(CDN+'firebase-app.js');return sdk.initializeApp(FIREBASE_CONFIG);})().catch(e=>{appPromise=null;throw e;});
 const ensureAppCheck=createAppCheckGate();
+let identityPromise;
+async function identity(){
+ return identityPromise??=(async()=>{
+  const [instance,sdk]=await Promise.all([app(),import(CDN+'firebase-auth.js')]);
+  const check=await ensureAppCheck(instance),auth=sdk.getAuth(instance);await auth.authStateReady();
+  if(auth.currentUser){try{await auth.currentUser.getIdToken(true);}catch(e){if(['auth/user-not-found','auth/user-token-expired','auth/invalid-user-token','auth/user-disabled'].includes(e.code))await sdk.signOut(auth);else throw e;}}
+  if(!auth.currentUser)await sdk.signInAnonymously(auth);
+  return {instance,auth,check};
+ })().catch(error=>{identityPromise=null;throw error;});
+}
+// Reuses the same anonymous identity/App Check instance without opening RTDB.
+export async function getConnectionTokens(){
+ const {auth,check}=await identity();if(!check)throw Error('App Check unavailable for relay access.');
+ const sdk=await import(CDN+'firebase-app-check.js');
+ const [idToken,result]=await Promise.all([auth.currentUser.getIdToken(),sdk.getToken(check,false)]);
+ return {idToken,appCheckToken:result.token};
+}
 
 export async function createFirebaseDirectoryBackend(){
- const [instance,authSDK,dbSDK]=await Promise.all([app(),import(CDN+'firebase-auth.js'),import(CDN+'firebase-database.js')]);
- await ensureAppCheck(instance);
- const auth=authSDK.getAuth(instance);await auth.authStateReady();
- if(auth.currentUser){try{await auth.currentUser.getIdToken(true);}catch(e){if(['auth/user-not-found','auth/user-token-expired','auth/invalid-user-token','auth/user-disabled'].includes(e.code))await authSDK.signOut(auth);else throw e;}}
- if(!auth.currentUser)await authSDK.signInAnonymously(auth);
+ const [{instance,auth},dbSDK]=await Promise.all([identity(),import(CDN+'firebase-database.js')]);
  const db=dbSDK.getDatabase(instance),room=id=>dbSDK.ref(db,'publicRooms/'+id);
  return {
   uid:auth.currentUser.uid,timestamp:()=>dbSDK.serverTimestamp(),

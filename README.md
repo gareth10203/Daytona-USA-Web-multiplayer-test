@@ -1,3 +1,32 @@
+# Daytona USA Web — 53.8.21: protected TURN connectivity
+
+Release 53.8.21 adds authenticated Cloudflare TURN fallback for networks that
+cannot establish a direct WebRTC connection. Direct connections remain preferred.
+Temporary relay credentials refresh automatically; selected relay paths renew ICE
+while retaining the existing reliable and movement channels.
+
+The separately deployed credential service validates Firebase Authentication and
+App Check, applies persistent global and per-identity issuance limits, and checks
+TURN usage every two minutes. Its SQLite controller retains the 900 GB safety
+latch and independently retries failed credential revocations in bounded batches.
+This is a software safety stop, not a guaranteed billing cap. No server-side
+credentials, private debug tokens or deployment tokens are included in this repo
+update. No Firebase database-rule change is required for this release.
+
+Validation: **396 automated tests passed**, plus live forced-relay UDP and TLS/443
+checks, two-cabinet PeerJS admission/chat/Ready/movement, relay renewal with
+different temporary credentials during play, return to lobby, and a successful
+scheduled usage check. These bounded transport checks do not replace a WAN
+campaign with real game ROMs. The game engine JS/WASM is unchanged from 53.8.18.
+
+All players should reload to use 53.8.21, especially for relay sessions lasting
+more than two hours. The published runtime is at the repository root and matches
+`MANIFEST.sha256`. Existing contributor credits and license notices are retained.
+
+---
+
+## Previous release notes
+
 # Daytona USA Web — 53.8.18: WebHID wheel feedback and updated runtime
 
 Release 53.8.18 includes the WebHID force-feedback providers, diagnostics, night settings, renderer and multiplayer fixes, and matching game JS/WASM. See [CONTRIBUTORS.md](CONTRIBUTORS.md) for @gareth10203's PR #2 contribution and the existing LICENSE, NOTICE.md and THIRD_PARTY.md for notices.

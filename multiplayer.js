@@ -1,15 +1,16 @@
-import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=53.8.18';
-import {LatestFlow} from './latest-flow.js?v=53.8.18';
-import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=53.8.18';
-import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=53.8.18';
-import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=53.8.18';
-import {SnapshotFlow} from './snapshot-flow.js?v=53.8.18';
-import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=53.8.18';
-import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=53.8.18';
-import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=53.8.18';
-import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=53.8.18';
-import {validPlayerSkin,skinOwner,validateSkinRoster} from './player-skins.js?v=53.8.18';
-import {RoomEnvironmentClock} from './environment.js?v=53.8.18';
+import {turnClient,maintainIceConfiguration} from './turn-client.js?v=53.8.21';
+import {TransportProbe,attachDataChannelProbe,transportSignals} from './transport-probe.js?v=53.8.21';
+import {LatestFlow} from './latest-flow.js?v=53.8.21';
+import {MotionChannel,MOTION_VERSION,motionChannelId} from './motion-channel.js?v=53.8.21';
+import {HostRaceAuthority,RaceOrderInbox,validateRaceOrder} from './race-authority.js?v=53.8.21';
+import {HostDistributor,STATE_BYTES,STATE_TAG,compactState,expandState,linkIdForSeat} from './central-link.js?v=53.8.21';
+import {SnapshotFlow} from './snapshot-flow.js?v=53.8.21';
+import {LinkClock,receivedTiming,sourceTiming} from './link-timing.js?v=53.8.21';
+import {HealthSampler,normalizeHealth,STOP_CAUSES,cleanReason} from './connection-health.js?v=53.8.21';
+import {PerformanceHistory,PERFORMANCE_BATCH_LIMIT,normalizePerformanceSample} from './performance-history.js?v=53.8.21';
+import {BUILD_ID,validateSettings,invitation,parseInvitation} from './room-settings.js?v=53.8.21';
+import {validPlayerSkin,skinOwner,validateSkinRoster} from './player-skins.js?v=53.8.21';
+import {RoomEnvironmentClock} from './environment.js?v=53.8.21';
 const token=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
 const cleanName=value=>String(value||'Driver').trim().slice(0,24)||'Driver';
 export const CHAT_LIMIT=240,CHAT_HISTORY_LIMIT=60,CHAT_INTERVAL_MS=900;
@@ -233,7 +234,11 @@ export class Multiplayer {
  async openPeer(){
   if(typeof globalThis.Peer!=='function')throw Error('PeerJS could not load. Reload the page.');
   const generation=this.generation;
-  const peer=this.peer=new Peer(`dt-${token()}`,{debug:0,config:{iceServers:globalThis.DAYTONA_ICE_SERVERS||[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]}});
+  const configuration=globalThis.DAYTONA_ICE_SERVERS?{iceServers:globalThis.DAYTONA_ICE_SERVERS,relay:false}:await turnClient.configuration();
+  if(generation!==this.generation)return false;
+  this.recordConnectionEvent(configuration.relay?'turn-ready':'turn-unavailable');
+  const peer=this.peer=new Peer(`dt-${token()}`,{debug:0,config:{iceServers:configuration.iceServers,iceTransportPolicy:'all'}});
+  if(!globalThis.DAYTONA_ICE_SERVERS)this.stopIceRefresh=maintainIceConfiguration(peer,configuration,{onChange:next=>{if(generation===this.generation)this.recordConnectionEvent(next.relay?'turn-ready':'turn-unavailable');}});
   peer.on('connection',conn=>{if(this.spectators?.connection(conn))return;if(this.isHost&&generation===this.generation)this.attach(conn,true);else conn.close();});
   peer.on('disconnected',()=>{if(generation===this.generation)this.signalingLost();});
   let opened=false;
@@ -253,10 +258,10 @@ export class Multiplayer {
   });
   this.timer=setInterval(()=>this.heartbeat(),1000);
  }
- async create(name,{visibility='private',roomName=''}={}){if(!['public','private'].includes(visibility))throw Error('Choose a public or private room.');this.leave();this.visibility=visibility;this.roomName=String(roomName).replace(/\s+/gu,' ').trim().slice(0,48)||cleanName(name)+"'s room";this.isHost=true;this.name=cleanName(name);this.phase='connecting';this.changed();try{await this.openPeer();this.host=this.id;this.secret=token();this.members=[{id:this.id,name:this.name,ready:false,cabinet:1,rtt:null}];this.phase='lobby';this.changed();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}}
+ async create(name,{visibility='private',roomName=''}={}){if(!['public','private'].includes(visibility))throw Error('Choose a public or private room.');this.leave();this.visibility=visibility;this.roomName=String(roomName).replace(/\s+/gu,' ').trim().slice(0,48)||cleanName(name)+"'s room";this.isHost=true;this.name=cleanName(name);this.phase='connecting';this.changed();try{if(await this.openPeer()===false)return;this.host=this.id;this.secret=token();this.members=[{id:this.id,name:this.name,ready:false,cabinet:1,rtt:null}];this.phase='lobby';this.changed();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}}
  async join(code,name,{publicRoom=false,role='driver'}={}){
   const invite=parseInvitation(code);this.leave();this.joinRole=role==='spectator'?'spectator':'driver';this.visibility=publicRoom?'public':'private';this.name=cleanName(name);this.sessionKey=token();this.host=invite.host;this.secret=invite.token;this.phase='connecting';this.changed();
-  try{await this.openPeer();this.connectHost();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}
+  try{if(await this.openPeer()===false)return;this.connectHost();}catch(e){this.leave();this.phase='error';this.error=e.message;this.changed();}
  }
  attach(conn,incoming){
   const generation=this.generation;let accepted=false;conn.consoleCounters={tx:0,rx:0};conn.lastSeen=performance.now();conn.openingUntil=conn.lastSeen+OPEN_TIMEOUT_MS;conn.wasOpened=false;
@@ -753,6 +758,6 @@ export class Multiplayer {
   for(const conn of connections)try{this.send(conn,{type:this.isHost?'room-closed':'leave',...(!this.isHost&&!unloading?{performance:this.makePerformance()}:{})});}catch{}
   // pagehide does not guarantee another timer turn. Close RTC synchronously
   // there; ordinary menu exits retain a short chance to deliver the notice.
-  const peer=this.peer;this.generation++;clearInterval(this.timer);if(peer){if(unloading)peer.destroy();else setTimeout(()=>peer.destroy(),200);}if(hadSession)this.onStop('You left the room.');this.reset();this.changed();
+  const peer=this.peer;this.generation++;clearInterval(this.timer);this.stopIceRefresh?.();this.stopIceRefresh=null;if(peer){if(unloading)peer.destroy();else setTimeout(()=>peer.destroy(),200);}if(hadSession)this.onStop('You left the room.');this.reset();this.changed();
  }
 }
